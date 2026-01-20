@@ -254,9 +254,9 @@
 
                 <!-- 生成控制 -->
                 <div class="generation-controls">
-                  <el-button type="success" :icon="MagicStick" :loading="generatingImage"
+                  <el-button type="success" :icon="MagicStick" :loading="currentImageGenerating"
                     :disabled="!currentFramePrompt" @click="generateFrameImage">
-                    {{ generatingImage ? $t('editor.generating') : $t('editor.generateImage') }}
+                    {{ currentImageGenerating ? $t('editor.generating') : $t('editor.generateImage') }}
                   </el-button>
                   <el-button :icon="Upload" @click="uploadImage">{{ $t('editor.uploadImage') }}</el-button>
                 </div>
@@ -949,7 +949,7 @@ const framePrompts = ref<Record<FrameType, string>>({
   action: ''
 })
 const currentFramePrompt = ref('')
-const generatingImage = ref(false)
+const generatingImageMap = ref<Record<string, boolean>>({})
 const generatedImages = ref<ImageGeneration[]>([])
 const imageCache = ref<Record<string, ImageGeneration[]>>({})
 const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类型
@@ -960,6 +960,11 @@ const currentPromptGenerating = computed(() => {
   const storyboardId = currentStoryboard.value?.id
   if (!storyboardId) return false
   return !!generatingPromptMap.value[`${storyboardId}_${selectedFrameType.value}`]
+})
+const currentImageGenerating = computed(() => {
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return false
+  return !!generatingImageMap.value[`${storyboardId}_${selectedFrameType.value}`]
 })
 
 // 视频生成相关状态
@@ -1604,9 +1609,9 @@ const loadStoryboardImages = async (storyboardId: number, frameType?: string) =>
       params.frame_type = frameType
     }
     const result = await imageAPI.listImages(params)
+    imageCache.value[cacheKey] = result.items || []
     if (!shouldApply()) return
-    generatedImages.value = result.items || []
-    imageCache.value[cacheKey] = generatedImages.value
+    generatedImages.value = imageCache.value[cacheKey]
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedImages.value.some(
@@ -1694,7 +1699,18 @@ const stopPolling = () => {
 const generateFrameImage = async () => {
   if (!currentStoryboard.value || !currentFramePrompt.value) return
 
-  generatingImage.value = true
+  const targetStoryboardId = currentStoryboard.value.id
+  const targetFrameType = selectedFrameType.value
+  const loadingKey = `${targetStoryboardId}_${targetFrameType}`
+  const storyboardLabel = getStoryboardLabel(currentStoryboard.value, targetStoryboardId)
+
+  if (generatingImageMap.value[loadingKey]) {
+    ElMessage.info(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}图片生成中，请稍候`)
+    return
+  }
+
+  const prompt = currentFramePrompt.value
+  generatingImageMap.value[loadingKey] = true
   try {
     // 收集参考图片URL
     const referenceImages: string[] = []
@@ -1716,16 +1732,23 @@ const generateFrameImage = async () => {
 
     const result = await imageAPI.generateImage({
       drama_id: dramaId.toString(),
-      prompt: currentFramePrompt.value,
-      storyboard_id: currentStoryboard.value.id,
+      prompt: prompt,
+      storyboard_id: targetStoryboardId,
       image_type: 'storyboard',
-      frame_type: selectedFrameType.value,
+      frame_type: targetFrameType,
       reference_images: referenceImages.length > 0 ? referenceImages : undefined
     })
 
-    generatedImages.value.unshift(result)
-    const cacheKey = getImageCacheKey(currentStoryboard.value.id, selectedFrameType.value)
-    imageCache.value[cacheKey] = generatedImages.value
+    const cacheKey = getImageCacheKey(targetStoryboardId, targetFrameType)
+    const isSameView =
+      currentStoryboard.value?.id === targetStoryboardId &&
+      selectedFrameType.value === targetFrameType
+    const baseList = isSameView ? generatedImages.value : (imageCache.value[cacheKey] || [])
+    const updatedList = [result, ...baseList]
+    imageCache.value[cacheKey] = updatedList
+    if (isSameView) {
+      generatedImages.value = updatedList
+    }
 
     // 提示信息
     const refMsg = referenceImages.length > 0
@@ -1734,11 +1757,13 @@ const generateFrameImage = async () => {
     ElMessage.success(`图片生成任务已提交${refMsg}`)
 
     // 启动轮询
-    startPolling()
+    if (isSameView) {
+      startPolling()
+    }
   } catch (error: any) {
     ElMessage.error('生成失败: ' + (error.message || '未知错误'))
   } finally {
-    generatingImage.value = false
+    generatingImageMap.value[loadingKey] = false
   }
 }
 
@@ -2068,9 +2093,9 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
       page: 1,
       page_size: 100
     })
+    videoReferenceCache.value[String(storyboardId)] = result.items || []
     if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
-    videoReferenceImages.value = result.items || []
-    videoReferenceCache.value[String(storyboardId)] = videoReferenceImages.value
+    videoReferenceImages.value = videoReferenceCache.value[String(storyboardId)]
   } catch (error: any) {
     console.error('加载视频参考图片失败:', error)
   }
@@ -2086,9 +2111,9 @@ const loadStoryboardVideos = async (storyboardId: number) => {
       page: 1,
       page_size: 50
     })
+    videoCache.value[String(storyboardId)] = result.items || []
     if (!shouldApply()) return
-    generatedVideos.value = result.items || []
-    videoCache.value[String(storyboardId)] = generatedVideos.value
+    generatedVideos.value = videoCache.value[String(storyboardId)]
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedVideos.value.some(
