@@ -951,6 +951,7 @@ const framePrompts = ref<Record<FrameType, string>>({
 const currentFramePrompt = ref('')
 const generatingImage = ref(false)
 const generatedImages = ref<ImageGeneration[]>([])
+const imageCache = ref<Record<string, ImageGeneration[]>>({})
 const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类型
 const loadingImages = ref(false)
 let pollingTimer: any = null
@@ -968,10 +969,12 @@ const selectedImagesForVideo = ref<number[]>([])
 const selectedLastImageForVideo = ref<number | null>(null)
 const generatingVideo = ref(false)
 const generatedVideos = ref<VideoGeneration[]>([])
+const videoCache = ref<Record<string, VideoGeneration[]>>({})
 const videoAssets = ref<Asset[]>([])
 const loadingVideos = ref(false)
 const timelineEditorRef = ref<InstanceType<typeof VideoTimelineEditor> | null>(null)
 const videoReferenceImages = ref<ImageGeneration[]>([])
+const videoReferenceCache = ref<Record<string, ImageGeneration[]>>({})
 const selectedVideoModel = ref<string>('')
 const selectedReferenceMode = ref<string>('')  // 参考图模式：single, first_last, multiple, none
 const previewImageUrl = ref<string>('')  // 预览大图的URL
@@ -1240,6 +1243,43 @@ const framePromptDefaults: Record<FrameType, string> = {
   action: ''
 }
 
+const getImageCacheKey = (storyboardId: number, frameType?: string) => {
+  return `${storyboardId}_${frameType || 'all'}`
+}
+
+const applyCachedImages = (storyboardId: number, frameType?: string) => {
+  const cacheKey = getImageCacheKey(storyboardId, frameType)
+  const cached = imageCache.value[cacheKey]
+  if (!cached) return
+  generatedImages.value = cached
+  const hasPendingOrProcessing = cached.some(
+    img => img.status === 'pending' || img.status === 'processing'
+  )
+  if (hasPendingOrProcessing) {
+    startPolling()
+  }
+}
+
+const applyCachedVideos = (storyboardId: number) => {
+  const cacheKey = String(storyboardId)
+  const cached = videoCache.value[cacheKey]
+  if (!cached) return
+  generatedVideos.value = cached
+  const hasPendingOrProcessing = cached.some(
+    video => video.status === 'pending' || video.status === 'processing'
+  )
+  if (hasPendingOrProcessing) {
+    startVideoPolling()
+  }
+}
+
+const applyCachedVideoReferences = (storyboardId: number) => {
+  const cacheKey = String(storyboardId)
+  const cached = videoReferenceCache.value[cacheKey]
+  if (!cached) return
+  videoReferenceImages.value = cached
+}
+
 const resetFramePrompts = () => {
   framePrompts.value = { ...framePromptDefaults }
 }
@@ -1307,6 +1347,8 @@ watch(selectedFrameType, (newType) => {
     }
   }
 
+  applyCachedImages(currentStoryboard.value.id, newType)
+
   // 重新加载该帧类型的图片
   loadStoryboardImages(currentStoryboard.value.id, newType)
 
@@ -1345,17 +1387,16 @@ watch(currentStoryboard, async (newStoryboard) => {
     isSwitchingFrameType.value = false
   }, 0)
 
-  // 加载该分镜的图片列表（根据当前选择的帧类型）
-  await loadStoryboardImages(newStoryboard.id, selectedFrameType.value)
+  applyCachedImages(newStoryboard.id, selectedFrameType.value)
+  applyCachedVideoReferences(newStoryboard.id)
+  applyCachedVideos(newStoryboard.id)
 
-  // 加载已生成的帧提示词
-  await loadFramePrompts(newStoryboard.id)
-
-  // 加载视频参考图片（所有帧类型）
-  await loadVideoReferenceImages(newStoryboard.id)
-
-  // 加载该分镜的视频列表
-  await loadStoryboardVideos(newStoryboard.id)
+  await Promise.allSettled([
+    loadStoryboardImages(newStoryboard.id, selectedFrameType.value),
+    loadFramePrompts(newStoryboard.id),
+    loadVideoReferenceImages(newStoryboard.id),
+    loadStoryboardVideos(newStoryboard.id)
+  ])
 })
 
 // 监听提示词变化，自动保存到sessionStorage
@@ -1548,6 +1589,10 @@ const getStoryboardLabel = (storyboard: Storyboard | null, fallbackId?: number |
 // 加载分镜的图片列表
 const loadStoryboardImages = async (storyboardId: number, frameType?: string) => {
   loadingImages.value = true
+  const cacheKey = getImageCacheKey(storyboardId, frameType)
+  const shouldApply = () =>
+    currentStoryboard.value?.id === storyboardId &&
+    (!frameType || selectedFrameType.value === frameType)
   try {
     const params: any = {
       storyboard_id: storyboardId,
@@ -1559,7 +1604,9 @@ const loadStoryboardImages = async (storyboardId: number, frameType?: string) =>
       params.frame_type = frameType
     }
     const result = await imageAPI.listImages(params)
+    if (!shouldApply()) return
     generatedImages.value = result.items || []
+    imageCache.value[cacheKey] = generatedImages.value
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedImages.value.some(
@@ -1571,7 +1618,9 @@ const loadStoryboardImages = async (storyboardId: number, frameType?: string) =>
   } catch (error: any) {
     console.error('加载图片列表失败:', error)
   } finally {
-    loadingImages.value = false
+    if (shouldApply()) {
+      loadingImages.value = false
+    }
   }
 }
 
@@ -1609,6 +1658,10 @@ const startPolling = () => {
       // 再次检查帧类型是否仍然匹配，避免竞态条件
       if (selectedFrameType.value === pollingFrameType) {
         generatedImages.value = result.items || []
+        if (pollingFrameType) {
+          const cacheKey = getImageCacheKey(currentStoryboard.value.id, pollingFrameType)
+          imageCache.value[cacheKey] = generatedImages.value
+        }
       }
 
       // 如果没有进行中的任务，停止轮询并刷新视频参考图片
@@ -1671,6 +1724,8 @@ const generateFrameImage = async () => {
     })
 
     generatedImages.value.unshift(result)
+    const cacheKey = getImageCacheKey(currentStoryboard.value.id, selectedFrameType.value)
+    imageCache.value[cacheKey] = generatedImages.value
 
     // 提示信息
     const refMsg = referenceImages.length > 0
@@ -1991,6 +2046,9 @@ const generateVideo = async () => {
     const result = await videoAPI.generateVideo(requestParams)
 
     generatedVideos.value.unshift(result)
+    if (currentStoryboard.value) {
+      videoCache.value[String(currentStoryboard.value.id)] = generatedVideos.value
+    }
     ElMessage.success('视频生成任务已提交')
 
     // 启动视频轮询
@@ -2010,7 +2068,9 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
       page: 1,
       page_size: 100
     })
+    if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
     videoReferenceImages.value = result.items || []
+    videoReferenceCache.value[String(storyboardId)] = videoReferenceImages.value
   } catch (error: any) {
     console.error('加载视频参考图片失败:', error)
   }
@@ -2019,13 +2079,16 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
 // 加载分镜的视频列表
 const loadStoryboardVideos = async (storyboardId: number) => {
   loadingVideos.value = true
+  const shouldApply = () => currentStoryboard.value?.id === storyboardId
   try {
     const result = await videoAPI.listVideos({
       storyboard_id: storyboardId.toString(),
       page: 1,
       page_size: 50
     })
+    if (!shouldApply()) return
     generatedVideos.value = result.items || []
+    videoCache.value[String(storyboardId)] = generatedVideos.value
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedVideos.value.some(
@@ -2037,7 +2100,9 @@ const loadStoryboardVideos = async (storyboardId: number) => {
   } catch (error: any) {
     console.error('加载视频列表失败:', error)
   } finally {
-    loadingVideos.value = false
+    if (shouldApply()) {
+      loadingVideos.value = false
+    }
   }
 }
 
@@ -2058,6 +2123,7 @@ const startVideoPolling = () => {
         page_size: 50
       })
       generatedVideos.value = result.items || []
+      videoCache.value[String(currentStoryboard.value.id)] = generatedVideos.value
 
       // 如果没有进行中的任务，停止轮询
       const hasPendingOrProcessing = generatedVideos.value.some(
@@ -2186,8 +2252,10 @@ const loadData = async () => {
     episode.value = ep
     episodeId.value = ep.id
 
-    // 加载分镜列表
-    const storyboardsRes = await dramaAPI.getStoryboards(ep.id.toString())
+    const [storyboardsRes] = await Promise.all([
+      dramaAPI.getStoryboards(ep.id.toString()),
+      loadVideoAssets()
+    ])
 
     // API返回格式: {storyboards: [...], total: number}
     storyboards.value = storyboardsRes?.storyboards || []
@@ -2202,9 +2270,6 @@ const loadData = async () => {
 
     // 加载可用场景列表
     availableScenes.value = dramaRes.scenes || []
-
-    // 加载视频素材库
-    await loadVideoAssets()
 
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
