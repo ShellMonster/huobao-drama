@@ -132,7 +132,7 @@
           </div>
         </el-form-item>
 
-        <el-form-item :label="$t('aiConfig.form.apiKey')" prop="api_key">
+        <el-form-item :label="isJimengProvider ? 'Access Key' : $t('aiConfig.form.apiKey')" prop="api_key">
           <el-input 
             v-model="form.api_key" 
             type="password" 
@@ -140,6 +140,16 @@
             :placeholder="$t('aiConfig.form.apiKeyPlaceholder')"
           />
           <div class="form-tip">{{ $t('aiConfig.form.apiKeyTip') }}</div>
+        </el-form-item>
+
+        <el-form-item v-if="isJimengProvider" label="Secret Key" prop="secret_key">
+          <el-input
+            v-model="form.secret_key"
+            type="password"
+            show-password
+            placeholder="请输入 Secret Key"
+          />
+          <div class="form-tip">即梦视频需要 Access Key + Secret Key 进行签名</div>
         </el-form-item>
 
         <el-form-item v-if="isEdit" :label="$t('aiConfig.form.isActive')">
@@ -181,15 +191,17 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const testing = ref(false)
 
-const form = reactive<CreateAIConfigRequest & { is_active?: boolean, provider?: string }>({
+const form = reactive<CreateAIConfigRequest & { is_active?: boolean, provider?: string, secret_key?: string }>({
   service_type: 'text',
   provider: '',
   name: '',
   base_url: '',
   api_key: '',
+  secret_key: '',
   model: [],  // 改为数组支持多选
   priority: 0,  // 默认优先级为0
-  is_active: true
+  is_active: true,
+  settings: ''
 })
 
 // 厂商和模型配置
@@ -259,6 +271,16 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
         'doubao-seedance-1-0-pro-fast-251015'
       ]
     },
+    {
+      id: 'jimeng',
+      name: '即梦',
+      models: [
+        'jimeng_ti2v_v30_pro',
+        'jimeng_i2v_first_v30',
+        'jimeng_i2v_first_tail_v30',
+        'jimeng_i2v_first_tail_v30_1080'
+      ]
+    },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
@@ -276,6 +298,10 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
 //    { id: 'minimax', name: 'MiniMax', models: ['MiniMax-Hailuo-2.3', 'MiniMax-Hailuo-2.3-Fast', 'MiniMax-Hailuo-02'] }
   ]
 }
+
+const isJimengProvider = computed(() => {
+  return form.service_type === 'video' && form.provider === 'jimeng'
+})
 
 // 当前可用的厂商列表（只显示有激活配置的）
 const availableProviders = computed(() => {
@@ -337,6 +363,8 @@ const fullEndpointExample = computed(() => {
       endpoint = '/video/generations'
     } else if (provider === 'doubao' || provider === 'volcengine' || provider === 'volces') {
       endpoint = '/contents/generations/tasks'
+    } else if (provider === 'jimeng') {
+      endpoint = '?Action=CVSync2AsyncSubmitTask&Version=2022-08-31'
     } else if (provider === 'openai') {
       endpoint = '/videos'
     } else {
@@ -360,6 +388,18 @@ const rules: FormRules = {
   ],
   api_key: [
     { required: true, message: '请输入 API Key', trigger: 'blur' }
+  ],
+  secret_key: [
+    {
+      validator: (rule: any, value: any, callback: any) => {
+        if (isJimengProvider.value && !value) {
+          callback(new Error('请输入 Secret Key'))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
   ],
   model: [
     { 
@@ -396,7 +436,8 @@ const generateConfigName = (provider: string, serviceType: AIServiceType): strin
     'chatfire': 'ChatFire',
     'openai': 'OpenAI',
     'gemini': 'Gemini',
-    'google': 'Google'
+    'google': 'Google',
+    'jimeng': '即梦'
   }
   
   const serviceNames: Record<AIServiceType, string> = {
@@ -429,16 +470,30 @@ const showCreateDialog = () => {
 const handleEdit = (config: AIServiceConfig) => {
   isEdit.value = true
   editingId.value = config.id
-  
+
+  let secretKey = ''
+  if (config.settings) {
+    try {
+      const parsed = JSON.parse(config.settings)
+      if (parsed && typeof parsed === 'object') {
+        secretKey = parsed.secret_key || ''
+      }
+    } catch (error) {
+      console.warn('Failed to parse config settings:', error)
+    }
+  }
+
   Object.assign(form, {
     service_type: config.service_type,
     provider: config.provider || 'chatfire',  // 直接使用配置中的 provider，默认为 chatfire
     name: config.name,
     base_url: config.base_url,
     api_key: config.api_key,
+    secret_key: secretKey,
     model: Array.isArray(config.model) ? config.model : [config.model],  // 统一转换为数组
     priority: config.priority || 0,
-    is_active: config.is_active
+    is_active: config.is_active,
+    settings: config.settings || ''
   })
   dialogVisible.value = true
 }
@@ -519,6 +574,12 @@ const handleSubmit = async () => {
     
     submitting.value = true
     try {
+      const settings = isJimengProvider.value
+        ? JSON.stringify({
+            access_key: form.api_key,
+            secret_key: form.secret_key
+          })
+        : (form.settings || '')
       if (isEdit.value && editingId.value) {
         const updateData: UpdateAIConfigRequest = {
           name: form.name,
@@ -529,10 +590,23 @@ const handleSubmit = async () => {
           priority: form.priority,
           is_active: form.is_active
         }
+        if (settings) {
+          updateData.settings = settings
+        }
         await aiAPI.update(editingId.value, updateData)
         ElMessage.success('更新成功')
       } else {
-        await aiAPI.create(form)
+        const createData: CreateAIConfigRequest = {
+          service_type: form.service_type,
+          provider: form.provider,
+          name: form.name,
+          base_url: form.base_url,
+          api_key: form.api_key,
+          model: form.model,
+          priority: form.priority,
+          settings: settings || undefined
+        }
+        await aiAPI.create(createData)
         ElMessage.success('创建成功')
       }
       
@@ -558,10 +632,22 @@ const handleProviderChange = () => {
   
   // 根据厂商自动设置默认 base_url
   if (form.provider === 'gemini' || form.provider === 'google') {
-    form.base_url = 'https://api.chatfire.site'
+    form.base_url = 'https://generativelanguage.googleapis.com'
+  } else if (form.provider === 'minimax') {
+    form.base_url = 'https://api.minimaxi.com/v1'
+  } else if (form.provider === 'volces' || form.provider === 'volcengine') {
+    form.base_url = 'https://ark.cn-beijing.volces.com/api/v3'
+  } else if (form.provider === 'jimeng') {
+    form.base_url = 'https://visual.volcengineapi.com'
+  } else if (form.provider === 'openai') {
+    form.base_url = 'https://api.openai.com/v1'
   } else {
-    // openai, chatfire 等其他厂商
+    // chatfire 和其他厂商
     form.base_url = 'https://api.chatfire.site/v1'
+  }
+
+  if (form.provider !== 'jimeng') {
+    form.secret_key = ''
   }
   
   // 仅在新建配置时自动更新名称
@@ -593,9 +679,11 @@ const resetForm = () => {
     name: '',
     base_url: '',
     api_key: '',
+    secret_key: '',
     model: [],  // 改为空数组
     priority: 0,
-    is_active: true
+    is_active: true,
+    settings: ''
   })
   formRef.value?.resetFields()
 }

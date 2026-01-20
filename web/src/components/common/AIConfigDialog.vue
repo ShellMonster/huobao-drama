@@ -185,7 +185,7 @@
           </div>
         </el-form-item>
 
-        <el-form-item :label="$t('aiConfig.form.apiKey')" prop="api_key">
+        <el-form-item :label="isJimengProvider ? 'Access Key' : $t('aiConfig.form.apiKey')" prop="api_key">
           <el-input 
             v-model="form.api_key" 
             type="password" 
@@ -193,6 +193,16 @@
             :placeholder="$t('aiConfig.form.apiKeyPlaceholder')"
           />
           <div class="form-tip">{{ $t('aiConfig.form.apiKeyTip') }}</div>
+        </el-form-item>
+
+        <el-form-item v-if="isJimengProvider" label="Secret Key" prop="secret_key">
+          <el-input
+            v-model="form.secret_key"
+            type="password"
+            show-password
+            placeholder="请输入 Secret Key"
+          />
+          <div class="form-tip">即梦视频需要 Access Key + Secret Key 进行签名</div>
         </el-form-item>
 
         <el-form-item v-if="isEdit" :label="$t('aiConfig.form.isActive')">
@@ -257,15 +267,17 @@ const quickSetupVisible = ref(false)
 const quickSetupApiKey = ref('')
 const quickSetupLoading = ref(false)
 
-const form = reactive<CreateAIConfigRequest & { is_active?: boolean, provider?: string }>({
+const form = reactive<CreateAIConfigRequest & { is_active?: boolean, provider?: string, secret_key?: string }>({
   service_type: 'text',
   provider: '',
   name: '',
   base_url: '',
   api_key: '',
+  secret_key: '',
   model: [],
   priority: 0,
-  is_active: true
+  is_active: true,
+  settings: ''
 })
 
 // Provider configs
@@ -324,6 +336,16 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
         'doubao-seedance-1-0-pro-fast-251015'
       ]
     },
+    {
+      id: 'jimeng',
+      name: '即梦',
+      models: [
+        'jimeng_ti2v_v30_pro',
+        'jimeng_i2v_first_v30',
+        'jimeng_i2v_first_tail_v30',
+        'jimeng_i2v_first_tail_v30_1080'
+      ]
+    },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
@@ -349,6 +371,10 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
     { id: 'openai', name: 'OpenAI', models: ['sora-2', 'sora-2-pro'] }
   ]
 }
+
+const isJimengProvider = computed(() => {
+  return form.service_type === 'video' && form.provider === 'jimeng'
+})
 
 // 当前可用的厂商列表（显示所有配置的厂商）
 const availableProviders = computed(() => {
@@ -392,6 +418,8 @@ const fullEndpointExample = computed(() => {
       endpoint = '/video/generations'
     } else if (provider === 'doubao' || provider === 'volcengine' || provider === 'volces') {
       endpoint = '/contents/generations/tasks'
+    } else if (provider === 'jimeng') {
+      endpoint = '?Action=CVSync2AsyncSubmitTask&Version=2022-08-31'
     } else if (provider === 'minimax') {
       endpoint = '/video_generation'
     } else if (provider === 'openai') {
@@ -412,6 +440,16 @@ const rules: FormRules = {
     { type: 'url', message: '请输入正确的 URL 格式', trigger: 'blur' }
   ],
   api_key: [{ required: true, message: '请输入 API Key', trigger: 'blur' }],
+  secret_key: [{
+    validator: (rule: any, value: any, callback: any) => {
+      if (isJimengProvider.value && !value) {
+        callback(new Error('请输入 Secret Key'))
+        return
+      }
+      callback()
+    },
+    trigger: 'blur'
+  }],
   model: [{
     required: true,
     message: '请至少选择一个模型',
@@ -444,7 +482,8 @@ const generateConfigName = (provider: string, serviceType: AIServiceType): strin
     'chatfire': 'ChatFire',
     'openai': 'OpenAI',
     'gemini': 'Gemini',
-    'google': 'Google'
+    'google': 'Google',
+    'jimeng': '即梦'
   }
   
   const serviceNames: Record<AIServiceType, string> = {
@@ -474,16 +513,30 @@ const showCreateDialog = () => {
 const handleEdit = (config: AIServiceConfig) => {
   isEdit.value = true
   editingId.value = config.id
-  
+
+  let secretKey = ''
+  if (config.settings) {
+    try {
+      const parsed = JSON.parse(config.settings)
+      if (parsed && typeof parsed === 'object') {
+        secretKey = parsed.secret_key || ''
+      }
+    } catch (error) {
+      console.warn('Failed to parse config settings:', error)
+    }
+  }
+
   Object.assign(form, {
     service_type: config.service_type,
     provider: config.provider || 'chatfire',
     name: config.name,
     base_url: config.base_url,
     api_key: config.api_key,
+    secret_key: secretKey,
     model: Array.isArray(config.model) ? config.model : [config.model],
     priority: config.priority || 0,
-    is_active: config.is_active
+    is_active: config.is_active,
+    settings: config.settings || ''
   })
   editDialogVisible.value = true
 }
@@ -564,6 +617,12 @@ const handleSubmit = async () => {
     
     submitting.value = true
     try {
+      const settings = isJimengProvider.value
+        ? JSON.stringify({
+            access_key: form.api_key,
+            secret_key: form.secret_key
+          })
+        : (form.settings || '')
       if (isEdit.value && editingId.value) {
         const updateData: UpdateAIConfigRequest = {
           name: form.name,
@@ -574,10 +633,23 @@ const handleSubmit = async () => {
           priority: form.priority,
           is_active: form.is_active
         }
+        if (settings) {
+          updateData.settings = settings
+        }
         await aiAPI.update(editingId.value, updateData)
         ElMessage.success('更新成功')
       } else {
-        await aiAPI.create(form)
+        const createData: CreateAIConfigRequest = {
+          service_type: form.service_type,
+          provider: form.provider,
+          name: form.name,
+          base_url: form.base_url,
+          api_key: form.api_key,
+          model: form.model,
+          priority: form.priority,
+          settings: settings || undefined
+        }
+        await aiAPI.create(createData)
         ElMessage.success('创建成功')
       }
       
@@ -607,11 +679,17 @@ const handleProviderChange = () => {
     form.base_url = 'https://api.minimaxi.com/v1'
   } else if (form.provider === 'volces' || form.provider === 'volcengine') {
     form.base_url = 'https://ark.cn-beijing.volces.com/api/v3'
+  } else if (form.provider === 'jimeng') {
+    form.base_url = 'https://visual.volcengineapi.com'
   } else if (form.provider === 'openai') {
     form.base_url = 'https://api.openai.com/v1'
   } else {
     // chatfire 和其他厂商
     form.base_url = 'https://api.chatfire.site/v1'
+  }
+
+  if (form.provider !== 'jimeng') {
+    form.secret_key = ''
   }
   
   if (!isEdit.value) {
@@ -627,9 +705,11 @@ const resetForm = () => {
     name: '',
     base_url: '',
     api_key: '',
+    secret_key: '',
     model: [],
     priority: 0,
-    is_active: true
+    is_active: true,
+    settings: ''
   })
   formRef.value?.resetFields()
 }

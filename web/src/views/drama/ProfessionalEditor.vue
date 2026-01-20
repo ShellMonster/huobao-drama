@@ -1080,6 +1080,34 @@ const defaultModelCapabilities: Record<string, Omit<VideoModelCapability, 'id' |
     supportTextOnly: true,
     maxImages: 2
   },
+  'jimeng_ti2v_v30_pro': {
+    supportSingleImage: true,
+    supportMultipleImages: false,
+    supportFirstLastFrame: false,
+    supportTextOnly: true,
+    maxImages: 1
+  },
+  'jimeng_i2v_first_v30': {
+    supportSingleImage: true,
+    supportMultipleImages: false,
+    supportFirstLastFrame: false,
+    supportTextOnly: false,
+    maxImages: 1
+  },
+  'jimeng_i2v_first_tail_v30': {
+    supportSingleImage: false,
+    supportMultipleImages: false,
+    supportFirstLastFrame: true,
+    supportTextOnly: false,
+    maxImages: 2
+  },
+  'jimeng_i2v_first_tail_v30_1080': {
+    supportSingleImage: false,
+    supportMultipleImages: false,
+    supportFirstLastFrame: true,
+    supportTextOnly: false,
+    maxImages: 2
+  },
   'MiniMax-Hailuo-2.3': {
     supportSingleImage: true,
     supportMultipleImages: false,
@@ -1107,6 +1135,9 @@ const defaultModelCapabilities: Record<string, Omit<VideoModelCapability, 'id' |
 const extractProviderFromModel = (modelName: string): string => {
   if (modelName.startsWith('doubao-') || modelName.startsWith('seedance')) {
     return 'doubao'
+  }
+  if (modelName.startsWith('jimeng_')) {
+    return 'jimeng'
   }
   if (modelName.startsWith('runway')) {
     return 'runway'

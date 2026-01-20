@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	models "github.com/drama-generator/backend/domain/models"
@@ -466,6 +467,26 @@ func (s *VideoGenerationService) getVideoClient(provider string, modelName strin
 		endpoint = "/contents/generations/tasks"
 		queryEndpoint = "/contents/generations/tasks/{taskId}"
 		return video.NewVolcesArkClient(baseURL, apiKey, model, endpoint, queryEndpoint), nil
+	case "jimeng":
+		accessKey := strings.TrimSpace(apiKey)
+		var settings struct {
+			AccessKey    string `json:"access_key"`
+			SecretKey    string `json:"secret_key"`
+			SessionToken string `json:"session_token"`
+		}
+		if config.Settings != "" {
+			if err := json.Unmarshal([]byte(config.Settings), &settings); err != nil {
+				return nil, fmt.Errorf("invalid jimeng settings: %w", err)
+			}
+		}
+		if accessKey == "" {
+			accessKey = strings.TrimSpace(settings.AccessKey)
+		}
+		secretKey := strings.TrimSpace(settings.SecretKey)
+		if accessKey == "" || secretKey == "" {
+			return nil, fmt.Errorf("jimeng access_key or secret_key missing")
+		}
+		return video.NewJimengCVClient(baseURL, accessKey, secretKey, model, settings.SessionToken), nil
 	case "openai":
 		// OpenAI Sora 使用 /v1/videos 端点
 		return video.NewOpenAISoraClient(baseURL, apiKey, model), nil
