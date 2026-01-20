@@ -1013,15 +1013,50 @@ interface VideoModelCapability {
   maxImages: number  // 最多支持几张图片
 }
 
+const klingOmniCapabilities = {
+  supportSingleImage: true,
+  supportMultipleImages: true,
+  supportFirstLastFrame: true,
+  supportTextOnly: true,
+  maxImages: 7
+}
+
+const klingImageCapabilities = {
+  supportSingleImage: true,
+  supportMultipleImages: false,
+  supportFirstLastFrame: true,
+  supportTextOnly: false,
+  maxImages: 2
+}
 
 // 模型能力默认配置（作为后备）
 const defaultModelCapabilities: Record<string, Omit<VideoModelCapability, 'id' | 'name'>> = {
-  'kling': {
-    supportSingleImage: true,
-    supportMultipleImages: false,
-    supportFirstLastFrame: false,
-    supportTextOnly: true,
-    maxImages: 1
+  'kling-video-o1': {
+    ...klingOmniCapabilities
+  },
+  'kling-v1': {
+    ...klingImageCapabilities
+  },
+  'kling-v1-5': {
+    ...klingImageCapabilities
+  },
+  'kling-v1-6': {
+    ...klingImageCapabilities
+  },
+  'kling-v2-master': {
+    ...klingImageCapabilities
+  },
+  'kling-v2-1': {
+    ...klingImageCapabilities
+  },
+  'kling-v2-1-master': {
+    ...klingImageCapabilities
+  },
+  'kling-v2-5-turbo': {
+    ...klingImageCapabilities
+  },
+  'kling-v2-6': {
+    ...klingImageCapabilities
   },
   'runway': {
     supportSingleImage: true,

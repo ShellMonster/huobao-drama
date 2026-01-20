@@ -281,6 +281,21 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
         'jimeng_i2v_first_tail_v30_1080'
       ]
     },
+    {
+      id: 'kling',
+      name: '可灵',
+      models: [
+        'kling-video-o1',
+        'kling-v1',
+        'kling-v1-5',
+        'kling-v1-6',
+        'kling-v2-master',
+        'kling-v2-1',
+        'kling-v2-1-master',
+        'kling-v2-5-turbo',
+        'kling-v2-6'
+      ]
+    },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
@@ -365,6 +380,8 @@ const fullEndpointExample = computed(() => {
       endpoint = '/contents/generations/tasks'
     } else if (provider === 'jimeng') {
       endpoint = '?Action=CVSync2AsyncSubmitTask&Version=2022-08-31'
+    } else if (provider === 'kling') {
+      endpoint = '/v1/videos/omni-video'
     } else if (provider === 'openai') {
       endpoint = '/videos'
     } else {
@@ -437,7 +454,8 @@ const generateConfigName = (provider: string, serviceType: AIServiceType): strin
     'openai': 'OpenAI',
     'gemini': 'Gemini',
     'google': 'Google',
-    'jimeng': '即梦'
+    'jimeng': '即梦',
+    'kling': '可灵'
   }
   
   const serviceNames: Record<AIServiceType, string> = {
@@ -639,6 +657,8 @@ const handleProviderChange = () => {
     form.base_url = 'https://ark.cn-beijing.volces.com/api/v3'
   } else if (form.provider === 'jimeng') {
     form.base_url = 'https://visual.volcengineapi.com'
+  } else if (form.provider === 'kling') {
+    form.base_url = 'https://api-beijing.klingai.com'
   } else if (form.provider === 'openai') {
     form.base_url = 'https://api.openai.com/v1'
   } else {

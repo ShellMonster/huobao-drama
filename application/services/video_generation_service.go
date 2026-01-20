@@ -487,6 +487,8 @@ func (s *VideoGenerationService) getVideoClient(provider string, modelName strin
 			return nil, fmt.Errorf("jimeng access_key or secret_key missing")
 		}
 		return video.NewJimengCVClient(baseURL, accessKey, secretKey, model, settings.SessionToken), nil
+	case "kling":
+		return video.NewKlingClient(baseURL, apiKey, model), nil
 	case "openai":
 		// OpenAI Sora 使用 /v1/videos 端点
 		return video.NewOpenAISoraClient(baseURL, apiKey, model), nil
