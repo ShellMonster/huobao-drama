@@ -14,7 +14,13 @@
     <!-- 主编辑区域 -->
     <div class="editor-main">
       <!-- 左侧分镜列表 -->
-      <div class="storyboard-panel" v-loading="loadingStoryboards" element-loading-text="加载分镜中...">
+      <div
+        class="storyboard-panel"
+        v-loading="loadingStoryboards"
+        element-loading-text="加载镜头列表中..."
+        element-loading-background="transparent"
+        element-loading-custom-class="storyboard-glass-loading"
+      >
         <div class="panel-header">
           <h3>{{ $t('storyboard.scriptStructure') }}</h3>
           <el-button text :icon="Plus" @click="handleAddStoryboard">{{ $t('storyboard.add') }}</el-button>
@@ -38,7 +44,7 @@
       </div>
 
       <!-- 中间时间线编辑区域 -->
-      <div class="timeline-area" v-loading="loadingStoryboards" element-loading-text="加载时间线中...">
+      <div class="timeline-area">
         <VideoTimelineEditor ref="timelineEditorRef" v-if="storyboards.length > 0" :scenes="storyboards"
           :episode-id="episodeId.toString()" :drama-id="dramaId.toString()" :assets="videoAssets"
           @select-scene="handleTimelineSelect" @asset-deleted="loadVideoAssets"
@@ -47,7 +53,7 @@
       </div>
 
       <!-- 右侧编辑面板 -->
-      <div class="edit-panel" v-loading="loadingStoryboards" element-loading-text="加载镜头中...">
+      <div class="edit-panel">
         <el-tabs v-model="activeTab" class="edit-tabs">
           <!-- 镜头属性标签 -->
           <el-tab-pane :label="$t('storyboard.shotProperties')" name="shot" v-if="currentStoryboard">
@@ -3501,6 +3507,24 @@ onBeforeUnmount(() => {
       border-right: 1px solid var(--border-primary);
       display: flex;
       flex-direction: column;
+      position: relative;
+
+      :deep(.storyboard-glass-loading) {
+        backdrop-filter: blur(14px) saturate(140%);
+        -webkit-backdrop-filter: blur(14px) saturate(140%);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      }
+
+      :deep(.storyboard-glass-loading .el-loading-text) {
+        color: var(--text-primary);
+        font-weight: 500;
+        letter-spacing: 0.2px;
+      }
+
+      :deep(.storyboard-glass-loading .el-loading-spinner .path) {
+        stroke: var(--accent);
+      }
 
       .panel-header {
         display: flex;
@@ -3663,6 +3687,15 @@ onBeforeUnmount(() => {
             margin-bottom: 16px;
           }
         }
+      }
+    }
+  }
+
+  .dark .editor-main {
+    .storyboard-panel {
+      :deep(.storyboard-glass-loading) {
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.4));
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.22);
       }
     }
   }

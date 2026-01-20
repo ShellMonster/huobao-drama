@@ -149,7 +149,7 @@
             show-password
             placeholder="请输入 Secret Key"
           />
-          <div class="form-tip">即梦视频需要 Access Key + Secret Key 进行签名</div>
+          <div class="form-tip">即梦视频需要 Access Key + Secret Key 才能调用</div>
         </el-form-item>
 
         <el-form-item v-if="isEdit" :label="$t('aiConfig.form.isActive')">
