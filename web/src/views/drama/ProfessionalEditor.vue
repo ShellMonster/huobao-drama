@@ -243,7 +243,7 @@
                 <div class="prompt-section">
                   <div class="section-label">
                     {{ $t('editor.prompt') }}
-                    <el-button size="small" type="primary" :disabled="generatingPrompt" :loading="generatingPrompt"
+                    <el-button size="small" type="primary" :loading="currentPromptGenerating"
                       @click="extractFramePrompt" style="margin-left: 10px;">
                       {{ $t('editor.extractPrompt') }}
                     </el-button>
@@ -886,7 +886,7 @@ import {
   Timer, Calendar, Clock, Loading, WarningFilled, Delete
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
-import { generateFramePrompt, type FrameType } from '@/api/frame'
+import { generateFramePrompt, getStoryboardFramePrompts, type FramePromptRecord, type FrameType } from '@/api/frame'
 import { imageAPI } from '@/api/image'
 import { videoAPI } from '@/api/video'
 import { aiAPI } from '@/api/ai'
@@ -940,12 +940,13 @@ const narrativeTab = ref('shot-prompt')
 // 图片生成相关状态
 const selectedFrameType = ref<FrameType>('first')
 const panelCount = ref(3)
-const generatingPrompt = ref(false)
-const framePrompts = ref<Record<string, string>>({
+const generatingPromptMap = ref<Record<string, boolean>>({})
+const framePrompts = ref<Record<FrameType, string>>({
   key: '',
   first: '',
   last: '',
-  panel: ''
+  panel: '',
+  action: ''
 })
 const currentFramePrompt = ref('')
 const generatingImage = ref(false)
@@ -954,6 +955,11 @@ const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类�
 const loadingImages = ref(false)
 let pollingTimer: any = null
 let pollingFrameType: FrameType | null = null // 记录正在轮询的帧类型
+const currentPromptGenerating = computed(() => {
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return false
+  return !!generatingPromptMap.value[`${storyboardId}_${selectedFrameType.value}`]
+})
 
 // 视频生成相关状态
 const videoDuration = ref(5)  // 默认5秒，会根据镜头duration自动更新
@@ -1226,6 +1232,54 @@ const currentStoryboard = computed(() => {
   return storyboards.value.find(s => String(s.id) === String(currentStoryboardId.value)) || null
 })
 
+const framePromptDefaults: Record<FrameType, string> = {
+  key: '',
+  first: '',
+  last: '',
+  panel: '',
+  action: ''
+}
+
+const resetFramePrompts = () => {
+  framePrompts.value = { ...framePromptDefaults }
+}
+
+const applyServerFramePrompts = (storyboardId: number, records: FramePromptRecord[]) => {
+  const supportedTypes: FrameType[] = ['first', 'key', 'last', 'panel', 'action']
+  records.forEach((record) => {
+    if (!record?.prompt) return
+    if (!supportedTypes.includes(record.frame_type)) return
+
+    const frameType = record.frame_type
+    const storageKey = getPromptStorageKey(storyboardId, frameType)
+    const stored = storageKey ? sessionStorage.getItem(storageKey) : null
+    const existing = framePrompts.value[frameType]
+
+    if (stored) {
+      framePrompts.value[frameType] = stored
+      return
+    }
+
+    if (!existing) {
+      framePrompts.value[frameType] = record.prompt
+    }
+
+    if (selectedFrameType.value === frameType && !currentFramePrompt.value) {
+      currentFramePrompt.value = record.prompt
+    }
+  })
+}
+
+const loadFramePrompts = async (storyboardId: number) => {
+  try {
+    const result = await getStoryboardFramePrompts(storyboardId)
+    if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
+    applyServerFramePrompts(storyboardId, result.frame_prompts || [])
+  } catch (error: any) {
+    console.error('加载帧提示词失败:', error)
+  }
+}
+
 // 监听帧类型切换，从存储中加载或清空
 watch(selectedFrameType, (newType) => {
   // 切换帧类型时，停止之前的轮询，避免旧结果覆盖新帧类型
@@ -1272,6 +1326,8 @@ watch(currentStoryboard, async (newStoryboard) => {
     return
   }
 
+  resetFramePrompts()
+
   // 设置切换标志
   isSwitchingFrameType.value = true
 
@@ -1291,6 +1347,9 @@ watch(currentStoryboard, async (newStoryboard) => {
 
   // 加载该分镜的图片列表（根据当前选择的帧类型）
   await loadStoryboardImages(newStoryboard.id, selectedFrameType.value)
+
+  // 加载已生成的帧提示词
+  await loadFramePrompts(newStoryboard.id)
 
   // 加载视频参考图片（所有帧类型）
   await loadVideoReferenceImages(newStoryboard.id)
@@ -1413,15 +1472,22 @@ const extractFramePrompt = async () => {
 
   // 记录点击时的帧类型，避免切换tab后提示词显示错位
   const targetFrameType = selectedFrameType.value
+  const targetStoryboardId = currentStoryboard.value.id
+  const loadingKey = `${targetStoryboardId}_${targetFrameType}`
+  const storyboardLabel = getStoryboardLabel(currentStoryboard.value, targetStoryboardId)
 
-  generatingPrompt.value = true
+  if (generatingPromptMap.value[loadingKey]) {
+    ElMessage.info(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词生成中，请稍候`)
+    return
+  }
+  generatingPromptMap.value[loadingKey] = true
   try {
     const params: any = { frame_type: targetFrameType }
     if (targetFrameType === 'panel') {
       params.panel_count = panelCount.value
     }
 
-    const result = await generateFramePrompt(currentStoryboard.value.id, params)
+    const result = await generateFramePrompt(targetStoryboardId, params)
 
     // 根据记录的帧类型提取prompt，确保更新到正确的位置
     let extractedPrompt = ''
@@ -1434,19 +1500,25 @@ const extractFramePrompt = async () => {
         .join('\n\n')
     }
 
-    // 只在当前仍然选中该帧类型时才更新显示
-    if (selectedFrameType.value === targetFrameType) {
-      currentFramePrompt.value = extractedPrompt
+    const storageKey = getPromptStorageKey(targetStoryboardId, targetFrameType)
+    if (storageKey) {
+      sessionStorage.setItem(storageKey, extractedPrompt)
     }
 
-    // 存储到对应帧类型的提示词中
-    framePrompts.value[targetFrameType] = extractedPrompt
+    const isSameStoryboard = currentStoryboard.value?.id === targetStoryboardId
+    if (isSameStoryboard) {
+      framePrompts.value[targetFrameType] = extractedPrompt
+      // 只在当前仍然选中该帧类型时才更新显示
+      if (selectedFrameType.value === targetFrameType) {
+        currentFramePrompt.value = extractedPrompt
+      }
+    }
 
-    ElMessage.success(`${getFrameTypeLabel(targetFrameType)}提示词提取成功`)
+    ElMessage.success(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词提取成功`)
   } catch (error: any) {
-    ElMessage.error('提取失败: ' + (error.message || '未知错误'))
+    ElMessage.error(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词提取失败: ${error.message || '未知错误'}`)
   } finally {
-    generatingPrompt.value = false
+    generatingPromptMap.value[loadingKey] = false
   }
 }
 
@@ -1456,9 +1528,21 @@ const getFrameTypeLabel = (frameType: string): string => {
     key: '关键帧',
     first: '首帧',
     last: '尾帧',
-    panel: '分镜版'
+    panel: '分镜版',
+    action: '动作序列'
   }
   return labels[frameType] || frameType
+}
+
+const getStoryboardLabel = (storyboard: Storyboard | null, fallbackId?: number | string) => {
+  const number = storyboard?.storyboard_number
+  if (number !== undefined && number !== null) {
+    return `镜头${number}`
+  }
+  if (fallbackId !== undefined && fallbackId !== null) {
+    return `镜头${fallbackId}`
+  }
+  return '镜头'
 }
 
 // 加载分镜的图片列表
