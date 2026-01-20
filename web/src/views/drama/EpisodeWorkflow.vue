@@ -3,7 +3,7 @@
     <div class="content-wrapper animate-fade-in">
       <AppHeader :fixed="false" :show-logo="false">
         <template #left>
-          <el-button text @click="$router.back()" class="back-btn">
+          <el-button text @click="goBack" class="back-btn" native-type="button">
             <el-icon><ArrowLeft /></el-icon>
             <span>{{ $t('workflow.backToProject') }}</span>
           </el-button>
@@ -924,8 +924,25 @@ const allImagesGenerated = computed(() => {
 })
 
 const goBack = () => {
-  // 使用 replace 避免在历史记录中留下当前页面
-  router.replace(`/dramas/${dramaId}`)
+  const target = { name: 'DramaManagement', params: { id: dramaId } }
+  if (!dramaId) {
+    router.push({ name: 'DramaList' })
+    return
+  }
+
+  const currentPath = route.fullPath
+  const hasHistory = typeof window !== 'undefined' && window.history.length > 1
+  if (hasHistory) {
+    router.back()
+    window.setTimeout(() => {
+      if (router.currentRoute.value.fullPath === currentPath) {
+        router.push(target)
+      }
+    }, 120)
+    return
+  }
+
+  router.push(target)
 }
 
 // 加载AI模型配置
