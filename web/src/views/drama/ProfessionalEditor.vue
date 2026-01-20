@@ -985,6 +985,10 @@ const selectedVideoModel = ref<string>('')
 const selectedReferenceMode = ref<string>('')  // 参考图模式：single, first_last, multiple, none
 const previewImageUrl = ref<string>('')  // 预览大图的URL
 const videoModelCapabilities = ref<VideoModelCapability[]>([])
+const videoConfigStorageKey = `video_gen_config_${dramaId}`
+const pendingVideoConfig = ref<{ model: string; referenceMode: string; updatedAt: number } | null>(null)
+const lastVideoConfigUpdateAt = ref(0)
+const isApplyingVideoConfig = ref(false)
 let videoPollingTimer: any = null
 let mergePollingTimer: any = null  // 视频合成列表轮询定时器
 
@@ -1166,6 +1170,11 @@ const loadVideoModels = async () => {
         ...capability
       }
     })
+
+    const storedConfig = getStoredVideoConfig()
+    if (storedConfig) {
+      await applyVideoConfig(storedConfig)
+    }
   } catch (error: any) {
     console.error('加载视频模型配置失败:', error)
     ElMessage.error('加载视频模型失败')
@@ -1216,6 +1225,68 @@ const availableReferenceModes = computed(() => {
 
   return modes
 })
+
+const getStoredVideoConfig = () => {
+  try {
+    const raw = localStorage.getItem(videoConfigStorageKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    if (!parsed.model || typeof parsed.model !== 'string') return null
+    return {
+      model: parsed.model as string,
+      referenceMode: typeof parsed.referenceMode === 'string' ? parsed.referenceMode : '',
+      updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0
+    }
+  } catch (error) {
+    return null
+  }
+}
+
+const saveVideoConfig = () => {
+  if (isApplyingVideoConfig.value) return
+  if (!selectedVideoModel.value) return
+  const config = {
+    model: selectedVideoModel.value,
+    referenceMode: selectedReferenceMode.value,
+    updatedAt: Date.now()
+  }
+  lastVideoConfigUpdateAt.value = config.updatedAt
+  localStorage.setItem(videoConfigStorageKey, JSON.stringify(config))
+}
+
+const applyVideoConfig = async (config: { model: string; referenceMode: string; updatedAt: number }) => {
+  if (!config?.model) return
+  const hasModel = videoModelCapabilities.value.some(m => m.id === config.model)
+  if (!hasModel) return
+
+  isApplyingVideoConfig.value = true
+  selectedVideoModel.value = config.model
+  await nextTick()
+
+  const modeSupported = availableReferenceModes.value.some(mode => mode.value === config.referenceMode)
+  selectedReferenceMode.value = modeSupported ? config.referenceMode : ''
+
+  lastVideoConfigUpdateAt.value = config.updatedAt
+  isApplyingVideoConfig.value = false
+}
+
+const handleVideoConfigStorage = (event: StorageEvent) => {
+  if (event.key !== videoConfigStorageKey || !event.newValue) return
+  try {
+    const parsed = JSON.parse(event.newValue)
+    if (!parsed || typeof parsed !== 'object') return
+    if (typeof parsed.model !== 'string' || !parsed.model) return
+    const updatedAt = typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0
+    if (updatedAt <= lastVideoConfigUpdateAt.value) return
+    pendingVideoConfig.value = {
+      model: parsed.model,
+      referenceMode: typeof parsed.referenceMode === 'string' ? parsed.referenceMode : '',
+      updatedAt: updatedAt
+    }
+  } catch (error) {
+  }
+}
 
 // 帧提示词存储key生成函数
 const getPromptStorageKey = (storyboardId: number | undefined, frameType: FrameType) => {
@@ -1374,6 +1445,17 @@ watch(currentStoryboard, async (newStoryboard) => {
     return
   }
 
+  if (pendingVideoConfig.value) {
+    const config = pendingVideoConfig.value
+    pendingVideoConfig.value = null
+    void applyVideoConfig(config)
+  } else {
+    const storedConfig = getStoredVideoConfig()
+    if (storedConfig && storedConfig.updatedAt > lastVideoConfigUpdateAt.value) {
+      void applyVideoConfig(storedConfig)
+    }
+  }
+
   resetFramePrompts()
 
   // 设置切换标志
@@ -1425,7 +1507,10 @@ watch(currentFramePrompt, (newPrompt) => {
 watch(selectedVideoModel, () => {
   selectedImagesForVideo.value = []
   selectedLastImageForVideo.value = null
-  selectedReferenceMode.value = ''
+  if (!isApplyingVideoConfig.value) {
+    selectedReferenceMode.value = ''
+  }
+  saveVideoConfig()
 })
 
 // 监听镜头切换，自动更新视频时长
@@ -1443,6 +1528,7 @@ watch(currentStoryboard, (newStoryboard) => {
 watch(selectedReferenceMode, () => {
   selectedImagesForVideo.value = []
   selectedLastImageForVideo.value = null
+  saveVideoConfig()
 })
 
 // 当前分镜的角色列表
@@ -2551,6 +2637,8 @@ onMounted(async () => {
   await loadData()
   await loadVideoModels()
   await loadVideoMerges()
+
+  window.addEventListener('storage', handleVideoConfigStorage)
 })
 
 // 组件卸载时停止轮询
@@ -2558,6 +2646,7 @@ onBeforeUnmount(() => {
   stopPolling()
   stopVideoPolling()
   stopMergePolling()
+  window.removeEventListener('storage', handleVideoConfigStorage)
 })
 </script>
 
