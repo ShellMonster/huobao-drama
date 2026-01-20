@@ -14,7 +14,7 @@
     <!-- 主编辑区域 -->
     <div class="editor-main">
       <!-- 左侧分镜列表 -->
-      <div class="storyboard-panel">
+      <div class="storyboard-panel" v-loading="loadingStoryboards" element-loading-text="加载分镜中...">
         <div class="panel-header">
           <h3>{{ $t('storyboard.scriptStructure') }}</h3>
           <el-button text :icon="Plus" @click="handleAddStoryboard">{{ $t('storyboard.add') }}</el-button>
@@ -38,7 +38,7 @@
       </div>
 
       <!-- 中间时间线编辑区域 -->
-      <div class="timeline-area">
+      <div class="timeline-area" v-loading="loadingStoryboards" element-loading-text="加载时间线中...">
         <VideoTimelineEditor ref="timelineEditorRef" v-if="storyboards.length > 0" :scenes="storyboards"
           :episode-id="episodeId.toString()" :drama-id="dramaId.toString()" :assets="videoAssets"
           @select-scene="handleTimelineSelect" @asset-deleted="loadVideoAssets"
@@ -47,7 +47,7 @@
       </div>
 
       <!-- 右侧编辑面板 -->
-      <div class="edit-panel">
+      <div class="edit-panel" v-loading="loadingStoryboards" element-loading-text="加载镜头中...">
         <el-tabs v-model="activeTab" class="edit-tabs">
           <!-- 镜头属性标签 -->
           <el-tab-pane :label="$t('storyboard.shotProperties')" name="shot" v-if="currentStoryboard">
@@ -222,7 +222,7 @@
           <!-- 图片生成标签 -->
           <el-tab-pane :label="$t('editor.shotImage')" name="image">
             <div class="tab-content" v-if="currentStoryboard">
-              <div class="image-generation-section">
+              <div class="image-generation-section" v-loading="loadingImages" element-loading-text="加载图片中...">
                 <!-- 帧类型选择 -->
                 <div class="frame-type-selector">
                   <div class="section-label">{{ $t('editor.selectFrameType') }}</div>
@@ -291,7 +291,7 @@
           <!-- 视频生成标签 -->
           <el-tab-pane :label="$t('video.videoGeneration')" name="video">
             <div class="tab-content" v-if="currentStoryboard">
-              <div class="video-generation-section">
+              <div class="video-generation-section" v-loading="loadingVideos" element-loading-text="加载视频中...">
                 <!-- 生成提示词展示 -->
                 <div class="video-prompt-box">
                   {{ currentStoryboard.video_prompt || '暂无提示词' }}
@@ -926,6 +926,7 @@ const showSettings = ref(false)
 const showVideoPreview = ref(false)
 const previewVideo = ref<VideoGeneration | null>(null)
 const addingToAssets = ref<Set<number>>(new Set())
+const loadingStoryboards = ref(false)
 
 const currentPlayState = ref<'playing' | 'paused'>('paused')
 const currentTime = ref(0)
@@ -2261,6 +2262,7 @@ const removeCharacterFromShot = async (charId: number) => {
 }
 
 const loadData = async () => {
+  loadingStoryboards.value = true
   try {
     // 加载剧集信息
     const dramaRes = await dramaAPI.get(dramaId.toString())
@@ -2298,6 +2300,8 @@ const loadData = async () => {
 
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
+  } finally {
+    loadingStoryboards.value = false
   }
 }
 
