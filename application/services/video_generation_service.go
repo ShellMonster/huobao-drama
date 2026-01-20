@@ -299,17 +299,35 @@ func (s *VideoGenerationService) pollTaskStatus(videoGenID uint, taskID string, 
 			continue
 		}
 
+		if provider == "minimax" && result.Completed && result.FileID != "" {
+			videoURL, err := s.storeMinimaxVideo(client, result.FileID)
+			if err != nil {
+				s.updateVideoGenError(videoGenID, err.Error())
+				return
+			}
+			duration := result.Duration
+			if duration == 0 && videoGen.Duration != nil {
+				duration = *videoGen.Duration
+			}
+			var durationPtr *int
+			if duration > 0 {
+				durationPtr = &duration
+			}
+			s.completeVideoGeneration(videoGenID, videoURL, durationPtr, &result.Width, &result.Height, nil)
+			return
+		}
+
+		if result.Error != "" {
+			s.updateVideoGenError(videoGenID, result.Error)
+			return
+		}
+
 		if result.Completed {
 			if result.VideoURL != "" {
 				s.completeVideoGeneration(videoGenID, result.VideoURL, &result.Duration, &result.Width, &result.Height, nil)
 				return
 			}
 			s.updateVideoGenError(videoGenID, "task completed but no video URL")
-			return
-		}
-
-		if result.Error != "" {
-			s.updateVideoGenError(videoGenID, result.Error)
 			return
 		}
 
@@ -422,6 +440,38 @@ func (s *VideoGenerationService) updateVideoGenError(videoGenID uint, errorMsg s
 		"error_msg": errorMsg,
 	}).Error; err != nil {
 		s.log.Errorw("Failed to update video generation error", "error", err, "id", videoGenID)
+	}
+}
+
+func (s *VideoGenerationService) storeMinimaxVideo(client video.VideoClient, fileID string) (string, error) {
+	if s.localStorage == nil {
+		return "", fmt.Errorf("local storage not available")
+	}
+	minimaxClient, ok := client.(*video.MinimaxClient)
+	if !ok {
+		return "", fmt.Errorf("invalid minimax client")
+	}
+
+	reader, contentType, err := minimaxClient.RetrieveFileContent(fileID)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
+	filename := fmt.Sprintf("minimax_%s%s", fileID, minimaxVideoExtension(contentType))
+	return s.localStorage.Upload(reader, filename, "videos")
+}
+
+func minimaxVideoExtension(contentType string) string {
+	switch {
+	case strings.Contains(contentType, "video/quicktime"):
+		return ".mov"
+	case strings.Contains(contentType, "video/webm"):
+		return ".webm"
+	case strings.Contains(contentType, "video/mp4"):
+		return ".mp4"
+	default:
+		return ".mp4"
 	}
 }
 

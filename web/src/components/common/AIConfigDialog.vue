@@ -380,7 +380,10 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
       models: [
         'MiniMax-Hailuo-2.3',
         'MiniMax-Hailuo-2.3-Fast',
-        'MiniMax-Hailuo-02'
+        'MiniMax-Hailuo-02',
+        'I2V-01-Director',
+        'I2V-01-live',
+        'I2V-01'
       ]
     },
     { id: 'openai', name: 'OpenAI', models: ['sora-2', 'sora-2-pro'] }
@@ -438,7 +441,7 @@ const fullEndpointExample = computed(() => {
     } else if (provider === 'kling') {
       endpoint = '/v1/videos/omni-video'
     } else if (provider === 'minimax') {
-      endpoint = '/video_generation'
+      endpoint = '/v1/video_generation'
     } else if (provider === 'openai') {
       endpoint = '/videos'
     } else {
@@ -501,7 +504,8 @@ const generateConfigName = (provider: string, serviceType: AIServiceType): strin
     'gemini': 'Gemini',
     'google': 'Google',
     'jimeng': '即梦',
-    'kling': '可灵'
+    'kling': '可灵',
+    'minimax': 'MiniMax'
   }
   
   const serviceNames: Record<AIServiceType, string> = {
@@ -693,8 +697,6 @@ const handleProviderChange = () => {
   // 根据厂商自动设置 Base URL
   if (form.provider === 'gemini' || form.provider === 'google') {
     form.base_url = 'https://generativelanguage.googleapis.com'
-  } else if (form.provider === 'minimax') {
-    form.base_url = 'https://api.minimaxi.com/v1'
   } else if (form.provider === 'volces' || form.provider === 'volcengine') {
     form.base_url = 'https://ark.cn-beijing.volces.com/api/v3'
   } else if (form.provider === 'jimeng') {
@@ -703,6 +705,8 @@ const handleProviderChange = () => {
     form.base_url = 'https://api-beijing.klingai.com'
   } else if (form.provider === 'openai') {
     form.base_url = 'https://api.openai.com/v1'
+  } else if (form.provider === 'minimax') {
+    form.base_url = 'https://api.minimaxi.com'
   } else {
     // chatfire 和其他厂商
     form.base_url = 'https://api.chatfire.site/v1'

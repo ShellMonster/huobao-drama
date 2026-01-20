@@ -22,6 +22,7 @@ type VideoResult struct {
 	Duration     int
 	Width        int
 	Height       int
+	FileID       string
 	Error        string
 	Completed    bool
 }

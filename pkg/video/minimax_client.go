@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -38,6 +40,8 @@ const (
 	Duration6s  = 6
 	Duration10s = 10
 )
+
+const minimaxDefaultBaseURL = "https://api.minimaxi.com"
 
 // MinimaxClient Minimax视频生成客户端
 type MinimaxClient struct {
@@ -74,7 +78,7 @@ type MinimaxCreateResponse struct {
 // MinimaxQueryResponse 查询任务状态的响应
 type MinimaxQueryResponse struct {
 	TaskID      string `json:"task_id"`
-	Status      string `json:"status"` // Processing, Success, Failed
+	Status      string `json:"status"` // Preparing, Queueing, Processing, Success, Fail
 	FileID      string `json:"file_id"`
 	VideoWidth  int    `json:"video_width"`
 	VideoHeight int    `json:"video_height"`
@@ -84,23 +88,10 @@ type MinimaxQueryResponse struct {
 	} `json:"base_resp"`
 }
 
-// MinimaxFileResponse 获取文件信息的响应
-type MinimaxFileResponse struct {
-	File struct {
-		FileID      string `json:"file_id"`
-		Bytes       int    `json:"bytes"`
-		CreatedAt   int64  `json:"created_at"`
-		Filename    string `json:"filename"`
-		Purpose     string `json:"purpose"`
-		DownloadURL string `json:"download_url"`
-	} `json:"file"`
-	BaseResp struct {
-		StatusCode int    `json:"status_code"`
-		StatusMsg  string `json:"status_msg"`
-	} `json:"base_resp"`
-}
-
 func NewMinimaxClient(baseURL, apiKey, model string) *MinimaxClient {
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = minimaxDefaultBaseURL
+	}
 	return &MinimaxClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
@@ -127,17 +118,19 @@ func (c *MinimaxClient) GenerateVideo(imageURL, prompt string, opts ...VideoOpti
 	if options.Model != "" {
 		model = options.Model
 	}
+	if strings.TrimSpace(model) == "" {
+		return nil, fmt.Errorf("model is required")
+	}
 
+	duration, resolution := normalizeMinimaxSettings(model, options.Duration, options.Resolution)
 	reqBody := MinimaxRequest{
 		Prompt:   prompt,
 		Model:    model,
-		Duration: options.Duration,
+		Duration: duration,
 	}
 
 	// 设置分辨率
-	if options.Resolution != "" {
-		reqBody.Resolution = options.Resolution
-	}
+	reqBody.Resolution = resolution
 
 	// 支持首帧图片
 	if options.FirstFrameURL != "" {
@@ -146,9 +139,8 @@ func (c *MinimaxClient) GenerateVideo(imageURL, prompt string, opts ...VideoOpti
 		reqBody.FirstFrameImage = imageURL
 	}
 
-	// 支持尾帧图片
-	if options.LastFrameURL != "" {
-		reqBody.LastFrameImage = options.LastFrameURL
+	if strings.TrimSpace(reqBody.FirstFrameImage) == "" {
+		return nil, fmt.Errorf("first_frame_image is required")
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -157,8 +149,10 @@ func (c *MinimaxClient) GenerateVideo(imageURL, prompt string, opts ...VideoOpti
 	}
 
 	// 步骤1：创建任务，POST 请求
-	// 注意：BaseURL 应该已包含 /v1，例如 https://api.minimaxi.com/v1
-	endpoint := c.BaseURL + "/video_generation"
+	endpoint, err := joinMinimaxURL(c.BaseURL, "/v1/video_generation")
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -205,8 +199,11 @@ func (c *MinimaxClient) GenerateVideo(imageURL, prompt string, opts ...VideoOpti
 // 步骤2：查询任务状态，如果成功则进入步骤3获取文件下载地址
 func (c *MinimaxClient) GetTaskStatus(taskID string) (*VideoResult, error) {
 	// 步骤2：查询任务状态
-	// 注意：BaseURL 应该已包含 /v1
-	endpoint := fmt.Sprintf("%s/query/video_generation?task_id=%s", c.BaseURL, taskID)
+	endpoint, err := joinMinimaxURL(c.BaseURL, "/v1/query/video_generation")
+	if err != nil {
+		return nil, err
+	}
+	endpoint = endpoint + "?task_id=" + url.QueryEscape(taskID)
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -246,56 +243,100 @@ func (c *MinimaxClient) GetTaskStatus(taskID string) (*VideoResult, error) {
 		Completed: false,
 	}
 
-	// 如果状态是 Success 且有 file_id，则获取文件下载地址
-	if queryResult.Status == "Success" && queryResult.FileID != "" {
-		downloadURL, err := c.getFileDownloadURL(queryResult.FileID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get download URL: %w", err)
-		}
-		videoResult.VideoURL = downloadURL
+	status := strings.ToLower(queryResult.Status)
+	if status == "success" && queryResult.FileID != "" {
+		videoResult.FileID = queryResult.FileID
 		videoResult.Completed = true
-	} else if queryResult.Status == "Failed" {
-		videoResult.Error = "Video generation failed"
+	} else if status == "fail" || status == "failed" {
+		videoResult.Error = "video generation failed"
 		videoResult.Completed = true
 	}
 
 	return videoResult, nil
 }
 
-// getFileDownloadURL 步骤3：根据 file_id 获取文件下载地址
-func (c *MinimaxClient) getFileDownloadURL(fileID string) (string, error) {
-	// 注意：BaseURL 应该已包含 /v1
-	endpoint := fmt.Sprintf("%s/files/retrieve?file_id=%s", c.BaseURL, fileID)
+// RetrieveFileContent 下载文件内容（返回数据流与 Content-Type）
+func (c *MinimaxClient) RetrieveFileContent(fileID string) (io.ReadCloser, string, error) {
+	endpoint, err := joinMinimaxURL(c.BaseURL, "/v1/files/retrieve_content")
+	if err != nil {
+		return nil, "", err
+	}
+	endpoint = endpoint + "?file_id=" + url.QueryEscape(fileID)
+
 	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return nil, "", fmt.Errorf("create request: %w", err)
 	}
-
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
+		return nil, "", fmt.Errorf("send request: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	var fileResult MinimaxFileResponse
-	if err := json.Unmarshal(body, &fileResult); err != nil {
-		return "", fmt.Errorf("parse response: %w", err)
+	contentType := resp.Header.Get("Content-Type")
+	return resp.Body, contentType, nil
+}
+
+func joinMinimaxURL(baseURL, path string) (string, error) {
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = minimaxDefaultBaseURL
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid base url: %w", err)
+	}
+	base.Path = strings.TrimSuffix(base.Path, "/")
+	base.Path = strings.TrimSuffix(base.Path, "/v1")
+
+	ref, err := url.Parse(path)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	return base.ResolveReference(ref).String(), nil
+}
+
+func normalizeMinimaxSettings(model string, duration int, resolution string) (int, string) {
+	if duration >= 8 {
+		duration = Duration10s
+	} else {
+		duration = Duration6s
 	}
 
-	if fileResult.BaseResp.StatusCode != 0 {
-		return "", fmt.Errorf("minimax error: %s", fileResult.BaseResp.StatusMsg)
-	}
+	model = strings.TrimSpace(model)
+	resolution = strings.TrimSpace(resolution)
 
-	return fileResult.File.DownloadURL, nil
+	switch model {
+	case ModelHailuo23, ModelHailuo23Fast:
+		if duration == Duration10s {
+			return duration, Resolution768P
+		}
+		if resolution == "" {
+			resolution = Resolution768P
+		}
+		return duration, resolution
+	case ModelHailuo02:
+		if duration == Duration10s {
+			if resolution == "" {
+				resolution = Resolution768P
+			}
+			if resolution == Resolution1080P {
+				resolution = Resolution768P
+			}
+			return duration, resolution
+		}
+		if resolution == "" {
+			resolution = Resolution768P
+		}
+		return duration, resolution
+	default:
+		// 其他模型仅支持 720P + 6s
+		return Duration6s, "720P"
+	}
 }

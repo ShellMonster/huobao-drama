@@ -1153,21 +1153,42 @@ const defaultModelCapabilities: Record<string, Omit<VideoModelCapability, 'id' |
     supportSingleImage: true,
     supportMultipleImages: false,
     supportFirstLastFrame: false,
-    supportTextOnly: true,
+    supportTextOnly: false,
     maxImages: 1
   },
   'MiniMax-Hailuo-2.3-Fast': {
     supportSingleImage: true,
     supportMultipleImages: false,
     supportFirstLastFrame: false,
-    supportTextOnly: true,
+    supportTextOnly: false,
     maxImages: 1
   },
   'MiniMax-Hailuo-02': {
     supportSingleImage: true,
     supportMultipleImages: false,
     supportFirstLastFrame: false,
-    supportTextOnly: true,
+    supportTextOnly: false,
+    maxImages: 1
+  },
+  'I2V-01-Director': {
+    supportSingleImage: true,
+    supportMultipleImages: false,
+    supportFirstLastFrame: false,
+    supportTextOnly: false,
+    maxImages: 1
+  },
+  'I2V-01-live': {
+    supportSingleImage: true,
+    supportMultipleImages: false,
+    supportFirstLastFrame: false,
+    supportTextOnly: false,
+    maxImages: 1
+  },
+  'I2V-01': {
+    supportSingleImage: true,
+    supportMultipleImages: false,
+    supportFirstLastFrame: false,
+    supportTextOnly: false,
     maxImages: 1
   }
 }
