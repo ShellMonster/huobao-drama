@@ -3,7 +3,9 @@ package ai
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -16,13 +18,17 @@ type OpenAISDKClient struct {
 	model  string
 }
 
+const openaiSDKDefaultTimeout = 10 * time.Minute
+
 func NewOpenAISDKClient(baseURL, apiKey, model string) *OpenAISDKClient {
 	opts := []option.RequestOption{}
 	if strings.TrimSpace(apiKey) != "" {
 		opts = append(opts, option.WithAPIKey(strings.TrimSpace(apiKey)))
 	}
-	if strings.TrimSpace(baseURL) != "" {
-		opts = append(opts, option.WithBaseURL(strings.TrimSpace(baseURL)))
+	httpClient := &http.Client{Timeout: openaiSDKDefaultTimeout}
+	opts = append(opts, option.WithHTTPClient(httpClient))
+	if normalizedBaseURL := normalizeOpenAIBaseURL(baseURL); normalizedBaseURL != "" {
+		opts = append(opts, option.WithBaseURL(normalizedBaseURL))
 	}
 	client := openai.NewClient(opts...)
 
@@ -34,6 +40,27 @@ func NewOpenAISDKClient(baseURL, apiKey, model string) *OpenAISDKClient {
 		client: client,
 		model:  model,
 	}
+}
+
+func normalizeOpenAIBaseURL(apiBase string) string {
+	base := strings.TrimSpace(apiBase)
+	if base == "" {
+		return ""
+	}
+
+	base = strings.TrimRight(base, "/")
+	if strings.Contains(base, "/chat/completions") {
+		base = strings.Split(base, "/chat/completions")[0]
+		base = strings.TrimRight(base, "/")
+	}
+	if strings.Contains(base, "/v1/") {
+		base = strings.Split(base, "/v1/")[0] + "/v1"
+		return base
+	}
+	if strings.HasSuffix(base, "/v1") {
+		return base
+	}
+	return base + "/v1"
 }
 
 func (c *OpenAISDKClient) GenerateText(prompt string, systemPrompt string, options ...func(*ChatCompletionRequest)) (string, error) {
@@ -67,7 +94,14 @@ func (c *OpenAISDKClient) GenerateText(prompt string, systemPrompt string, optio
 		params.MaxTokens = param.NewOpt(int64(req.MaxTokens))
 	}
 
-	resp, err := c.client.Chat.Completions.New(context.Background(), params)
+	ctx, cancel := context.WithTimeout(context.Background(), openaiSDKDefaultTimeout)
+	defer cancel()
+
+	resp, err := c.client.Chat.Completions.New(
+		ctx,
+		params,
+		option.WithRequestTimeout(openaiSDKDefaultTimeout),
+	)
 	if err != nil {
 		return "", err
 	}
