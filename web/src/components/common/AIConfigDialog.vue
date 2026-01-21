@@ -233,12 +233,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, MagicStick } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
 import type { AIServiceConfig, AIServiceType, CreateAIConfigRequest, UpdateAIConfigRequest } from '@/types/ai'
 import ConfigList from '@/views/settings/components/ConfigList.vue'
+import { getAIConfigCache, setAIConfigCache } from '@/utils/aiConfigCache'
 
 const props = defineProps<{
   modelValue: boolean
@@ -257,6 +258,8 @@ const visible = computed({
 const activeTab = ref<AIServiceType>('text')
 const loading = ref(false)
 const configs = ref<AIServiceConfig[]>([])
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
 const editDialogVisible = ref(false)
 const isEdit = ref(false)
 const editingId = ref<number>()
@@ -486,14 +489,53 @@ const rules: FormRules = {
   }]
 }
 
-const loadConfigs = async () => {
-  loading.value = true
+const startLoading = (shouldStart: boolean) => {
+  if (!shouldStart || loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    loading.value = true
+  }, 200)
+}
+
+const stopLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  loading.value = false
+}
+
+const hydrateConfigsFromCache = (serviceType: AIServiceType) => {
+  const cached = getAIConfigCache(serviceType, cacheTTL)
+  if (!cached) return false
+  configs.value = cached
+  return true
+}
+
+const loadConfigs = async (options: { useCache?: boolean; showLoading?: boolean; clear?: boolean } = {}) => {
+  const serviceType = activeTab.value
+  if (options.clear) {
+    configs.value = []
+  }
+
+  let hasCache = false
+  if (options.useCache ?? true) {
+    hasCache = hydrateConfigsFromCache(serviceType)
+  }
+
+  const shouldShowLoading = options.showLoading ?? (configs.value.length === 0 && !hasCache)
+  if (shouldShowLoading) {
+    startLoading(true)
+  } else {
+    stopLoading()
+  }
   try {
-    configs.value = await aiAPI.list(activeTab.value)
+    const data = await aiAPI.list(serviceType)
+    configs.value = data
+    setAIConfigCache(serviceType, data)
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
-    loading.value = false
+    stopLoading()
   }
 }
 
@@ -573,7 +615,7 @@ const handleDelete = async (config: AIServiceConfig) => {
     
     await aiAPI.delete(config.id)
     ElMessage.success('删除成功')
-    loadConfigs()
+    loadConfigs({ useCache: false })
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
@@ -586,7 +628,7 @@ const handleToggleActive = async (config: AIServiceConfig) => {
     const newActiveState = !config.is_active
     await aiAPI.update(config.id, { is_active: newActiveState })
     ElMessage.success(newActiveState ? '已启用配置' : '已禁用配置')
-    await loadConfigs()
+    await loadConfigs({ useCache: false })
   } catch (error: any) {
     ElMessage.error(error.message || '操作失败')
   }
@@ -676,7 +718,7 @@ const handleSubmit = async () => {
       }
       
       editDialogVisible.value = false
-      loadConfigs()
+      loadConfigs({ useCache: false })
       emit('config-updated')
     } catch (error: any) {
       ElMessage.error(error.message || '操作失败')
@@ -688,7 +730,7 @@ const handleSubmit = async () => {
 
 const handleTabChange = (tabName: string | number) => {
   activeTab.value = tabName as AIServiceType
-  loadConfigs()
+  loadConfigs({ useCache: true, clear: true })
 }
 
 const handleProviderChange = () => {
@@ -828,7 +870,7 @@ const handleQuickSetup = async () => {
     }
 
     quickSetupVisible.value = false
-    loadConfigs()
+    loadConfigs({ useCache: false })
     if (createdServices.length > 0) {
       emit('config-updated')
     }
@@ -842,8 +884,14 @@ const handleQuickSetup = async () => {
 // Load configs when dialog opens
 watch(visible, (val) => {
   if (val) {
-    loadConfigs()
+    loadConfigs({ useCache: true, clear: true })
+    return
   }
+  stopLoading()
+})
+
+onBeforeUnmount(() => {
+  stopLoading()
 })
 </script>
 
