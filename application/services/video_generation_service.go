@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -689,5 +690,33 @@ func (s *VideoGenerationService) BatchGenerateVideosForEpisode(episodeID string)
 }
 
 func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
-	return s.db.Delete(&models.VideoGeneration{}, id).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var videoGen models.VideoGeneration
+		if err := tx.Where("id = ?", id).First(&videoGen).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("video generation not found")
+			}
+			return err
+		}
+
+		if err := tx.Delete(&models.VideoGeneration{}, id).Error; err != nil {
+			return err
+		}
+
+		if videoGen.StoryboardID != nil && videoGen.VideoURL != nil && *videoGen.VideoURL != "" {
+			if err := tx.Model(&models.Storyboard{}).
+				Where("id = ? AND video_url = ?", *videoGen.StoryboardID, *videoGen.VideoURL).
+				Update("video_url", gorm.Expr("NULL")).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Model(&models.Asset{}).
+			Where("video_gen_id = ?", id).
+			Update("video_gen_id", gorm.Expr("NULL")).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

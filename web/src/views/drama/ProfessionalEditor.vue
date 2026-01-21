@@ -290,8 +290,14 @@
                         <p>生成中...</p>
                       </div>
                       <div class="image-info">
-                        <el-tag :type="getStatusType(img.status)" size="small">{{ getStatusText(img.status) }}</el-tag>
-                        <span v-if="img.frame_type" class="frame-type-tag">{{ getFrameTypeText(img.frame_type) }}</span>
+                        <div class="image-tags">
+                          <el-tag :type="getStatusType(img.status)" size="small">{{ getStatusText(img.status) }}</el-tag>
+                          <span v-if="img.frame_type" class="frame-type-tag">{{ getFrameTypeText(img.frame_type) }}</span>
+                        </div>
+                        <el-button class="image-delete-button" type="danger" size="small"
+                          :loading="deletingImageIds.has(img.id)" @click.stop="deleteGeneratedImage(img)">
+                          删除
+                        </el-button>
                       </div>
                     </div>
                   </div>
@@ -387,6 +393,14 @@
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
+                          <div class="reference-action"
+                            :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
+                            @click.stop="deleteGeneratedImage(img)">
+                            <el-icon :size="14" color="#fff">
+                              <Loading v-if="deletingImageIds.has(img.id)" />
+                              <Delete v-else />
+                            </el-icon>
+                          </div>
                           <div class="preview-icon" @click.stop="previewImage(img.image_url)"
                             style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">
                             <el-icon :size="14" color="#fff">
@@ -412,6 +426,14 @@
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
+                          <div class="reference-action"
+                            :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
+                            @click.stop="deleteGeneratedImage(img)">
+                            <el-icon :size="14" color="#fff">
+                              <Loading v-if="deletingImageIds.has(img.id)" />
+                              <Delete v-else />
+                            </el-icon>
+                          </div>
                           <div class="preview-icon" @click.stop="previewImage(img.image_url)"
                             style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">
                             <el-icon :size="14" color="#fff">
@@ -437,6 +459,14 @@
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
+                          <div class="reference-action"
+                            :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
+                            @click.stop="deleteGeneratedImage(img)">
+                            <el-icon :size="14" color="#fff">
+                              <Loading v-if="deletingImageIds.has(img.id)" />
+                              <Delete v-else />
+                            </el-icon>
+                          </div>
                           <div class="preview-icon" @click.stop="previewImage(img.image_url)"
                             style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">
                             <el-icon :size="14" color="#fff">
@@ -462,6 +492,14 @@
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
+                          <div class="reference-action"
+                            :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
+                            @click.stop="deleteGeneratedImage(img)">
+                            <el-icon :size="14" color="#fff">
+                              <Loading v-if="deletingImageIds.has(img.id)" />
+                              <Delete v-else />
+                            </el-icon>
+                          </div>
                           <div class="preview-icon" @click.stop="previewImage(img.image_url)"
                             style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">
                             <el-icon :size="14" color="#fff">
@@ -487,6 +525,14 @@
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
+                          <div class="reference-action"
+                            :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
+                            @click.stop="deleteGeneratedImage(img)">
+                            <el-icon :size="14" color="#fff">
+                              <Loading v-if="deletingImageIds.has(img.id)" />
+                              <Delete v-else />
+                            </el-icon>
+                          </div>
                           <div class="preview-icon" @click.stop="previewImage(img.image_url)"
                             style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">
                             <el-icon :size="14" color="#fff">
@@ -659,6 +705,10 @@
                           <el-button v-if="video.status === 'completed' && video.video_url" type="success" size="small"
                             :loading="addingToAssets.has(video.id)" @click.stop="addVideoToAssets(video)">
                             {{ addingToAssets.has(video.id) ? '添加中...' : '添加到素材库' }}
+                          </el-button>
+                          <el-button type="danger" size="small" plain :loading="deletingVideoIds.has(video.id)"
+                            :disabled="addingToAssets.has(video.id)" @click.stop="deleteGeneratedVideo(video)">
+                            删除
                           </el-button>
                         </div>
                       </div>
@@ -972,6 +1022,7 @@ const currentFramePrompt = ref('')
 const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
 const generatedImages = ref<ImageGeneration[]>([])
+const deletingImageIds = ref<Set<number>>(new Set())
 const imageCache = ref<Record<string, ImageGeneration[]>>({})
 const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类型
 const loadingImages = ref(false)
@@ -1003,6 +1054,7 @@ const selectedImagesForVideo = ref<number[]>([])
 const selectedLastImageForVideo = ref<number | null>(null)
 const generatingVideo = ref(false)
 const generatedVideos = ref<VideoGeneration[]>([])
+const deletingVideoIds = ref<Set<number>>(new Set())
 const videoCache = ref<Record<string, VideoGeneration[]>>({})
 const videoAssets = ref<Asset[]>([])
 const loadingVideos = ref(false)
@@ -2130,6 +2182,114 @@ const getStatusText = (status: string) => {
     failed: '失败'
   }
   return statusTextMap[status] || status
+}
+
+const pruneImageCaches = (imageId: number) => {
+  Object.keys(imageCache.value).forEach((key) => {
+    const cached = imageCache.value[key]
+    if (!cached) return
+    const next = cached.filter(img => img.id !== imageId)
+    if (next.length !== cached.length) {
+      imageCache.value[key] = next
+    }
+  })
+  generatedImages.value = generatedImages.value.filter(img => img.id !== imageId)
+
+  Object.keys(videoReferenceCache.value).forEach((key) => {
+    const cached = videoReferenceCache.value[key]
+    if (!cached) return
+    const next = cached.filter(img => img.id !== imageId)
+    if (next.length !== cached.length) {
+      videoReferenceCache.value[key] = next
+    }
+  })
+  videoReferenceImages.value = videoReferenceImages.value.filter(img => img.id !== imageId)
+
+  selectedImagesForVideo.value = selectedImagesForVideo.value.filter(id => id !== imageId)
+  if (selectedLastImageForVideo.value === imageId) {
+    selectedLastImageForVideo.value = null
+  }
+}
+
+const pruneVideoCaches = (videoId: number) => {
+  Object.keys(videoCache.value).forEach((key) => {
+    const cached = videoCache.value[key]
+    if (!cached) return
+    const next = cached.filter(video => video.id !== videoId)
+    if (next.length !== cached.length) {
+      videoCache.value[key] = next
+    }
+  })
+  generatedVideos.value = generatedVideos.value.filter(video => video.id !== videoId)
+}
+
+const deleteGeneratedImage = async (image: ImageGeneration) => {
+  if (deletingImageIds.value.has(image.id)) return
+  try {
+    await ElMessageBox.confirm('确定要删除该图片吗？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  deletingImageIds.value.add(image.id)
+  try {
+    await imageAPI.deleteImage(image.id)
+    pruneImageCaches(image.id)
+
+    if (image.storyboard_id && image.image_url) {
+      const storyboard = storyboards.value.find(item => item.id === image.storyboard_id)
+      if (storyboard?.composed_image === image.image_url) {
+        storyboard.composed_image = undefined
+      }
+    }
+
+    ElMessage.success('删除成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || '删除失败')
+  } finally {
+    deletingImageIds.value.delete(image.id)
+  }
+}
+
+const deleteGeneratedVideo = async (video: VideoGeneration) => {
+  if (deletingVideoIds.value.has(video.id)) return
+  try {
+    await ElMessageBox.confirm('确定要删除该视频吗？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  deletingVideoIds.value.add(video.id)
+  try {
+    await videoAPI.deleteVideo(video.id)
+    pruneVideoCaches(video.id)
+
+    if (previewVideo.value?.id === video.id) {
+      previewVideo.value = null
+      showVideoPreview.value = false
+    }
+
+    if (video.storyboard_id && video.video_url) {
+      const storyboard = storyboards.value.find(item => item.id === video.storyboard_id)
+      if (storyboard?.video_url === video.video_url) {
+        storyboard.video_url = undefined
+      }
+    }
+
+    ElMessage.success('删除成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || '删除失败')
+  } finally {
+    deletingVideoIds.value.delete(video.id)
+  }
 }
 
 // 获取帧类型中文文本
@@ -4047,8 +4207,27 @@ onBeforeUnmount(() => {
           align-items: center;
           gap: 4px;
 
+          .image-tags {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+          }
+
           :deep(.el-tag) {
             backdrop-filter: blur(8px);
+            font-size: 10px;
+            height: 20px;
+            padding: 0 6px;
+          }
+
+          :deep(.image-delete-button) {
+            --el-button-bg-color: rgba(255, 90, 90, 0.2);
+            --el-button-border-color: rgba(255, 255, 255, 0.25);
+            --el-button-hover-bg-color: rgba(255, 90, 90, 0.35);
+            --el-button-hover-border-color: rgba(255, 255, 255, 0.4);
+            --el-button-active-bg-color: rgba(255, 90, 90, 0.45);
+            --el-button-active-border-color: rgba(255, 255, 255, 0.45);
+            color: #fff;
             font-size: 10px;
             height: 20px;
             padding: 0 6px;
@@ -4067,6 +4246,7 @@ onBeforeUnmount(() => {
             letter-spacing: 0.3px;
           }
         }
+
       }
     }
 
@@ -4084,8 +4264,6 @@ onBeforeUnmount(() => {
       height: 160px;
     }
   }
-
-
 
   .panel-count-label {
     margin-left: 5px;
@@ -4116,6 +4294,26 @@ onBeforeUnmount(() => {
     margin-bottom: 12px;
     padding-left: 8px;
     border-left: 3px solid var(--accent);
+  }
+
+  .reference-action {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  .reference-action.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 
   // 视频生成结果样式

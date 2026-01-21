@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -548,14 +549,63 @@ func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *ui
 }
 
 func (s *ImageGenerationService) DeleteImageGeneration(imageGenID uint) error {
-	result := s.db.Where("id = ? ", imageGenID).Delete(&models.ImageGeneration{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("image generation not found")
-	}
-	return nil
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var imageGen models.ImageGeneration
+		if err := tx.Where("id = ?", imageGenID).First(&imageGen).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("image generation not found")
+			}
+			return err
+		}
+
+		if err := tx.Delete(&models.ImageGeneration{}, imageGenID).Error; err != nil {
+			return err
+		}
+
+		if imageGen.ImageURL != nil && *imageGen.ImageURL != "" {
+			if imageGen.StoryboardID != nil {
+				if err := tx.Model(&models.Storyboard{}).
+					Where("id = ? AND composed_image = ?", *imageGen.StoryboardID, *imageGen.ImageURL).
+					Update("composed_image", gorm.Expr("NULL")).Error; err != nil {
+					return err
+				}
+			}
+
+			if imageGen.SceneID != nil && imageGen.ImageType == string(models.ImageTypeScene) {
+				sceneUpdates := map[string]interface{}{
+					"image_url": gorm.Expr("NULL"),
+					"status":    "pending",
+				}
+				if err := tx.Model(&models.Scene{}).
+					Where("id = ? AND image_url = ?", *imageGen.SceneID, *imageGen.ImageURL).
+					Updates(sceneUpdates).Error; err != nil {
+					return err
+				}
+			}
+
+			if imageGen.CharacterID != nil {
+				if err := tx.Model(&models.Character{}).
+					Where("id = ? AND image_url = ?", *imageGen.CharacterID, *imageGen.ImageURL).
+					Update("image_url", gorm.Expr("NULL")).Error; err != nil {
+					return err
+				}
+			}
+		} else if imageGen.SceneID != nil && imageGen.ImageType == string(models.ImageTypeScene) {
+			if err := tx.Model(&models.Scene{}).
+				Where("id = ? AND image_url IS NULL", *imageGen.SceneID).
+				Update("status", "pending").Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.Model(&models.Asset{}).
+			Where("image_gen_id = ?", imageGenID).
+			Update("image_gen_id", gorm.Expr("NULL")).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (s *ImageGenerationService) GenerateImagesForScene(sceneID string) ([]*models.ImageGeneration, error) {
