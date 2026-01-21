@@ -22,7 +22,7 @@
       v-loading="pageLoading"
       :element-loading-text="$t('common.loading')"
       element-loading-background="transparent"
-      element-loading-custom-class="glass-loading"
+      element-loading-custom-class="storyboard-glass-loading"
     >
       <div class="toolbar">
         <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate">

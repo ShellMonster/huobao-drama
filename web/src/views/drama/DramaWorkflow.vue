@@ -36,7 +36,7 @@
       v-loading="pageLoading"
       :element-loading-text="$t('common.loading')"
       element-loading-background="transparent"
-      element-loading-custom-class="glass-loading"
+      element-loading-custom-class="storyboard-glass-loading"
     >
       <!-- 阶段 0: 剧本生成 -->
       <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">

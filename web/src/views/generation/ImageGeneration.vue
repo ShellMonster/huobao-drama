@@ -42,7 +42,12 @@
       </el-form>
     </el-card>
 
-    <el-row :gutter="16" v-loading="loading">
+    <el-row
+      :gutter="16"
+      v-loading="loading"
+      element-loading-background="transparent"
+      element-loading-custom-class="storyboard-glass-loading"
+    >
       <el-col
         v-for="image in images"
         :key="image.id"

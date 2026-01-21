@@ -39,7 +39,7 @@
       v-loading="pageLoading"
       :element-loading-text="$t('common.loading')"
       element-loading-background="transparent"
-      element-loading-custom-class="glass-loading"
+      element-loading-custom-class="storyboard-glass-loading"
     >
     <!-- 阶段 0: 章节内容 + 提取角色场景 -->
     <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">

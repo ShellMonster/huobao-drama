@@ -1,5 +1,10 @@
 <template>
-  <div v-loading="loading" class="config-list">
+  <div
+    v-loading="loading"
+    class="config-list"
+    element-loading-background="transparent"
+    element-loading-custom-class="storyboard-glass-loading"
+  >
     <el-empty v-if="!loading && configs.length === 0" :description="$t('aiConfig.empty')" />
 
     <el-card 

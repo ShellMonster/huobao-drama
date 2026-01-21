@@ -228,7 +228,13 @@
           <!-- 图片生成标签 -->
           <el-tab-pane :label="$t('editor.shotImage')" name="image">
             <div class="tab-content" v-if="currentStoryboard">
-              <div class="image-generation-section" v-loading="loadingImages" element-loading-text="加载图片中...">
+              <div
+                class="image-generation-section"
+                v-loading="loadingImages"
+                element-loading-text="加载图片中..."
+                element-loading-background="transparent"
+                element-loading-custom-class="storyboard-glass-loading"
+              >
                 <!-- 帧类型选择 -->
                 <div class="frame-type-selector">
                   <div class="section-label">{{ $t('editor.selectFrameType') }}</div>
@@ -246,7 +252,13 @@
                 </div>
 
                 <!-- 提示词区域 -->
-                <div class="prompt-section">
+                <div
+                  class="prompt-section"
+                  v-loading="promptLoading"
+                  element-loading-text="加载提示词中..."
+                  element-loading-background="transparent"
+                  element-loading-custom-class="storyboard-glass-loading"
+                >
                   <div class="section-label">
                     {{ $t('editor.prompt') }}
                     <el-button size="small" type="primary" :loading="currentPromptGenerating"
@@ -297,7 +309,13 @@
           <!-- 视频生成标签 -->
           <el-tab-pane :label="$t('video.videoGeneration')" name="video">
             <div class="tab-content" v-if="currentStoryboard">
-              <div class="video-generation-section" v-loading="loadingVideos" element-loading-text="加载视频中...">
+              <div
+                class="video-generation-section"
+                v-loading="loadingVideos"
+                element-loading-text="加载视频中..."
+                element-loading-background="transparent"
+                element-loading-custom-class="storyboard-glass-loading"
+              >
                 <!-- 生成提示词展示 -->
                 <div class="video-prompt-box">
                   {{ currentStoryboard.video_prompt || '暂无提示词' }}
@@ -668,7 +686,12 @@
           <!-- 视频合成列表标签 -->
           <el-tab-pane :label="$t('video.videoMerge')" name="merges">
             <div class="tab-content">
-              <div class="merges-list" v-loading="loadingMerges">
+              <div
+                class="merges-list"
+                v-loading="loadingMerges"
+                element-loading-background="transparent"
+                element-loading-custom-class="storyboard-glass-loading"
+              >
                 <el-empty v-if="videoMerges.length === 0" :description="$t('video.noMergeRecords')" :image-size="120">
                   <template #description>
                     <div style="color: #909399; font-size: 14px; margin-top: 12px;">
@@ -957,6 +980,7 @@ const framePrompts = ref<Record<FrameType, string>>({
   action: ''
 })
 const currentFramePrompt = ref('')
+const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
 const generatedImages = ref<ImageGeneration[]>([])
 const imageCache = ref<Record<string, ImageGeneration[]>>({})
@@ -966,10 +990,16 @@ let pollingTimer: any = null
 let pollingFrameType: FrameType | null = null // 记录正在轮询的帧类型
 let imageStreamStop: (() => void) | null = null
 let imageRefreshTimer: number | null = null
+let framePromptRequestId = 0
+let framePromptLoadingRequestId = 0
 const currentPromptGenerating = computed(() => {
   const storyboardId = currentStoryboard.value?.id
   if (!storyboardId) return false
   return !!generatingPromptMap.value[`${storyboardId}_${selectedFrameType.value}`]
+})
+const promptLoading = computed(() => {
+  if (!currentStoryboard.value) return false
+  return framePromptLoadingKey.value === `${currentStoryboard.value.id}_${selectedFrameType.value}`
 })
 const currentImageGenerating = computed(() => {
   const storyboardId = currentStoryboard.value?.id
@@ -1485,13 +1515,36 @@ const applyServerFramePrompts = (storyboardId: number, records: FramePromptRecor
   })
 }
 
-const loadFramePrompts = async (storyboardId: number) => {
+const loadFramePrompts = async (
+  storyboardId: number,
+  options: { showLoading?: boolean; frameType?: FrameType } = {}
+) => {
+  const requestId = ++framePromptRequestId
+  const loadingKey = options.showLoading
+    ? `${storyboardId}_${options.frameType || selectedFrameType.value}`
+    : null
+
+  if (loadingKey) {
+    framePromptLoadingKey.value = loadingKey
+    framePromptLoadingRequestId = requestId
+  }
+
   try {
     const result = await getStoryboardFramePrompts(storyboardId)
+    if (requestId !== framePromptRequestId) return
     if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
     applyServerFramePrompts(storyboardId, result.frame_prompts || [])
   } catch (error: any) {
     console.error('加载帧提示词失败:', error)
+  } finally {
+    if (
+      loadingKey &&
+      framePromptLoadingKey.value === loadingKey &&
+      framePromptLoadingRequestId === requestId
+    ) {
+      framePromptLoadingKey.value = null
+      framePromptLoadingRequestId = 0
+    }
   }
 }
 
@@ -1522,6 +1575,10 @@ watch(selectedFrameType, (newType) => {
     }
   }
 
+  if (!currentFramePrompt.value) {
+    void loadFramePrompts(currentStoryboard.value.id, { showLoading: true, frameType: newType })
+  }
+
   applyCachedImages(currentStoryboard.value.id, newType)
 
   // 重新加载该帧类型的图片
@@ -1540,6 +1597,8 @@ watch(currentStoryboard, async (newStoryboard) => {
     generatedImages.value = []
     generatedVideos.value = []
     videoReferenceImages.value = []
+    framePromptLoadingKey.value = null
+    framePromptLoadingRequestId = 0
     return
   }
 
@@ -1577,9 +1636,11 @@ watch(currentStoryboard, async (newStoryboard) => {
   applyCachedVideoReferences(newStoryboard.id)
   applyCachedVideos(newStoryboard.id)
 
+  const shouldLoadPrompts = !currentFramePrompt.value
+
   await Promise.allSettled([
     loadStoryboardImages(newStoryboard.id, selectedFrameType.value),
-    loadFramePrompts(newStoryboard.id),
+    loadFramePrompts(newStoryboard.id, { showLoading: shouldLoadPrompts, frameType: selectedFrameType.value }),
     loadVideoReferenceImages(newStoryboard.id),
     loadStoryboardVideos(newStoryboard.id)
   ])
@@ -3658,23 +3719,6 @@ onBeforeUnmount(() => {
       flex-direction: column;
       position: relative;
 
-      :deep(.storyboard-glass-loading) {
-        backdrop-filter: blur(14px) saturate(140%);
-        -webkit-backdrop-filter: blur(14px) saturate(140%);
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.18));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-      }
-
-      :deep(.storyboard-glass-loading .el-loading-text) {
-        color: var(--text-primary);
-        font-weight: 500;
-        letter-spacing: 0.2px;
-      }
-
-      :deep(.storyboard-glass-loading .el-loading-spinner .path) {
-        stroke: var(--accent);
-      }
-
       .panel-header {
         display: flex;
         justify-content: space-between;
@@ -3842,10 +3886,6 @@ onBeforeUnmount(() => {
 
   .dark .editor-main {
     .storyboard-panel {
-      :deep(.storyboard-glass-loading) {
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.4));
-        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.22);
-      }
     }
   }
 }

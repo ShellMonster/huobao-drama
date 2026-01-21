@@ -22,7 +22,13 @@
       </AppHeader>
 
       <!-- Project Grid / 项目网格 -->
-      <div v-loading="loading" class="projects-grid" :class="{ 'is-empty': !loading && dramas.length === 0 }">
+      <div
+        v-loading="loading"
+        class="projects-grid"
+        :class="{ 'is-empty': !loading && dramas.length === 0 }"
+        element-loading-background="transparent"
+        element-loading-custom-class="storyboard-glass-loading"
+      >
         <!-- Empty state / 空状态 -->
         <EmptyState v-if="!loading && dramas.length === 0" :title="$t('drama.empty')"
           :description="$t('drama.emptyHint')" :icon="Film">
@@ -52,7 +58,14 @@
       <!-- Edit Dialog / 编辑对话框 -->
       <el-dialog v-model="editDialogVisible" :title="$t('drama.editProject')" width="520px"
         :close-on-click-modal="false" class="edit-dialog">
-        <el-form :model="editForm" label-position="top" v-loading="editLoading" class="edit-form">
+        <el-form
+          :model="editForm"
+          label-position="top"
+          v-loading="editLoading"
+          class="edit-form"
+          element-loading-background="transparent"
+          element-loading-custom-class="storyboard-glass-loading"
+        >
           <el-form-item :label="$t('drama.projectName')" required>
             <el-input v-model="editForm.title" :placeholder="$t('drama.projectNamePlaceholder')" size="large" />
           </el-form-item>

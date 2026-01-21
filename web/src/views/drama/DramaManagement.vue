@@ -21,7 +21,7 @@
         v-loading="pageLoading"
         :element-loading-text="$t('common.loading')"
         element-loading-background="transparent"
-        element-loading-custom-class="glass-loading"
+        element-loading-custom-class="storyboard-glass-loading"
       >
         <el-tabs v-model="activeTab" class="management-tabs">
       <!-- 项目概览 -->
