@@ -6,77 +6,79 @@
     :close-on-click-modal="false"
     @close="handleClose"
   >
-    <el-form :model="form" label-width="100px">
-      <el-form-item label="剧本内容" required>
-        <el-input
-          v-model="form.script_content"
-          type="textarea"
-          :rows="15"
-          placeholder="粘贴您的剧本内容&#10;系统将自动识别并拆分为剧集和场景"
-          maxlength="50000"
-          show-word-limit
-        />
-        <div class="form-tip">
-          支持多种剧本格式，系统会智能识别剧集、场景、对话等内容
-        </div>
-      </el-form-item>
+    <LoadingSection :loading="dialogLoading" text="处理中...">
+      <el-form :model="form" label-width="100px">
+        <el-form-item label="剧本内容" required>
+          <el-input
+            v-model="form.script_content"
+            type="textarea"
+            :rows="15"
+            placeholder="粘贴您的剧本内容&#10;系统将自动识别并拆分为剧集和场景"
+            maxlength="50000"
+            show-word-limit
+          />
+          <div class="form-tip">
+            支持多种剧本格式，系统会智能识别剧集、场景、对话等内容
+          </div>
+        </el-form-item>
 
-      <el-form-item label="拆分选项">
-        <el-checkbox v-model="form.auto_split">自动拆分剧集</el-checkbox>
-        <div class="form-tip">
-          启用后将自动识别剧集分界点，否则作为单集处理
-        </div>
-      </el-form-item>
-    </el-form>
+        <el-form-item label="拆分选项">
+          <el-checkbox v-model="form.auto_split">自动拆分剧集</el-checkbox>
+          <div class="form-tip">
+            启用后将自动识别剧集分界点，否则作为单集处理
+          </div>
+        </el-form-item>
+      </el-form>
 
-    <template v-if="parseResult">
-      <el-divider>解析结果</el-divider>
-      
-      <div class="parse-result">
-        <el-alert
-          title="解析完成"
-          type="success"
-          :closable="false"
-          show-icon
-        >
-          <template #default>
-            共识别 {{ parseResult.episodes.length }} 个剧集，
-            {{ totalScenes }} 个场景
-          </template>
-        </el-alert>
-
-        <div class="summary-box" v-if="parseResult.summary">
-          <h4>剧本概要</h4>
-          <p>{{ parseResult.summary }}</p>
-        </div>
-
-        <el-collapse v-model="activeEpisode" accordion>
-          <el-collapse-item
-            v-for="episode in parseResult.episodes"
-            :key="episode.episode_number"
-            :title="`第${episode.episode_number}集: ${episode.title}`"
-            :name="episode.episode_number"
+      <template v-if="parseResult">
+        <el-divider>解析结果</el-divider>
+        
+        <div class="parse-result">
+          <el-alert
+            title="解析完成"
+            type="success"
+            :closable="false"
+            show-icon
           >
-            <div class="episode-info">
-              <p><strong>场景数：</strong>{{ episode.scenes.length }}</p>
-              
-              <el-table :data="episode.scenes" size="small" border>
-                <el-table-column prop="storyboard_number" label="场景号" width="80" />
-                <el-table-column prop="title" label="标题" width="150" />
-                <el-table-column prop="location" label="地点" width="120" />
-                <el-table-column prop="time" label="时间" width="100" />
-                <el-table-column prop="characters" label="角色" width="150" />
-                <el-table-column label="对话">
-                  <template #default="{ row }">
-                    <div class="dialogue-preview">{{ row.dialogue }}</div>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </el-collapse-item>
-        </el-collapse>
-      </div>
-    </template>
+            <template #default>
+              共识别 {{ parseResult.episodes.length }} 个剧集，
+              {{ totalScenes }} 个场景
+            </template>
+          </el-alert>
+
+          <div class="summary-box" v-if="parseResult.summary">
+            <h4>剧本概要</h4>
+            <p>{{ parseResult.summary }}</p>
+          </div>
+
+          <el-collapse v-model="activeEpisode" accordion>
+            <el-collapse-item
+              v-for="episode in parseResult.episodes"
+              :key="episode.episode_number"
+              :title="`第${episode.episode_number}集: ${episode.title}`"
+              :name="episode.episode_number"
+            >
+              <div class="episode-info">
+                <p><strong>场景数：</strong>{{ episode.scenes.length }}</p>
+                
+                <el-table :data="episode.scenes" size="small" border>
+                  <el-table-column prop="storyboard_number" label="场景号" width="80" />
+                  <el-table-column prop="title" label="标题" width="150" />
+                  <el-table-column prop="location" label="地点" width="120" />
+                  <el-table-column prop="time" label="时间" width="100" />
+                  <el-table-column prop="characters" label="角色" width="150" />
+                  <el-table-column label="对话">
+                    <template #default="{ row }">
+                      <div class="dialogue-preview">{{ row.dialogue }}</div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+      </template>
+    </LoadingSection>
 
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
@@ -95,6 +97,7 @@ import { ref, computed, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { generationAPI } from '@/api/generation'
 import type { ParseScriptResult } from '@/types/generation'
+import { LoadingSection } from '@/components/common'
 
 interface Props {
   modelValue: boolean
@@ -121,6 +124,7 @@ const parsing = ref(false)
 const saving = ref(false)
 const parseResult = ref<ParseScriptResult>()
 const activeEpisode = ref<number>()
+const dialogLoading = computed(() => parsing.value || saving.value)
 
 const totalScenes = computed(() => {
   if (!parseResult.value) return 0

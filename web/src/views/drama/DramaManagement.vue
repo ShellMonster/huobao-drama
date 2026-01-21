@@ -16,12 +16,10 @@
       </AppHeader>
 
       <!-- Tabs / 标签页 -->
-      <div
+      <LoadingSection
         class="tabs-wrapper"
-        v-loading="pageLoading"
-        :element-loading-text="$t('common.loading')"
-        element-loading-background="transparent"
-        element-loading-custom-class="storyboard-glass-loading"
+        :loading="pageLoading"
+        :text="$t('common.loading')"
       >
         <el-tabs v-model="activeTab" class="management-tabs">
       <!-- 项目概览 -->
@@ -222,7 +220,7 @@
         <el-empty v-if="scenes.length === 0" :description="$t('drama.management.noScenes')" />
       </el-tab-pane>
         </el-tabs>
-      </div>
+      </LoadingSection>
 
       <!-- 添加角色对话框 -->
     <el-dialog v-model="addCharacterDialogVisible" :title="editingCharacterId ? $t('common.edit') : $t('character.add')" width="600px">
@@ -284,7 +282,7 @@ import { dramaAPI } from '@/api/drama'
 import { sceneAPI } from '@/api/scene'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Drama } from '@/types/drama'
-import { AppHeader, StatCard, EmptyState } from '@/components/common'
+import { AppHeader, StatCard, EmptyState, LoadingSection } from '@/components/common'
 
 const router = useRouter()
 const route = useRoute()

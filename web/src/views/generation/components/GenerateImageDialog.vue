@@ -6,102 +6,104 @@
     :close-on-click-modal="false"
     @close="handleClose"
   >
-    <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
-      <el-form-item :label="$t('imageDialog.selectDrama')" prop="drama_id">
-        <el-select v-model="form.drama_id" :placeholder="$t('imageDialog.selectDrama')" @change="onDramaChange">
-          <el-option
-            v-for="drama in dramas"
-            :key="drama.id"
-            :label="drama.title"
-            :value="drama.id"
+    <LoadingSection :loading="dataLoading" :text="$t('common.loading')">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+        <el-form-item :label="$t('imageDialog.selectDrama')" prop="drama_id">
+          <el-select v-model="form.drama_id" :placeholder="$t('imageDialog.selectDrama')" @change="onDramaChange">
+            <el-option
+              v-for="drama in dramas"
+              :key="drama.id"
+              :label="drama.title"
+              :value="drama.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item :label="$t('imageDialog.selectScene')" prop="scene_id">
+          <el-select
+            v-model="form.scene_id"
+            :placeholder="$t('imageDialog.selectSceneOptional')"
+            clearable
+            @change="onSceneChange"
+          >
+            <el-option
+              v-for="scene in scenes"
+              :key="scene.id"
+  :label="$t('imageDialog.sceneLabel', { number: scene.storyboard_number, title: scene.title })"
+              :value="scene.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item :label="$t('imageDialog.prompt')" prop="prompt">
+          <el-input
+            v-model="form.prompt"
+            type="textarea"
+            :rows="6"
+  :placeholder="$t('imageDialog.promptPlaceholder')"
+            maxlength="2000"
+            show-word-limit
           />
-        </el-select>
-      </el-form-item>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.selectScene')" prop="scene_id">
-        <el-select
-          v-model="form.scene_id"
-          :placeholder="$t('imageDialog.selectSceneOptional')"
-          clearable
-          @change="onSceneChange"
-        >
-          <el-option
-            v-for="scene in scenes"
-            :key="scene.id"
-:label="$t('imageDialog.sceneLabel', { number: scene.storyboard_number, title: scene.title })"
-            :value="scene.id"
+        <el-form-item :label="$t('imageDialog.negativePrompt')">
+          <el-input
+            v-model="form.negative_prompt"
+            type="textarea"
+            :rows="3"
+  :placeholder="$t('imageDialog.negativePromptPlaceholder')"
+            maxlength="1000"
+            show-word-limit
           />
-        </el-select>
-      </el-form-item>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.prompt')" prop="prompt">
-        <el-input
-          v-model="form.prompt"
-          type="textarea"
-          :rows="6"
-:placeholder="$t('imageDialog.promptPlaceholder')"
-          maxlength="2000"
-          show-word-limit
-        />
-      </el-form-item>
+        <el-form-item :label="$t('imageDialog.aiService')">
+          <el-select v-model="form.provider" :placeholder="$t('imageDialog.selectService')">
+            <el-option label="OpenAI/DALL-E" value="openai" />
+            <el-option label="Stable Diffusion" value="stable_diffusion" />
+          </el-select>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.negativePrompt')">
-        <el-input
-          v-model="form.negative_prompt"
-          type="textarea"
-          :rows="3"
-:placeholder="$t('imageDialog.negativePromptPlaceholder')"
-          maxlength="1000"
-          show-word-limit
-        />
-      </el-form-item>
+        <el-form-item :label="$t('imageDialog.imageSize')">
+          <el-select v-model="form.size" :placeholder="$t('imageDialog.selectSize')">
+            <el-option :label="`1024x1024 (${$t('imageDialog.square')})`" value="1024x1024" />
+            <el-option :label="`1792x1024 (${$t('imageDialog.landscape')})`" value="1792x1024" />
+            <el-option :label="`1024x1792 (${$t('imageDialog.portrait')})`" value="1024x1792" />
+          </el-select>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.aiService')">
-        <el-select v-model="form.provider" :placeholder="$t('imageDialog.selectService')">
-          <el-option label="OpenAI/DALL-E" value="openai" />
-          <el-option label="Stable Diffusion" value="stable_diffusion" />
-        </el-select>
-      </el-form-item>
+        <el-form-item :label="$t('imageDialog.imageQuality')" v-if="form.provider === 'openai'">
+          <el-radio-group v-model="form.quality">
+            <el-radio label="standard">{{ $t('imageDialog.standard') }}</el-radio>
+            <el-radio label="hd">{{ $t('imageDialog.hd') }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.imageSize')">
-        <el-select v-model="form.size" :placeholder="$t('imageDialog.selectSize')">
-          <el-option :label="`1024x1024 (${$t('imageDialog.square')})`" value="1024x1024" />
-          <el-option :label="`1792x1024 (${$t('imageDialog.landscape')})`" value="1792x1024" />
-          <el-option :label="`1024x1792 (${$t('imageDialog.portrait')})`" value="1024x1792" />
-        </el-select>
-      </el-form-item>
+        <el-form-item :label="$t('imageDialog.style')" v-if="form.provider === 'openai'">
+          <el-radio-group v-model="form.style">
+            <el-radio label="vivid">{{ $t('imageDialog.vivid') }}</el-radio>
+            <el-radio label="natural">{{ $t('imageDialog.natural') }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.imageQuality')" v-if="form.provider === 'openai'">
-        <el-radio-group v-model="form.quality">
-          <el-radio label="standard">{{ $t('imageDialog.standard') }}</el-radio>
-          <el-radio label="hd">{{ $t('imageDialog.hd') }}</el-radio>
-        </el-radio-group>
-      </el-form-item>
+        <el-collapse v-if="form.provider === 'stable_diffusion'">
+          <el-collapse-item :title="$t('imageDialog.advancedSettings')" name="advanced">
+            <el-form-item :label="$t('imageDialog.samplingSteps')">
+              <el-slider v-model="form.steps" :min="10" :max="50" :marks="stepsMarks" />
+            </el-form-item>
 
-      <el-form-item :label="$t('imageDialog.style')" v-if="form.provider === 'openai'">
-        <el-radio-group v-model="form.style">
-          <el-radio label="vivid">{{ $t('imageDialog.vivid') }}</el-radio>
-          <el-radio label="natural">{{ $t('imageDialog.natural') }}</el-radio>
-        </el-radio-group>
-      </el-form-item>
+            <el-form-item :label="$t('imageDialog.promptRelevance')">
+              <el-slider v-model="form.cfg_scale" :min="1" :max="20" :step="0.5" :marks="cfgMarks" />
+            </el-form-item>
 
-      <el-collapse v-if="form.provider === 'stable_diffusion'">
-        <el-collapse-item :title="$t('imageDialog.advancedSettings')" name="advanced">
-          <el-form-item :label="$t('imageDialog.samplingSteps')">
-            <el-slider v-model="form.steps" :min="10" :max="50" :marks="stepsMarks" />
-          </el-form-item>
-
-          <el-form-item :label="$t('imageDialog.promptRelevance')">
-            <el-slider v-model="form.cfg_scale" :min="1" :max="20" :step="0.5" :marks="cfgMarks" />
-          </el-form-item>
-
-          <el-form-item :label="$t('imageDialog.randomSeed')">
-            <el-input-number v-model="form.seed" :min="-1" :placeholder="$t('imageDialog.leaveBlankRandom')" />
-            <span class="form-tip">{{ $t('imageDialog.seedTip') }}</span>
-          </el-form-item>
-        </el-collapse-item>
-      </el-collapse>
-    </el-form>
+            <el-form-item :label="$t('imageDialog.randomSeed')">
+              <el-input-number v-model="form.seed" :min="-1" :placeholder="$t('imageDialog.leaveBlankRandom')" />
+              <span class="form-tip">{{ $t('imageDialog.seedTip') }}</span>
+            </el-form-item>
+          </el-collapse-item>
+        </el-collapse>
+      </el-form>
+    </LoadingSection>
 
     <template #footer>
       <el-button @click="handleClose">{{ $t('common.cancel') }}</el-button>
@@ -120,6 +122,7 @@ import { imageAPI } from '@/api/image'
 import { dramaAPI } from '@/api/drama'
 import type { Drama, Scene } from '@/types/drama'
 import type { GenerateImageRequest } from '@/types/image'
+import { LoadingSection } from '@/components/common'
 
 interface Props {
   modelValue: boolean
@@ -143,6 +146,8 @@ const formRef = ref<FormInstance>()
 const generating = ref(false)
 const dramas = ref<Drama[]>([])
 const scenes = ref<Scene[]>([])
+const dataLoadingCount = ref(0)
+const dataLoading = computed(() => dataLoadingCount.value > 0)
 
 const form = reactive<GenerateImageRequest>({
   drama_id: props.dramaId || '',
@@ -194,15 +199,19 @@ watch(() => props.modelValue, (val) => {
 })
 
 const loadDramas = async () => {
+  dataLoadingCount.value += 1
   try {
     const result = await dramaAPI.list({ page: 1, page_size: 100 })
     dramas.value = result.items || []
   } catch (error: any) {
     console.error('Failed to load dramas:', error)
+  } finally {
+    dataLoadingCount.value = Math.max(0, dataLoadingCount.value - 1)
   }
 }
 
 const loadScenes = async (dramaId: string) => {
+  dataLoadingCount.value += 1
   try {
     const drama = await dramaAPI.get(dramaId)
     const allScenes: Scene[] = []
@@ -218,6 +227,8 @@ const loadScenes = async (dramaId: string) => {
     scenes.value = allScenes
   } catch (error: any) {
     console.error('Failed to load scenes:', error)
+  } finally {
+    dataLoadingCount.value = Math.max(0, dataLoadingCount.value - 1)
   }
 }
 

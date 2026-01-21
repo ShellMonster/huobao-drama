@@ -6,7 +6,8 @@
       </template>
     </el-page-header>
 
-    <el-card shadow="never" class="main-card">
+    <LoadingSection class="main-card" :loading="pageLoading" :text="$t('common.loading')">
+      <el-card shadow="never">
       <template #header>
         <div class="card-header">
           <h3>{{ $t('character.list') }}</h3>
@@ -57,7 +58,8 @@
           {{ $t('character.nextStep') }}
         </el-button>
       </div>
-    </el-card>
+      </el-card>
+    </LoadingSection>
 
     <!-- 编辑对话框 -->
     <el-dialog v-model="editDialogVisible" :title="dialogTitle" width="600px">
@@ -95,6 +97,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,6 +106,7 @@ const dramaId = route.params.id as string
 
 const characters = ref<Character[]>([])
 const dialogSaving = ref(false)
+const pageLoading = ref(false)
 const editDialogVisible = ref(false)
 const editingCharacterId = ref<number | null>(null)
 const editForm = reactive({
@@ -134,10 +138,13 @@ const addCharacter = () => {
 }
 
 const loadCharacters = async () => {
+  pageLoading.value = true
   try {
     characters.value = await dramaAPI.getCharacters(dramaId)
   } catch (error: any) {
     ElMessage.error(error.message || '加载角色失败')
+  } finally {
+    pageLoading.value = false
   }
 }
 

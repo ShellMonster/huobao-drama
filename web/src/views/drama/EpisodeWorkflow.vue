@@ -34,12 +34,10 @@
         </template>
       </AppHeader>
 
-    <div
+    <LoadingSection
       class="workflow-body"
-      v-loading="pageLoading"
-      :element-loading-text="$t('common.loading')"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
+      :loading="pageLoading"
+      :text="$t('common.loading')"
     >
     <!-- 阶段 0: 章节内容 + 提取角色场景 -->
     <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">
@@ -563,7 +561,7 @@
         </div>
       </div>
     </el-card>
-    </div>
+    </LoadingSection>
 
     <!-- 阶段 3: 专业制作（占位，实际跳转到专业UI页面） -->
 
@@ -829,7 +827,7 @@ import { aiAPI } from '@/api/ai'
 import type { AIServiceConfig } from '@/types/ai'
 import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
-import { AppHeader } from '@/components/common'
+import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()

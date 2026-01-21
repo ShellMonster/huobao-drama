@@ -6,17 +6,18 @@
     :close-on-click-modal="false"
     @close="handleClose"
   >
-    <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
-      <el-form-item label="选择剧本" prop="drama_id">
-        <el-select v-model="form.drama_id" placeholder="选择剧本" @change="onDramaChange">
-          <el-option
-            v-for="drama in dramas"
-            :key="drama.id"
-            :label="drama.title"
-            :value="drama.id"
-          />
-        </el-select>
-      </el-form-item>
+    <LoadingSection :loading="dataLoading" text="加载中...">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+        <el-form-item label="选择剧本" prop="drama_id">
+          <el-select v-model="form.drama_id" placeholder="选择剧本" @change="onDramaChange">
+            <el-option
+              v-for="drama in dramas"
+              :key="drama.id"
+              :label="drama.title"
+              :value="drama.id"
+            />
+          </el-select>
+        </el-form-item>
 
       <el-form-item label="选择图片" prop="image_gen_id">
         <el-select
@@ -120,8 +121,9 @@
             <span class="form-tip">设置相同种子可复现视频</span>
           </el-form-item>
         </el-collapse-item>
-      </el-collapse>
-    </el-form>
+        </el-collapse>
+      </el-form>
+    </LoadingSection>
 
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
@@ -141,6 +143,7 @@ import { dramaAPI } from '@/api/drama'
 import type { Drama } from '@/types/drama'
 import type { ImageGeneration } from '@/types/image'
 import type { GenerateVideoRequest } from '@/types/video'
+import { LoadingSection } from '@/components/common'
 
 interface Props {
   modelValue: boolean
@@ -162,6 +165,8 @@ const formRef = ref<FormInstance>()
 const generating = ref(false)
 const dramas = ref<Drama[]>([])
 const images = ref<ImageGeneration[]>([])
+const dataLoadingCount = ref(0)
+const dataLoading = computed(() => dataLoadingCount.value > 0)
 
 const form = reactive<GenerateVideoRequest & { image_gen_id?: number }>({
   drama_id: props.dramaId || '',
@@ -211,15 +216,19 @@ watch(() => props.modelValue, (val) => {
 })
 
 const loadDramas = async () => {
+  dataLoadingCount.value += 1
   try {
     const result = await dramaAPI.list({ page: 1, page_size: 100 })
     dramas.value = result.items
   } catch (error: any) {
     console.error('Failed to load dramas:', error)
+  } finally {
+    dataLoadingCount.value = Math.max(0, dataLoadingCount.value - 1)
   }
 }
 
 const loadImages = async (dramaId: string) => {
+  dataLoadingCount.value += 1
   try {
     const result = await imageAPI.listImages({
       drama_id: dramaId,
@@ -230,6 +239,8 @@ const loadImages = async (dramaId: string) => {
     images.value = result.items
   } catch (error: any) {
     console.error('Failed to load images:', error)
+  } finally {
+    dataLoadingCount.value = Math.max(0, dataLoadingCount.value - 1)
   }
 }
 

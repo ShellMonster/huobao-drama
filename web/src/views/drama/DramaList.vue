@@ -22,12 +22,10 @@
       </AppHeader>
 
       <!-- Project Grid / 项目网格 -->
-      <div
-        v-loading="loading"
+      <LoadingSection
         class="projects-grid"
         :class="{ 'is-empty': !loading && dramas.length === 0 }"
-        element-loading-background="transparent"
-        element-loading-custom-class="storyboard-glass-loading"
+        :loading="loading"
       >
         <!-- Empty state / 空状态 -->
         <EmptyState v-if="!loading && dramas.length === 0" :title="$t('drama.empty')"
@@ -53,27 +51,22 @@
             </el-popconfirm>
           </template>
         </ProjectCard>
-      </div>
+      </LoadingSection>
 
       <!-- Edit Dialog / 编辑对话框 -->
       <el-dialog v-model="editDialogVisible" :title="$t('drama.editProject')" width="520px"
         :close-on-click-modal="false" class="edit-dialog">
-        <el-form
-          :model="editForm"
-          label-position="top"
-          v-loading="editLoading"
-          class="edit-form"
-          element-loading-background="transparent"
-          element-loading-custom-class="storyboard-glass-loading"
-        >
-          <el-form-item :label="$t('drama.projectName')" required>
-            <el-input v-model="editForm.title" :placeholder="$t('drama.projectNamePlaceholder')" size="large" />
-          </el-form-item>
-          <el-form-item :label="$t('drama.projectDesc')">
-            <el-input v-model="editForm.description" type="textarea" :rows="4"
-              :placeholder="$t('drama.projectDescPlaceholder')" resize="none" />
-          </el-form-item>
-        </el-form>
+        <LoadingSection :loading="editLoading">
+          <el-form :model="editForm" label-position="top" class="edit-form">
+            <el-form-item :label="$t('drama.projectName')" required>
+              <el-input v-model="editForm.title" :placeholder="$t('drama.projectNamePlaceholder')" size="large" />
+            </el-form-item>
+            <el-form-item :label="$t('drama.projectDesc')">
+              <el-input v-model="editForm.description" type="textarea" :rows="4"
+                :placeholder="$t('drama.projectDescPlaceholder')" resize="none" />
+            </el-form-item>
+          </el-form>
+        </LoadingSection>
         <template #footer>
           <div class="dialog-footer">
             <el-button @click="editDialogVisible = false" size="large">{{ $t('common.cancel') }}</el-button>
@@ -129,7 +122,7 @@ import {
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import type { Drama, DramaListQuery } from '@/types/drama'
-import { AppHeader, ProjectCard, ActionButton, CreateDramaDialog, EmptyState } from '@/components/common'
+import { AppHeader, ProjectCard, ActionButton, CreateDramaDialog, EmptyState, LoadingSection } from '@/components/common'
 
 const router = useRouter()
 const loading = ref(false)

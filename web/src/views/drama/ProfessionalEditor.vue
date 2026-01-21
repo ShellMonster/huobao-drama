@@ -14,12 +14,10 @@
     <!-- 主编辑区域 -->
     <div class="editor-main">
       <!-- 左侧分镜列表 -->
-      <div
+      <LoadingSection
         class="storyboard-panel"
-        v-loading="loadingStoryboards"
-        element-loading-text="加载镜头列表中..."
-        element-loading-background="transparent"
-        element-loading-custom-class="storyboard-glass-loading"
+        :loading="loadingStoryboards"
+        text="加载镜头列表中..."
       >
         <div class="panel-header">
           <h3>{{ $t('storyboard.scriptStructure') }}</h3>
@@ -41,7 +39,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </LoadingSection>
 
       <!-- 中间时间线编辑区域 -->
       <div class="timeline-area">
@@ -246,12 +244,10 @@
                 </div>
 
                 <!-- 提示词区域 -->
-                <div
+                <LoadingSection
                   class="prompt-section"
-                  v-loading="promptLoading"
-                  element-loading-text="加载提示词中..."
-                  element-loading-background="transparent"
-                  element-loading-custom-class="storyboard-glass-loading"
+                  :loading="promptLoading"
+                  text="加载提示词中..."
                 >
                   <div class="section-label">
                     {{ $t('editor.prompt') }}
@@ -262,7 +258,7 @@
                   </div>
                   <el-input v-model="currentFramePrompt" type="textarea" :rows="8"
                     :placeholder="$t('editor.promptPlaceholder')" />
-                </div>
+                </LoadingSection>
 
                 <!-- 生成控制 -->
                 <div class="generation-controls">
@@ -274,13 +270,11 @@
                 </div>
 
                 <!-- 生成结果 -->
-                <div
-                  class="generation-result"
+                <LoadingSection
                   v-if="generatedImages.length > 0 || loadingImages"
-                  v-loading="loadingImages"
-                  element-loading-text="加载图片中..."
-                  element-loading-background="transparent"
-                  element-loading-custom-class="storyboard-glass-loading"
+                  class="generation-result"
+                  :loading="loadingImages"
+                  text="加载图片中..."
                 >
                   <div class="section-label">{{ $t('editor.generationResult') }} ({{ generatedImages.length }})</div>
                   <div v-if="generatedImages.length > 0" class="image-grid">
@@ -302,7 +296,7 @@
                     </div>
                   </div>
                   <div v-else class="image-loading-placeholder"></div>
-                </div>
+                </LoadingSection>
               </div>
             </div>
             <el-empty v-else description="未选择镜头" />
@@ -311,12 +305,10 @@
           <!-- 视频生成标签 -->
           <el-tab-pane :label="$t('video.videoGeneration')" name="video">
             <div class="tab-content" v-if="currentStoryboard">
-              <div
+              <LoadingSection
                 class="video-generation-section"
-                v-loading="loadingVideos"
-                element-loading-text="加载视频中..."
-                element-loading-background="transparent"
-                element-loading-custom-class="storyboard-glass-loading"
+                :loading="loadingVideos"
+                text="加载视频中..."
               >
                 <!-- 生成提示词展示 -->
                 <div class="video-prompt-box">
@@ -673,7 +665,7 @@
                     </div>
                   </div>
                 </div>
-              </div>
+              </LoadingSection>
             </div>
             <el-empty v-else description="未选择镜头" />
           </el-tab-pane>
@@ -688,12 +680,7 @@
           <!-- 视频合成列表标签 -->
           <el-tab-pane :label="$t('video.videoMerge')" name="merges">
             <div class="tab-content">
-              <div
-                class="merges-list"
-                v-loading="loadingMerges"
-                element-loading-background="transparent"
-                element-loading-custom-class="storyboard-glass-loading"
-              >
+              <LoadingSection class="merges-list" :loading="loadingMerges">
                 <el-empty v-if="videoMerges.length === 0" :description="$t('video.noMergeRecords')" :image-size="120">
                   <template #description>
                     <div style="color: #909399; font-size: 14px; margin-top: 12px;">
@@ -797,7 +784,7 @@
                     </div>
                   </div>
                 </div>
-              </div>
+              </LoadingSection>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -930,7 +917,7 @@ import type { Asset } from '@/types/asset'
 import type { VideoMerge } from '@/api/videoMerge'
 import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
 import type { Drama, Episode, Storyboard } from '@/types/drama'
-import { AppHeader } from '@/components/common'
+import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()

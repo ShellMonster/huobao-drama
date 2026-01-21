@@ -8,6 +8,7 @@ export { default as PageHeader } from './PageHeader.vue'
 export { default as BaseCard } from './BaseCard.vue'
 export { default as StatCard } from './StatCard.vue'
 export { default as EmptyState } from './EmptyState.vue'
+export { default as LoadingSection } from './LoadingSection.vue'
 
 // Interactive Components / 交互组件
 export { default as ProjectCard } from './ProjectCard.vue'

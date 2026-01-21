@@ -8,12 +8,10 @@
       <h2>{{ $t('timeline.title') }}</h2>
     </div>
     
-    <div
+    <LoadingSection
       class="editor-content"
-      v-loading="pageLoading"
-      :element-loading-text="$t('common.loading')"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
+      :loading="pageLoading"
+      :text="$t('common.loading')"
     >
       <VideoTimelineEditor 
         v-if="scenes.length > 0"
@@ -21,7 +19,7 @@
         :episode-id="episodeId" 
       />
       <el-empty v-else :description="$t('timeline.noScenes')" />
-    </div>
+    </LoadingSection>
   </div>
 </template>
 
@@ -32,6 +30,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()

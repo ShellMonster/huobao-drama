@@ -42,21 +42,17 @@
       </el-form>
     </el-card>
 
-    <el-row
-      :gutter="16"
-      v-loading="loading"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
-    >
-      <el-col
-        v-for="video in videos"
-        :key="video.id"
-        :xs="24"
-        :sm="12"
-        :md="8"
-        :lg="6"
-      >
-        <el-card class="video-card" shadow="hover">
+    <LoadingSection :loading="loading">
+      <el-row :gutter="16">
+        <el-col
+          v-for="video in videos"
+          :key="video.id"
+          :xs="24"
+          :sm="12"
+          :md="8"
+          :lg="6"
+        >
+          <el-card class="video-card" shadow="hover">
           <div class="video-wrapper">
             <video
               v-if="video.status === 'completed' && video.video_url"
@@ -137,8 +133,9 @@
             </div>
           </template>
         </el-card>
-      </el-col>
-    </el-row>
+        </el-col>
+      </el-row>
+    </LoadingSection>
 
     <el-empty v-if="!loading && videos.length === 0" description="暂无视频，开始生成吧！" />
 
@@ -182,6 +179,7 @@ import type { Drama } from '@/types/drama'
 import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()

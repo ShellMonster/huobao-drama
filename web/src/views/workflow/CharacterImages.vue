@@ -16,15 +16,9 @@
       </template>
     </el-page-header>
 
-    <el-card
-      shadow="never"
-      class="main-card"
-      v-loading="pageLoading"
-      :element-loading-text="$t('common.loading')"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
-    >
-      <div class="toolbar">
+    <LoadingSection class="main-card" :loading="pageLoading" :text="$t('common.loading')">
+      <el-card shadow="never">
+        <div class="toolbar">
         <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate">
           全选
         </el-checkbox>
@@ -71,7 +65,8 @@
           完成并返回项目
         </el-button>
       </div>
-    </el-card>
+      </el-card>
+    </LoadingSection>
   </div>
 </template>
 
@@ -84,6 +79,7 @@ import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()

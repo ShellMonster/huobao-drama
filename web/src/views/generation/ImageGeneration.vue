@@ -42,21 +42,17 @@
       </el-form>
     </el-card>
 
-    <el-row
-      :gutter="16"
-      v-loading="loading"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
-    >
-      <el-col
-        v-for="image in images"
-        :key="image.id"
-        :xs="24"
-        :sm="12"
-        :md="8"
-        :lg="6"
-      >
-        <el-card class="image-card" shadow="hover">
+    <LoadingSection :loading="loading">
+      <el-row :gutter="16">
+        <el-col
+          v-for="image in images"
+          :key="image.id"
+          :xs="24"
+          :sm="12"
+          :md="8"
+          :lg="6"
+        >
+          <el-card class="image-card" shadow="hover">
           <div class="image-wrapper">
             <el-image
               v-if="image.status === 'completed' && image.image_url"
@@ -134,8 +130,9 @@
             </div>
           </template>
         </el-card>
-      </el-col>
-    </el-row>
+        </el-col>
+      </el-row>
+    </LoadingSection>
 
     <el-empty v-if="!loading && images.length === 0" description="暂无图片，开始生成吧！" />
 
@@ -179,6 +176,7 @@ import type { Drama } from '@/types/drama'
 import GenerateImageDialog from './components/GenerateImageDialog.vue'
 import ImageDetailDialog from './components/ImageDetailDialog.vue'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()

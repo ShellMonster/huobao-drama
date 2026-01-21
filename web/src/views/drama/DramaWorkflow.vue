@@ -31,12 +31,10 @@
     </AppHeader>
 
     <!-- 当前阶段内容区域 -->
-    <div
+    <LoadingSection
       class="stage-area"
-      v-loading="pageLoading"
-      :element-loading-text="$t('common.loading')"
-      element-loading-background="transparent"
-      element-loading-custom-class="storyboard-glass-loading"
+      :loading="pageLoading"
+      :text="$t('common.loading')"
     >
       <!-- 阶段 0: 剧本生成 -->
       <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">
@@ -427,7 +425,7 @@
           </div>
         </div>
       </el-card>
-    </div>
+    </LoadingSection>
 
     <!-- 编辑角色描述对话框 -->
     <el-dialog v-model="editDescDialogVisible" title="编辑角色描述" width="600px">
@@ -570,7 +568,7 @@ import { generationAPI } from '@/api/generation'
 import { characterLibraryAPI } from '@/api/character-library'
 import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
-import { AppHeader } from '@/components/common'
+import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()

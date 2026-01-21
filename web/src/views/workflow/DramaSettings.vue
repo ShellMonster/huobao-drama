@@ -6,8 +6,9 @@
       </template>
     </el-page-header>
 
-    <el-card shadow="never" class="main-card">
-      <el-tabs v-model="activeTab">
+    <LoadingSection class="main-card" :loading="pageLoading" text="加载中...">
+      <el-card shadow="never">
+        <el-tabs v-model="activeTab">
         <el-tab-pane label="基本信息" name="basic">
           <el-form :model="form" label-width="100px" style="max-width: 600px">
             <el-form-item label="项目标题">
@@ -35,7 +36,7 @@
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="saveSettings">保存设置</el-button>
+              <el-button type="primary" :loading="saving" @click="saveSettings">保存设置</el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -49,11 +50,12 @@
             show-icon
           />
           <div class="danger-zone">
-            <el-button type="danger" @click="deleteProject">删除项目</el-button>
+            <el-button type="danger" :loading="deleting" @click="deleteProject">删除项目</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>
-    </el-card>
+      </el-card>
+    </LoadingSection>
   </div>
 </template>
 
@@ -62,12 +64,16 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dramaAPI } from '@/api/drama'
+import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()
 const dramaId = route.params.id as string
 
 const activeTab = ref('basic')
+const pageLoading = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
 const form = reactive({
   title: '',
   description: '',
@@ -80,11 +86,14 @@ const goBack = () => {
 }
 
 const saveSettings = async () => {
+  saving.value = true
   try {
     await dramaAPI.update(dramaId, form)
     ElMessage.success('设置保存成功')
   } catch (error: any) {
     ElMessage.error(error.message || '保存失败')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -100,6 +109,7 @@ const deleteProject = async () => {
       }
     )
     
+    deleting.value = true
     await dramaAPI.delete(dramaId)
     ElMessage.success('项目已删除')
     router.push('/dramas')
@@ -107,15 +117,20 @@ const deleteProject = async () => {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
     }
+  } finally {
+    deleting.value = false
   }
 }
 
 onMounted(async () => {
+  pageLoading.value = true
   try {
     const drama = await dramaAPI.get(dramaId)
     Object.assign(form, drama)
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
+  } finally {
+    pageLoading.value = false
   }
 })
 </script>

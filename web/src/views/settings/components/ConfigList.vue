@@ -1,10 +1,5 @@
 <template>
-  <div
-    v-loading="loading"
-    class="config-list"
-    element-loading-background="transparent"
-    element-loading-custom-class="storyboard-glass-loading"
-  >
+  <LoadingSection class="config-list" :loading="loading">
     <el-empty v-if="!loading && configs.length === 0" :description="$t('aiConfig.empty')" />
 
     <el-card 
@@ -96,11 +91,12 @@
         </div>
       </div>
     </el-card>
-  </div>
+  </LoadingSection>
 </template>
 
 <script setup lang="ts">
 import { Connection, Edit, Delete } from '@element-plus/icons-vue'
+import { LoadingSection } from '@/components/common'
 import type { AIServiceConfig } from '@/types/ai'
 
 defineProps<{
