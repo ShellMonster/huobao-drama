@@ -131,7 +131,6 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 	// 使用国际化提示词
 	systemPrompt := s.promptI18n.GetStoryboardSystemPrompt()
 
-	scriptLabel := s.promptI18n.FormatUserPrompt("script_content_label")
 	taskLabel := s.promptI18n.FormatUserPrompt("task_label")
 	taskInstruction := s.promptI18n.FormatUserPrompt("task_instruction")
 	charListLabel := s.promptI18n.FormatUserPrompt("character_list_label")
@@ -139,10 +138,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 	sceneListLabel := s.promptI18n.FormatUserPrompt("scene_list_label")
 	sceneConstraint := s.promptI18n.FormatUserPrompt("scene_constraint")
 
-	prompt := fmt.Sprintf(`%s
-
-%s
-%s
+prompt := fmt.Sprintf(`%s
 
 %s%s
 
@@ -324,7 +320,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 - 包含感官细节：视觉、听觉、触觉、嗅觉
 - 描述光线、色彩、质感、动态
 - 为视频生成AI提供足够的画面构建信息
-- 避免抽象词汇，使用具象的视觉化描述`, systemPrompt, scriptLabel, scriptContent, taskLabel, taskInstruction, charListLabel, characterList, charConstraint, sceneListLabel, sceneList, sceneConstraint, scriptContent)
+- 避免抽象词汇，使用具象的视觉化描述`, systemPrompt, taskLabel, taskInstruction, charListLabel, characterList, charConstraint, sceneListLabel, sceneList, sceneConstraint, scriptContent)
 
 	// 调用AI服务生成（如果指定了模型则使用指定的模型）
 	// 设置较大的max_tokens以确保完整返回所有分镜的JSON
