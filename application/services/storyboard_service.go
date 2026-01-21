@@ -335,14 +335,14 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 		if getErr != nil {
 			s.log.Warnw("Failed to get client for specified model, using default", "model", model, "error", getErr)
 			var err error
-			text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(16000))
+			text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(30000))
 			if err != nil {
 				s.log.Errorw("Failed to generate storyboard", "error", err)
 				return nil, fmt.Errorf("生成分镜头失败: %w", err)
 			}
 		} else {
 			var err error
-			text, err = client.GenerateText(prompt, "", ai.WithMaxTokens(16000))
+			text, err = client.GenerateText(prompt, "", ai.WithMaxTokens(30000))
 			if err != nil {
 				s.log.Errorw("Failed to generate storyboard", "error", err)
 				return nil, fmt.Errorf("生成分镜头失败: %w", err)
@@ -350,7 +350,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 		}
 	} else {
 		var err error
-		text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(16000))
+		text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(30000))
 		if err != nil {
 			s.log.Errorw("Failed to generate storyboard", "error", err)
 			return nil, fmt.Errorf("生成分镜头失败: %w", err)
