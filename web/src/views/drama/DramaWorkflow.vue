@@ -261,7 +261,9 @@
                   <div class="character-info">
                     <h4>{{ character.name }}</h4>
                     <el-tag :type="character.role === 'main' ? 'danger' : 'info'" size="small">
-                      {{ character.role === 'main' ? '主角' : character.role === 'supporting' ? '配角' : '次要' }}
+                      {{ character.role === 'main' ? $t('character.roles.main')
+                        : character.role === 'supporting' ? $t('character.roles.supporting')
+                        : $t('character.roles.minor') }}
                     </el-tag>
                     <p class="desc">{{ character.appearance || character.description }}</p>
                     <el-button 
@@ -478,9 +480,9 @@
         </el-form-item>
         <el-form-item label="角色类型">
           <el-select v-model="newCharacter.role" placeholder="请选择角色类型">
-            <el-option label="主角" value="main" />
-            <el-option label="配角" value="supporting" />
-            <el-option label="次要" value="minor" />
+            <el-option :label="$t('character.roles.main')" value="main" />
+            <el-option :label="$t('character.roles.supporting')" value="supporting" />
+            <el-option :label="$t('character.roles.minor')" value="minor" />
           </el-select>
         </el-form-item>
         <el-form-item label="外貌描述">

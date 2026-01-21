@@ -166,7 +166,9 @@
               <div class="character-info">
                 <h4>{{ character.name }}</h4>
                 <el-tag :type="character.role === 'main' ? 'danger' : 'info'" size="small">
-                  {{ character.role === 'main' ? 'Main' : character.role === 'supporting' ? 'Supporting' : 'Minor' }}
+                  {{ character.role === 'main' ? $t('character.roles.main')
+                    : character.role === 'supporting' ? $t('character.roles.supporting')
+                    : $t('character.roles.minor') }}
                 </el-tag>
                 <p class="desc">{{ character.appearance || character.description }}</p>
               </div>
@@ -230,9 +232,9 @@
         </el-form-item>
         <el-form-item :label="$t('character.role')">
           <el-select v-model="newCharacter.role" :placeholder="$t('common.pleaseSelect')">
-            <el-option label="Main" value="main" />
-            <el-option label="Supporting" value="supporting" />
-            <el-option label="Minor" value="minor" />
+            <el-option :label="$t('character.roles.main')" value="main" />
+            <el-option :label="$t('character.roles.supporting')" value="supporting" />
+            <el-option :label="$t('character.roles.minor')" value="minor" />
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('character.appearance')"> 

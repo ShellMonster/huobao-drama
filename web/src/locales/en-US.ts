@@ -185,6 +185,11 @@ export default {
     list: 'Character List',
     name: 'Character Name',
     role: 'Role',
+    roles: {
+      main: 'Main',
+      supporting: 'Supporting',
+      minor: 'Minor'
+    },
     personality: 'Personality',
     appearance: 'Appearance',
     background: 'Background',

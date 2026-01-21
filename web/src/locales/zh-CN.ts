@@ -200,6 +200,11 @@ export default {
     list: '角色列表',
     name: '角色名称',
     role: '角色',
+    roles: {
+      main: '主角',
+      supporting: '配角',
+      minor: '次要角色'
+    },
     personality: '性格',
     appearance: '外貌',
     background: '背景',
