@@ -89,6 +89,7 @@ export default {
   },
   aiConfig: {
     title: 'AI 服务配置',
+    subtitle: '管理 AI 服务配置',
     addConfig: '添加配置',
     editConfig: '编辑配置',
     back: '返回',
