@@ -4,7 +4,7 @@
       <!-- Page Header / 页面头部 -->
       <AppHeader :fixed="false" :show-logo="false">
         <template #left>
-          <el-button text @click="$router.back()" class="back-btn">
+          <el-button text @click="goBack" class="back-btn">
             <el-icon><ArrowLeft /></el-icon>
             <span>{{ $t('common.back') }}</span>
           </el-button>
@@ -381,6 +381,21 @@ const createNewEpisode = () => {
       episodeNumber: nextEpisodeNumber
     }
   })
+}
+
+const goBack = () => {
+  const target = { name: 'DramaList' }
+  const targetPath = router.resolve(target).path
+  const historyState = router.options.history.state as { back?: string } | null
+  const backPath = typeof historyState?.back === 'string' ? historyState.back : ''
+  const normalizedBack = backPath.split('?')[0].split('#')[0]
+
+  if (normalizedBack === targetPath) {
+    router.back()
+    return
+  }
+
+  router.replace(target)
 }
 
 const enterEpisodeWorkflow = (episode: any) => {
