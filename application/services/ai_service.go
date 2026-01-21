@@ -381,7 +381,9 @@ func (s *AIService) GetAIClient(serviceType string) (ai.AIClient, error) {
 	// 根据 provider 创建对应的客户端
 	switch config.Provider {
 	case "gemini", "google":
-		return ai.NewGeminiClient(config.BaseURL, config.APIKey, model, endpoint), nil
+		return ai.NewGeminiSDKClient(config.BaseURL, config.APIKey, model)
+	case "openai":
+		return ai.NewOpenAISDKClient(config.BaseURL, config.APIKey, model), nil
 	default:
 		// openai, chatfire 等其他厂商都使用 OpenAI 格式
 		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, model, endpoint), nil
@@ -409,7 +411,9 @@ func (s *AIService) GetAIClientForModel(serviceType string, modelName string) (a
 	// 根据 provider 创建对应的客户端
 	switch config.Provider {
 	case "gemini", "google":
-		return ai.NewGeminiClient(config.BaseURL, config.APIKey, modelName, endpoint), nil
+		return ai.NewGeminiSDKClient(config.BaseURL, config.APIKey, modelName)
+	case "openai":
+		return ai.NewOpenAISDKClient(config.BaseURL, config.APIKey, modelName), nil
 	default:
 		// openai, chatfire 等其他厂商都使用 OpenAI 格式
 		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, modelName, endpoint), nil

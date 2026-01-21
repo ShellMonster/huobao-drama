@@ -399,7 +399,7 @@ func (s *ImageGenerationService) getImageClient(provider string) (image.ImageCli
 	switch actualProvider {
 	case "openai", "dalle":
 		endpoint = "/images/generations"
-		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
+		return image.NewOpenAIImageSDKClient(config.BaseURL, config.APIKey, model), nil
 	case "chatfire":
 		endpoint = "/images/generations"
 		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
@@ -409,7 +409,11 @@ func (s *ImageGenerationService) getImageClient(provider string) (image.ImageCli
 		return image.NewVolcEngineImageClient(config.BaseURL, config.APIKey, model, endpoint, queryEndpoint), nil
 	case "gemini", "google":
 		endpoint = "/v1beta/models/{model}:generateContent"
-		return image.NewGeminiImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
+		client, err := image.NewGeminiImageSDKClient(config.BaseURL, config.APIKey, model)
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
 	default:
 		endpoint = "/images/generations"
 		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
@@ -457,7 +461,7 @@ func (s *ImageGenerationService) getImageClientWithModel(provider string, modelN
 	switch actualProvider {
 	case "openai", "dalle":
 		endpoint = "/images/generations"
-		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
+		return image.NewOpenAIImageSDKClient(config.BaseURL, config.APIKey, model), nil
 	case "chatfire":
 		endpoint = "/images/generations"
 		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
@@ -467,7 +471,11 @@ func (s *ImageGenerationService) getImageClientWithModel(provider string, modelN
 		return image.NewVolcEngineImageClient(config.BaseURL, config.APIKey, model, endpoint, queryEndpoint), nil
 	case "gemini", "google":
 		endpoint = "/v1beta/models/{model}:generateContent"
-		return image.NewGeminiImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
+		client, err := image.NewGeminiImageSDKClient(config.BaseURL, config.APIKey, model)
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
 	default:
 		endpoint = "/images/generations"
 		return image.NewOpenAIImageClient(config.BaseURL, config.APIKey, model, endpoint), nil
