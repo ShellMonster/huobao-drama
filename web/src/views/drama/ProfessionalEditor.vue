@@ -228,13 +228,7 @@
           <!-- 图片生成标签 -->
           <el-tab-pane :label="$t('editor.shotImage')" name="image">
             <div class="tab-content" v-if="currentStoryboard">
-              <div
-                class="image-generation-section"
-                v-loading="loadingImages"
-                element-loading-text="加载图片中..."
-                element-loading-background="transparent"
-                element-loading-custom-class="storyboard-glass-loading"
-              >
+              <div class="image-generation-section">
                 <!-- 帧类型选择 -->
                 <div class="frame-type-selector">
                   <div class="section-label">{{ $t('editor.selectFrameType') }}</div>
@@ -280,9 +274,16 @@
                 </div>
 
                 <!-- 生成结果 -->
-                <div class="generation-result" v-if="generatedImages.length > 0">
+                <div
+                  class="generation-result"
+                  v-if="generatedImages.length > 0 || loadingImages"
+                  v-loading="loadingImages"
+                  element-loading-text="加载图片中..."
+                  element-loading-background="transparent"
+                  element-loading-custom-class="storyboard-glass-loading"
+                >
                   <div class="section-label">{{ $t('editor.generationResult') }} ({{ generatedImages.length }})</div>
-                  <div class="image-grid">
+                  <div v-if="generatedImages.length > 0" class="image-grid">
                     <div v-for="img in generatedImages" :key="img.id" class="image-item">
                       <el-image v-if="img.image_url" :src="img.image_url"
                         :preview-src-list="generatedImages.filter(i => i.image_url).map(i => i.image_url!)"
@@ -300,6 +301,7 @@
                       </div>
                     </div>
                   </div>
+                  <div v-else class="image-loading-placeholder"></div>
                 </div>
               </div>
             </div>
@@ -4089,6 +4091,10 @@ onBeforeUnmount(() => {
       100% {
         transform: translateX(100%) translateY(100%) rotate(45deg);
       }
+    }
+
+    .image-loading-placeholder {
+      height: 160px;
     }
   }
 
