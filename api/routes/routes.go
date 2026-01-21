@@ -6,6 +6,7 @@ import (
 	services2 "github.com/drama-generator/backend/application/services"
 	storage2 "github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -32,27 +33,29 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	aiService := services2.NewAIService(db, log)
 	localStoragePtr := localStorage.(*storage2.LocalStorage)
 	transferService := services2.NewResourceTransferService(db, log)
+	eventHub := events.NewEventHub()
 	dramaHandler := handlers2.NewDramaHandler(db, cfg, log, nil)
 	aiConfigHandler := handlers2.NewAIConfigHandler(db, cfg, log)
-	scriptGenHandler := handlers2.NewScriptGenerationHandler(db, cfg, log)
-	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, localStoragePtr, log)
-	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, localStoragePtr)
-	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, localStoragePtr, aiService, log)
+	scriptGenHandler := handlers2.NewScriptGenerationHandler(db, cfg, log, eventHub.Tasks)
+	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, localStoragePtr, log, eventHub.ImageGenerations)
+	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, localStoragePtr, eventHub.Tasks, eventHub.ImageGenerations)
+	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, localStoragePtr, aiService, log, eventHub.VideoGenerations)
 	videoMergeHandler := handlers2.NewVideoMergeHandler(db, nil, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log)
 	assetHandler := handlers2.NewAssetHandler(db, cfg, log)
 	characterLibraryService := services2.NewCharacterLibraryService(db, log)
-	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, localStoragePtr)
+	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, localStoragePtr, eventHub.ImageGenerations)
 	uploadHandler, err := handlers2.NewUploadHandler(cfg, log, characterLibraryService)
 	if err != nil {
 		log.Fatalw("Failed to create upload handler", "error", err)
 	}
-	storyboardHandler := handlers2.NewStoryboardHandler(db, cfg, log)
+	storyboardHandler := handlers2.NewStoryboardHandler(db, cfg, log, eventHub.Tasks)
 	sceneHandler := handlers2.NewSceneHandler(db, log, imageGenService)
-	taskHandler := handlers2.NewTaskHandler(db, log)
+	taskHandler := handlers2.NewTaskHandler(db, log, eventHub.Tasks)
 	framePromptService := services2.NewFramePromptService(db, cfg, log)
 	framePromptHandler := handlers2.NewFramePromptHandler(framePromptService, log)
 	audioExtractionHandler := handlers2.NewAudioExtractionHandler(log, cfg.Storage.LocalPath)
 	settingsHandler := handlers2.NewSettingsHandler(cfg, log)
+	eventHandler := handlers2.NewEventHandler(eventHub, log)
 
 	api := r.Group("/api/v1")
 	{
@@ -131,6 +134,14 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 		{
 			tasks.GET("/:task_id", taskHandler.GetTaskStatus)
 			tasks.GET("", taskHandler.GetResourceTasks)
+		}
+
+		// 事件流路由（SSE）
+		events := api.Group("/events")
+		{
+			events.GET("/tasks", eventHandler.StreamTasks)
+			events.GET("/image-generations", eventHandler.StreamImageGenerations)
+			events.GET("/video-generations", eventHandler.StreamVideoGenerations)
 		}
 
 		// 场景路由

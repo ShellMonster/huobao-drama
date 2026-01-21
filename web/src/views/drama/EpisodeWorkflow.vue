@@ -800,7 +800,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -830,6 +830,7 @@ import type { AIServiceConfig } from '@/types/ai'
 import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
 import { AppHeader } from '@/components/common'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -1242,35 +1243,83 @@ const handleExtractCharactersAndBackgrounds = async () => {
   await extractCharactersAndBackgrounds()
 }
 
-// 轮询检查图片生成状态
-const pollImageStatus = async (imageGenId: number, onComplete: () => Promise<void>) => {
-  const maxAttempts = 100 // 最多轮询100次
-  const pollInterval = 6000 // 每6秒轮询一次
-  
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      await new Promise(resolve => setTimeout(resolve, pollInterval))
-      
-      const imageGen = await imageAPI.getImage(imageGenId)
-      
+// 轮询检查图片生成状态（SSE优先，轮询兜底）
+const pollImageStatus = (imageGenId: number, onComplete: () => Promise<void>) => {
+  const maxAttempts = 100
+  const pollInterval = 6000
+
+  return new Promise<void>((resolve) => {
+    let attempts = 0
+    let done = false
+    let fallbackTimer: number | null = null
+    const url = buildSSEUrl('/api/v1/events/image-generations', { image_ids: imageGenId })
+
+    const stopAll = () => {
+      if (done) return
+      done = true
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer)
+        fallbackTimer = null
+      }
+      subscription?.close()
+    }
+
+    const handleStatus = async (imageGen: any) => {
+      if (done || imageGen?.id !== imageGenId) return
       if (imageGen.status === 'completed') {
-        // 生成成功
-        await onComplete()
-        return
-      } else if (imageGen.status === 'failed') {
-        // 生成失败
-        ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
+        try {
+          await onComplete()
+        } catch (error) {
+          console.error('[SSE] 图片完成回调失败:', error)
+        }
+        stopAll()
+        resolve()
         return
       }
-      // 如果是pending或processing，继续轮询
-    } catch (error: any) {
-      console.error('[轮询] 检查图片状态失败:', error)
-      // 继续轮询，不中断
+      if (imageGen.status === 'failed') {
+        ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
+        stopAll()
+        resolve()
+      }
     }
-  }
-  
-  // 超时
-  ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
+
+    const startFallback = () => {
+      if (fallbackTimer) return
+      fallbackTimer = window.setInterval(async () => {
+        attempts += 1
+        if (attempts > maxAttempts) {
+          ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
+          stopAll()
+          resolve()
+          return
+        }
+        try {
+          const imageGen = await imageAPI.getImage(imageGenId)
+          await handleStatus(imageGen)
+        } catch (error: any) {
+          console.error('[轮询] 检查图片状态失败:', error)
+        }
+      }, pollInterval)
+    }
+
+    const subscription = subscribeSSE({
+      url,
+      event: 'image_generation',
+      onMessage: (payload) => {
+        void handleStatus(payload)
+      },
+      fallback: startFallback
+    })
+
+    void (async () => {
+      try {
+        const imageGen = await imageAPI.getImage(imageGenId)
+        await handleStatus(imageGen)
+      } catch (error: any) {
+        console.error('[轮询] 初始化图片状态失败:', error)
+      }
+    })()
+  })
 }
 
 const extractCharactersAndBackgrounds = async () => {
@@ -1329,39 +1378,90 @@ const extractCharactersAndBackgrounds = async () => {
   }
 }
 
-// 轮询提取任务状态
-const pollExtractTask = async (taskId: string, type: 'character' | 'background') => {
-  const maxAttempts = 60 // 最多轮询60次（2分钟）
-  const interval = 2000 // 每2秒查询一次
-  
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(resolve => setTimeout(resolve, interval))
-    
-    try {
-      const task = await generationAPI.getTaskStatus(taskId)
-      
-      if (task.status === 'completed') {
-        // 任务完成
-        if (type === 'character' && task.result) {
-          // 解析角色数据并保存
-          const result = typeof task.result === 'string' ? JSON.parse(task.result) : task.result
-          if (result.characters && result.characters.length > 0) {
-            await dramaAPI.saveCharacters(dramaId, result.characters, currentEpisode.value?.id)
-          }
-        }
-        return
-      } else if (task.status === 'failed') {
-        // 任务失败
-        throw new Error(task.error || `${type === 'character' ? '角色生成' : '场景提取'}失败`)
+// 轮询提取任务状态（SSE优先，轮询兜底）
+const pollExtractTask = (taskId: string, type: 'character' | 'background') => {
+  const maxAttempts = 60
+  const interval = 2000
+
+  return new Promise<void>((resolve, reject) => {
+    let attempts = 0
+    let done = false
+    let fallbackTimer: number | null = null
+    const url = buildSSEUrl('/api/v1/events/tasks', { task_ids: taskId })
+
+    const stopAll = () => {
+      if (done) return
+      done = true
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer)
+        fallbackTimer = null
       }
-      // 否则继续轮询
-    } catch (error: any) {
-      console.error(`轮询${type}任务状态失败:`, error)
-      throw error
+      subscription?.close()
     }
-  }
-  
-  throw new Error(`${type === 'character' ? '角色生成' : '场景提取'}超时`)
+
+    const handleTask = async (task: any) => {
+      if (done || task?.id !== taskId) return
+      if (task.status === 'completed') {
+        try {
+          if (type === 'character' && task.result) {
+            const result = typeof task.result === 'string' ? JSON.parse(task.result) : task.result
+            if (result.characters && result.characters.length > 0) {
+              await dramaAPI.saveCharacters(dramaId, result.characters, currentEpisode.value?.id)
+            }
+          }
+          stopAll()
+          resolve()
+          return
+        } catch (error: any) {
+          stopAll()
+          reject(error)
+        }
+      }
+      if (task.status === 'failed') {
+        stopAll()
+        reject(new Error(task.error || `${type === 'character' ? '角色生成' : '场景提取'}失败`))
+      }
+    }
+
+    const startFallback = () => {
+      if (fallbackTimer) return
+      fallbackTimer = window.setInterval(async () => {
+        attempts += 1
+        if (attempts > maxAttempts) {
+          stopAll()
+          reject(new Error(`${type === 'character' ? '角色生成' : '场景提取'}超时`))
+          return
+        }
+        try {
+          const task = await generationAPI.getTaskStatus(taskId)
+          await handleTask(task)
+        } catch (error: any) {
+          console.error(`轮询${type}任务状态失败:`, error)
+          stopAll()
+          reject(error)
+        }
+      }, interval)
+    }
+
+    const subscription = subscribeSSE({
+      url,
+      event: 'task',
+      onMessage: (payload) => {
+        void handleTask(payload)
+      },
+      fallback: startFallback
+    })
+
+    void (async () => {
+      try {
+        const task = await generationAPI.getTaskStatus(taskId)
+        await handleTask(task)
+      } catch (error: any) {
+        console.error(`轮询${type}任务状态失败:`, error)
+        startFallback()
+      }
+    })()
+  })
 }
 
 
@@ -1495,6 +1595,14 @@ const batchGenerateSceneImages = async () => {
 const taskProgress = ref(0)
 const taskMessage = ref('')
 let pollTimer: any = null
+let taskStreamStop: (() => void) | null = null
+
+const stopTaskStream = () => {
+  if (taskStreamStop) {
+    taskStreamStop()
+    taskStreamStop = null
+  }
+}
 
 const generateShots = async () => {
   if (!currentEpisode.value?.id) {
@@ -1535,56 +1643,72 @@ const generateShots = async () => {
 }
 
 const pollTaskStatus = async (taskId: string) => {
-  const checkStatus = async () => {
-    try {
-      const task = await generationAPI.getTaskStatus(taskId)
-      
-      taskProgress.value = task.progress
-      taskMessage.value = task.message || `处理中... ${task.progress}%`
-      
-      if (task.status === 'completed') {
-        // 任务完成
-        if (pollTimer) {
-          clearInterval(pollTimer)
-          pollTimer = null
-        }
-        generatingShots.value = false
-        
-        ElMessage.success($t('workflow.splitSuccess'))
-        
-        // 跳转到专业编辑器页面
-        router.push({
-          name: 'ProfessionalEditor',
-          params: {
-            dramaId: dramaId,
-            episodeNumber: episodeNumber
-          }
-        })
-      } else if (task.status === 'failed') {
-        // 任务失败
-        if (pollTimer) {
-          clearInterval(pollTimer)
-          pollTimer = null
-        }
-        generatingShots.value = false
-        ElMessage.error(task.error || '分镜拆分失败')
-      }
-      // 否则继续轮询
-    } catch (error: any) {
+  const handleTask = (task: any) => {
+    taskProgress.value = task.progress
+    taskMessage.value = task.message || `处理中... ${task.progress}%`
+
+    if (task.status === 'completed') {
+      stopTaskStream()
       if (pollTimer) {
         clearInterval(pollTimer)
         pollTimer = null
       }
       generatingShots.value = false
+      ElMessage.success($t('workflow.splitSuccess'))
+      router.push({
+        name: 'ProfessionalEditor',
+        params: {
+          dramaId: dramaId,
+          episodeNumber: episodeNumber
+        }
+      })
+    } else if (task.status === 'failed') {
+      stopTaskStream()
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      generatingShots.value = false
+      ElMessage.error(task.error || '分镜拆分失败')
+    }
+  }
+
+  const checkStatus = async () => {
+    try {
+      const task = await generationAPI.getTaskStatus(taskId)
+      handleTask(task)
+    } catch (error: any) {
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      stopTaskStream()
+      generatingShots.value = false
       ElMessage.error('查询任务状态失败: ' + error.message)
     }
   }
-  
-  // 立即检查一次
+
+  stopTaskStream()
+  const url = buildSSEUrl('/api/v1/events/tasks', { task_ids: taskId })
+  taskStreamStop = subscribeSSE({
+    url,
+    event: 'task',
+    onMessage: (payload) => {
+      handleTask(payload)
+    },
+    fallback: () => {
+      if (pollTimer) return
+      pollTimer = setInterval(checkStatus, 2000)
+      return () => {
+        if (pollTimer) {
+          clearInterval(pollTimer)
+          pollTimer = null
+        }
+      }
+    }
+  }).close
+
   await checkStatus()
-  
-  // 每2秒轮询一次
-  pollTimer = setInterval(checkStatus, 2000)
 }
 
 const regenerateShots = async () => {
@@ -1810,6 +1934,14 @@ onMounted(() => {
   loadDramaData()
   loadSavedModelConfig()
   loadAIConfigs()
+})
+
+onBeforeUnmount(() => {
+  stopTaskStream()
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 })
 </script>
 

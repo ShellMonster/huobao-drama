@@ -571,6 +571,7 @@ import { characterLibraryAPI } from '@/api/character-library'
 import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
 import { AppHeader } from '@/components/common'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -1177,50 +1178,100 @@ const batchGenerateCharacterImages = async () => {
 }
 
 let characterPollingTimer: number | null = null
+let characterStreamStop: (() => void) | null = null
+
+const stopCharacterStream = () => {
+  if (characterStreamStop) {
+    characterStreamStop()
+    characterStreamStop = null
+  }
+}
 
 const startCharacterPolling = () => {
-  if (characterPollingTimer) return
-  
-  characterPollingTimer = window.setInterval(async () => {
-    try {
-      await loadDramaData()
-      
-      if (!drama.value?.characters) return
-      
-      // 检查每个选中角色的状态
-      let completedCount = 0
-      let failedCount = 0
-      const failedCharacters: string[] = []
-      
-      selectedCharacterIds.value.forEach(id => {
-        const char = drama.value?.characters?.find(c => c.id === id)
-        if (char) {
-          if (char.image_url) {
-            completedCount++
-          } else if (char.image_generation_status === 'failed') {
-            failedCount++
-            failedCharacters.push(char.name)
+  if (characterPollingTimer || characterStreamStop) return
+
+  const handleImageEvent = (imageGen: any) => {
+    if (!imageGen?.character_id) return
+    if (!selectedCharacterIds.value.includes(imageGen.character_id)) return
+
+    const idx = drama.value?.characters?.findIndex(c => c.id === imageGen.character_id) ?? -1
+    if (idx >= 0 && drama.value?.characters) {
+      drama.value.characters[idx] = {
+        ...drama.value.characters[idx],
+        image_url: imageGen.image_url || drama.value.characters[idx].image_url,
+        image_generation_status: imageGen.status
+      }
+    }
+
+    const { completedCount, failedCount, failedCharacters } = getBatchCharacterProgress()
+    if (completedCount + failedCount === selectedCharacterIds.value.length) {
+      stopCharacterPolling()
+      if (failedCount > 0) {
+        ElMessage.warning(`批量生成完成：${completedCount}个成功，${failedCount}个失败（${failedCharacters.join('、')}）`)
+      } else {
+        ElMessage.success('批量生成完成')
+      }
+    }
+  }
+
+  const startFallback = () => {
+    if (characterPollingTimer) return
+    characterPollingTimer = window.setInterval(async () => {
+      try {
+        await loadDramaData()
+        const { completedCount, failedCount, failedCharacters } = getBatchCharacterProgress()
+        if (completedCount + failedCount === selectedCharacterIds.value.length) {
+          stopCharacterPolling()
+          if (failedCount > 0) {
+            ElMessage.warning(`批量生成完成：${completedCount}个成功，${failedCount}个失败（${failedCharacters.join('、')}）`)
+          } else {
+            ElMessage.success('批量生成完成')
           }
         }
-      })
-      
-      // 如果所有任务都完成（成功或失败），停止轮询
-      if (completedCount + failedCount === selectedCharacterIds.value.length) {
-        stopCharacterPolling()
-        
-        if (failedCount > 0) {
-          ElMessage.warning(`批量生成完成：${completedCount}个成功，${failedCount}个失败（${failedCharacters.join('、')}）`)
-        } else {
-          ElMessage.success('批量生成完成')
-        }
+      } catch (error) {
+        console.error('轮询错误:', error)
       }
-    } catch (error) {
-      console.error('轮询错误:', error)
+    }, 5000)
+    return () => {
+      if (characterPollingTimer) {
+        clearInterval(characterPollingTimer)
+        characterPollingTimer = null
+      }
     }
-  }, 5000) // 每5秒检查一次
+  }
+
+  const url = buildSSEUrl('/api/v1/events/image-generations', { drama_id: dramaId })
+  characterStreamStop = subscribeSSE({
+    url,
+    event: 'image_generation',
+    onMessage: handleImageEvent,
+    fallback: startFallback
+  }).close
+}
+
+const getBatchCharacterProgress = () => {
+  if (!drama.value?.characters) {
+    return { completedCount: 0, failedCount: 0, failedCharacters: [] as string[] }
+  }
+  let completedCount = 0
+  let failedCount = 0
+  const failedCharacters: string[] = []
+  selectedCharacterIds.value.forEach(id => {
+    const char = drama.value?.characters?.find(c => c.id === id)
+    if (char) {
+      if (char.image_url) {
+        completedCount++
+      } else if (char.image_generation_status === 'failed') {
+        failedCount++
+        failedCharacters.push(char.name)
+      }
+    }
+  })
+  return { completedCount, failedCount, failedCharacters }
 }
 
 const stopCharacterPolling = () => {
+  stopCharacterStream()
   if (characterPollingTimer) {
     clearInterval(characterPollingTimer)
     characterPollingTimer = null

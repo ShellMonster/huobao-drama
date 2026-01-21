@@ -176,6 +176,7 @@ import type { VideoGeneration, VideoStatus } from '@/types/video'
 import type { Drama } from '@/types/drama'
 import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -188,6 +189,8 @@ const showGenerateDialog = ref(false)
 const showDetailDialog = ref(false)
 const selectedVideo = ref<VideoGeneration>()
 let pollInterval: number | null = null
+let videoStreamStop: (() => void) | null = null
+let reloadTimer: number | null = null
 
 const filters = reactive({
   drama_id: undefined as string | undefined,
@@ -198,6 +201,67 @@ const pagination = reactive({
   page: 1,
   page_size: 12
 })
+
+const stopVideoStream = () => {
+  if (videoStreamStop) {
+    videoStreamStop()
+    videoStreamStop = null
+  }
+  if (reloadTimer) {
+    clearTimeout(reloadTimer)
+    reloadTimer = null
+  }
+}
+
+const scheduleReload = () => {
+  if (reloadTimer) return
+  reloadTimer = window.setTimeout(() => {
+    reloadTimer = null
+    loadVideos()
+  }, 500)
+}
+
+const startVideoStream = () => {
+  stopVideoStream()
+  const url = buildSSEUrl('/api/v1/events/video-generations', {
+    drama_id: filters.drama_id || undefined
+  })
+
+  videoStreamStop = subscribeSSE({
+    url,
+    event: 'video_generation',
+    onMessage: (videoGen) => {
+      if (filters.drama_id && String(videoGen.drama_id) !== filters.drama_id) return
+
+      if (filters.status && videoGen.status !== filters.status) {
+        videos.value = videos.value.filter(video => video.id !== videoGen.id)
+        return
+      }
+
+      const index = videos.value.findIndex(video => video.id === videoGen.id)
+      if (index >= 0) {
+        videos.value[index] = { ...videos.value[index], ...videoGen }
+      } else {
+        scheduleReload()
+      }
+    },
+    fallback: () => {
+      if (pollInterval) return
+      pollInterval = window.setInterval(() => {
+        const hasProcessing = videos.value.some(v => v.status === 'processing')
+        if (hasProcessing) {
+          loadVideos()
+        }
+      }, 10000)
+      return () => {
+        if (pollInterval) {
+          clearInterval(pollInterval)
+          pollInterval = null
+        }
+      }
+    }
+  }).close
+}
 
 const loadVideos = async () => {
   loading.value = true
@@ -210,6 +274,7 @@ const loadVideos = async () => {
     })
     videos.value = result.items
     total.value = result.pagination.total
+    startVideoStream()
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
@@ -294,15 +359,11 @@ const goBack = () => {
 }
 
 const startPolling = () => {
-  pollInterval = setInterval(() => {
-    const hasProcessing = videos.value.some(v => v.status === 'processing')
-    if (hasProcessing) {
-      loadVideos()
-    }
-  }, 10000)
+  startVideoStream()
 }
 
 const stopPolling = () => {
+  stopVideoStream()
   if (pollInterval) {
     clearInterval(pollInterval)
     pollInterval = null

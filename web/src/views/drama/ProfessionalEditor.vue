@@ -906,6 +906,7 @@ import type { VideoMerge } from '@/api/videoMerge'
 import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
 import type { Drama, Episode, Storyboard } from '@/types/drama'
 import { AppHeader } from '@/components/common'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -963,6 +964,8 @@ const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类�
 const loadingImages = ref(false)
 let pollingTimer: any = null
 let pollingFrameType: FrameType | null = null // 记录正在轮询的帧类型
+let imageStreamStop: (() => void) | null = null
+let imageRefreshTimer: number | null = null
 const currentPromptGenerating = computed(() => {
   const storyboardId = currentStoryboard.value?.id
   if (!storyboardId) return false
@@ -996,6 +999,8 @@ const pendingVideoConfig = ref<{ model: string; referenceMode: string; updatedAt
 const lastVideoConfigUpdateAt = ref(0)
 const isApplyingVideoConfig = ref(false)
 let videoPollingTimer: any = null
+let videoStreamStop: (() => void) | null = null
+let videoRefreshTimer: number | null = null
 let mergePollingTimer: any = null  // 视频合成列表轮询定时器
 
 // 视频合成列表
@@ -1809,14 +1814,14 @@ const loadStoryboardImages = async (storyboardId: number, frameType?: string) =>
   }
 }
 
-// 启动状态轮询
+// 启动状态轮询（SSE优先，轮询兜底）
 const startPolling = () => {
-  if (pollingTimer) return
+  if (pollingTimer || imageStreamStop) return
 
   // 记录开始轮询时的帧类型
   pollingFrameType = selectedFrameType.value
 
-  pollingTimer = setInterval(async () => {
+  const refreshImages = async () => {
     if (!currentStoryboard.value) {
       stopPolling()
       return
@@ -1834,13 +1839,11 @@ const startPolling = () => {
         page: 1,
         page_size: 50
       }
-      // 使用轮询开始时记录的帧类型
       if (pollingFrameType) {
         params.frame_type = pollingFrameType
       }
       const result = await imageAPI.listImages(params)
 
-      // 再次检查帧类型是否仍然匹配，避免竞态条件
       if (selectedFrameType.value === pollingFrameType) {
         generatedImages.value = result.items || []
         if (pollingFrameType) {
@@ -1849,13 +1852,11 @@ const startPolling = () => {
         }
       }
 
-      // 如果没有进行中的任务，停止轮询并刷新视频参考图片
       const hasPendingOrProcessing = (result.items || []).some(
         (img: any) => img.status === 'pending' || img.status === 'processing'
       )
       if (!hasPendingOrProcessing) {
         stopPolling()
-        // 刷新视频参考图片列表
         if (currentStoryboard.value) {
           loadVideoReferenceImages(currentStoryboard.value.id)
         }
@@ -1863,11 +1864,59 @@ const startPolling = () => {
     } catch (error) {
       console.error('轮询图片状态失败:', error)
     }
-  }, 3000) // 每3秒轮询一次
+  }
+
+  const scheduleRefresh = () => {
+    if (imageRefreshTimer) return
+    imageRefreshTimer = window.setTimeout(() => {
+      imageRefreshTimer = null
+      void refreshImages()
+    }, 400)
+  }
+
+  const startFallback = () => {
+    if (pollingTimer) return
+    pollingTimer = setInterval(refreshImages, 3000)
+    return () => {
+      if (pollingTimer) {
+        clearInterval(pollingTimer)
+        pollingTimer = null
+      }
+    }
+  }
+
+  const storyboardId = currentStoryboard.value?.id
+  const url = storyboardId
+    ? buildSSEUrl('/api/v1/events/image-generations', {
+        storyboard_id: storyboardId,
+        frame_type: pollingFrameType || undefined
+      })
+    : ''
+
+  if (url) {
+    imageStreamStop = subscribeSSE({
+      url,
+      event: 'image_generation',
+      onMessage: () => {
+        scheduleRefresh()
+      },
+      fallback: startFallback
+    }).close
+  } else {
+    startFallback()
+  }
 }
 
 // 停止轮询
 const stopPolling = () => {
+  if (imageStreamStop) {
+    imageStreamStop()
+    imageStreamStop = null
+  }
+  if (imageRefreshTimer) {
+    clearTimeout(imageRefreshTimer)
+    imageRefreshTimer = null
+  }
   if (pollingTimer) {
     clearInterval(pollingTimer)
     pollingTimer = null
@@ -2311,11 +2360,11 @@ const loadStoryboardVideos = async (storyboardId: number) => {
   }
 }
 
-// 启动视频状态轮询
+// 启动视频状态轮询（SSE优先，轮询兜底）
 const startVideoPolling = () => {
-  if (videoPollingTimer) return
+  if (videoPollingTimer || videoStreamStop) return
 
-  videoPollingTimer = setInterval(async () => {
+  const refreshVideos = async () => {
     if (!currentStoryboard.value) {
       stopVideoPolling()
       return
@@ -2330,7 +2379,6 @@ const startVideoPolling = () => {
       generatedVideos.value = result.items || []
       videoCache.value[String(currentStoryboard.value.id)] = generatedVideos.value
 
-      // 如果没有进行中的任务，停止轮询
       const hasPendingOrProcessing = generatedVideos.value.some(
         v => v.status === 'pending' || v.status === 'processing'
       )
@@ -2340,11 +2388,56 @@ const startVideoPolling = () => {
     } catch (error) {
       console.error('轮询视频状态失败:', error)
     }
-  }, 5000) // 每5秒轮询一次
+  }
+
+  const scheduleRefresh = () => {
+    if (videoRefreshTimer) return
+    videoRefreshTimer = window.setTimeout(() => {
+      videoRefreshTimer = null
+      void refreshVideos()
+    }, 500)
+  }
+
+  const startFallback = () => {
+    if (videoPollingTimer) return
+    videoPollingTimer = setInterval(refreshVideos, 5000)
+    return () => {
+      if (videoPollingTimer) {
+        clearInterval(videoPollingTimer)
+        videoPollingTimer = null
+      }
+    }
+  }
+
+  const storyboardId = currentStoryboard.value?.id
+  const url = storyboardId
+    ? buildSSEUrl('/api/v1/events/video-generations', { storyboard_id: storyboardId })
+    : ''
+
+  if (url) {
+    videoStreamStop = subscribeSSE({
+      url,
+      event: 'video_generation',
+      onMessage: () => {
+        scheduleRefresh()
+      },
+      fallback: startFallback
+    }).close
+  } else {
+    startFallback()
+  }
 }
 
 // 停止视频轮询
 const stopVideoPolling = () => {
+  if (videoStreamStop) {
+    videoStreamStop()
+    videoStreamStop = null
+  }
+  if (videoRefreshTimer) {
+    clearTimeout(videoRefreshTimer)
+    videoRefreshTimer = null
+  }
   if (videoPollingTimer) {
     clearInterval(videoPollingTimer)
     videoPollingTimer = null

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -14,12 +15,14 @@ import (
 type TaskService struct {
 	db  *gorm.DB
 	log *logger.Logger
+	hub *events.TaskHub
 }
 
-func NewTaskService(db *gorm.DB, log *logger.Logger) *TaskService {
+func NewTaskService(db *gorm.DB, log *logger.Logger, hub *events.TaskHub) *TaskService {
 	return &TaskService{
 		db:  db,
 		log: log,
+		hub: hub,
 	}
 }
 
@@ -37,6 +40,7 @@ func (s *TaskService) CreateTask(taskType, resourceID string) (*models.AsyncTask
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}
 
+	s.publishTask(task)
 	return task, nil
 }
 
@@ -54,15 +58,20 @@ func (s *TaskService) UpdateTaskStatus(taskID, status string, progress int, mess
 		updates["completed_at"] = &now
 	}
 
-	return s.db.Model(&models.AsyncTask{}).
+	if err := s.db.Model(&models.AsyncTask{}).
 		Where("id = ?", taskID).
-		Updates(updates).Error
+		Updates(updates).Error; err != nil {
+		return err
+	}
+
+	s.publishTaskByID(taskID)
+	return nil
 }
 
 // UpdateTaskError 更新任务错误
 func (s *TaskService) UpdateTaskError(taskID string, err error) error {
 	now := time.Now()
-	return s.db.Model(&models.AsyncTask{}).
+	if err := s.db.Model(&models.AsyncTask{}).
 		Where("id = ?", taskID).
 		Updates(map[string]interface{}{
 			"status":       "failed",
@@ -70,7 +79,12 @@ func (s *TaskService) UpdateTaskError(taskID string, err error) error {
 			"progress":     0,
 			"completed_at": &now,
 			"updated_at":   time.Now(),
-		}).Error
+		}).Error; err != nil {
+		return err
+	}
+
+	s.publishTaskByID(taskID)
+	return nil
 }
 
 // UpdateTaskResult 更新任务结果
@@ -81,7 +95,7 @@ func (s *TaskService) UpdateTaskResult(taskID string, result interface{}) error 
 	}
 
 	now := time.Now()
-	return s.db.Model(&models.AsyncTask{}).
+	if err := s.db.Model(&models.AsyncTask{}).
 		Where("id = ?", taskID).
 		Updates(map[string]interface{}{
 			"status":       "completed",
@@ -89,7 +103,12 @@ func (s *TaskService) UpdateTaskResult(taskID string, result interface{}) error 
 			"result":       string(resultJSON),
 			"completed_at": &now,
 			"updated_at":   time.Now(),
-		}).Error
+		}).Error; err != nil {
+		return err
+	}
+
+	s.publishTaskByID(taskID)
+	return nil
 }
 
 // GetTask 获取任务信息
@@ -110,4 +129,23 @@ func (s *TaskService) GetTasksByResource(resourceID string) ([]*models.AsyncTask
 		return nil, err
 	}
 	return tasks, nil
+}
+
+func (s *TaskService) publishTask(task *models.AsyncTask) {
+	if s.hub == nil || task == nil {
+		return
+	}
+	s.hub.Publish(task)
+}
+
+func (s *TaskService) publishTaskByID(taskID string) {
+	if s.hub == nil {
+		return
+	}
+	task, err := s.GetTask(taskID)
+	if err != nil {
+		s.log.Warnw("Failed to publish task update", "error", err, "task_id", taskID)
+		return
+	}
+	s.hub.Publish(task)
 }

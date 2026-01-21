@@ -10,6 +10,7 @@ import (
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
 	"github.com/drama-generator/backend/infrastructure/storage"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/video"
 	"gorm.io/gorm"
@@ -22,9 +23,10 @@ type VideoGenerationService struct {
 	localStorage    *storage.LocalStorage
 	aiService       *AIService
 	ffmpeg          *ffmpeg.FFmpeg
+	events          *events.VideoGenerationHub
 }
 
-func NewVideoGenerationService(db *gorm.DB, transferService *ResourceTransferService, localStorage *storage.LocalStorage, aiService *AIService, log *logger.Logger) *VideoGenerationService {
+func NewVideoGenerationService(db *gorm.DB, transferService *ResourceTransferService, localStorage *storage.LocalStorage, aiService *AIService, log *logger.Logger, events *events.VideoGenerationHub) *VideoGenerationService {
 	service := &VideoGenerationService{
 		db:              db,
 		localStorage:    localStorage,
@@ -32,6 +34,7 @@ func NewVideoGenerationService(db *gorm.DB, transferService *ResourceTransferSer
 		aiService:       aiService,
 		log:             log,
 		ffmpeg:          ffmpeg.NewFFmpeg(log),
+		events:          events,
 	}
 
 	go service.RecoverPendingTasks()
@@ -167,6 +170,7 @@ func (s *VideoGenerationService) GenerateVideo(request *GenerateVideoRequest) (*
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
 
+	s.publishVideoGeneration(videoGen.ID)
 	go s.ProcessVideoGeneration(videoGen.ID)
 
 	return videoGen, nil
@@ -180,6 +184,7 @@ func (s *VideoGenerationService) ProcessVideoGeneration(videoGenID uint) {
 	}
 
 	s.db.Model(&videoGen).Update("status", models.VideoStatusProcessing)
+	s.publishVideoGeneration(videoGenID)
 
 	client, err := s.getVideoClient(videoGen.Provider, videoGen.Model)
 	if err != nil {
@@ -256,6 +261,7 @@ func (s *VideoGenerationService) ProcessVideoGeneration(videoGenID uint) {
 			"task_id": result.TaskID,
 			"status":  models.VideoStatusProcessing,
 		})
+		s.publishVideoGeneration(videoGenID)
 		go s.pollTaskStatus(videoGenID, result.TaskID, videoGen.Provider, videoGen.Model)
 		return
 	}
@@ -412,6 +418,7 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 		s.log.Errorw("Failed to update video generation", "error", err, "id", videoGenID)
 		return
 	}
+	s.publishVideoGeneration(videoGenID)
 
 	var videoGen models.VideoGeneration
 	if err := s.db.First(&videoGen, videoGenID).Error; err == nil {
@@ -441,6 +448,19 @@ func (s *VideoGenerationService) updateVideoGenError(videoGenID uint, errorMsg s
 	}).Error; err != nil {
 		s.log.Errorw("Failed to update video generation error", "error", err, "id", videoGenID)
 	}
+	s.publishVideoGeneration(videoGenID)
+}
+
+func (s *VideoGenerationService) publishVideoGeneration(videoGenID uint) {
+	if s.events == nil {
+		return
+	}
+	var videoGen models.VideoGeneration
+	if err := s.db.Where("id = ?", videoGenID).First(&videoGen).Error; err != nil {
+		s.log.Warnw("Failed to publish video generation update", "error", err, "id", videoGenID)
+		return
+	}
+	s.events.Publish(&videoGen)
 }
 
 func (s *VideoGenerationService) storeMinimaxVideo(client video.VideoClient, fileID string) (string, error) {

@@ -3,6 +3,7 @@ package handlers
 import (
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -15,10 +16,10 @@ type ScriptGenerationHandler struct {
 	log           *logger.Logger
 }
 
-func NewScriptGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger) *ScriptGenerationHandler {
+func NewScriptGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, hub *events.TaskHub) *ScriptGenerationHandler {
 	return &ScriptGenerationHandler{
 		scriptService: services.NewScriptGenerationService(db, cfg, log),
-		taskService:   services.NewTaskService(db, log),
+		taskService:   services.NewTaskService(db, log, hub),
 		log:           log,
 	}
 }

@@ -83,6 +83,7 @@ import { Edit, Picture } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -193,35 +194,83 @@ const batchGenerate = async () => {
 }
 
 let pollingTimer: number | null = null
+let sseStop: (() => void) | null = null
+
+const stopSSE = () => {
+  if (sseStop) {
+    sseStop()
+    sseStop = null
+  }
+}
 
 const startPolling = () => {
-  if (pollingTimer) return
-  
-  pollingTimer = window.setInterval(async () => {
-    try {
-      const drama = await dramaAPI.get(dramaId)
-      if (drama.characters) {
-        // 更新角色列表
-        characters.value = drama.characters
-        
-        // 检查是否所有选中的角色都生成完成
-        const allGenerated = selectedCharacters.value.every(id => {
-          const char = characters.value.find(c => c.id === id)
-          return char?.image_url
-        })
-        
-        if (allGenerated) {
-          stopPolling()
-          ElMessage.success('批量生成完成')
-        }
+  if (pollingTimer || sseStop) return
+
+  const handleImageEvent = (imageGen: any) => {
+    if (!imageGen?.character_id) return
+    if (!selectedCharacters.value.includes(imageGen.character_id)) return
+
+    const idx = characters.value.findIndex(c => c.id === imageGen.character_id)
+    if (idx !== -1) {
+      characters.value[idx] = {
+        ...characters.value[idx],
+        image_url: imageGen.image_url || characters.value[idx].image_url,
+        image_generation_status: imageGen.status
       }
-    } catch (error) {
-      console.error('轮询错误:', error)
     }
-  }, 5000) // 每5秒检查一次
+
+    const allGenerated = selectedCharacters.value.every(id => {
+      const char = characters.value.find(c => c.id === id)
+      return char?.image_url || char?.image_generation_status === 'failed'
+    })
+
+    if (allGenerated) {
+      stopPolling()
+      ElMessage.success('批量生成完成')
+    }
+  }
+
+  const startFallback = () => {
+    if (pollingTimer) return
+    pollingTimer = window.setInterval(async () => {
+      try {
+        const drama = await dramaAPI.get(dramaId)
+        if (drama.characters) {
+          characters.value = drama.characters
+
+          const allGenerated = selectedCharacters.value.every(id => {
+            const char = characters.value.find(c => c.id === id)
+            return char?.image_url || char?.image_generation_status === 'failed'
+          })
+
+          if (allGenerated) {
+            stopPolling()
+            ElMessage.success('批量生成完成')
+          }
+        }
+      } catch (error) {
+        console.error('轮询错误:', error)
+      }
+    }, 5000)
+    return () => {
+      if (pollingTimer) {
+        clearInterval(pollingTimer)
+        pollingTimer = null
+      }
+    }
+  }
+
+  const url = buildSSEUrl('/api/v1/events/image-generations', { drama_id: dramaId })
+  sseStop = subscribeSSE({
+    url,
+    event: 'image_generation',
+    onMessage: handleImageEvent,
+    fallback: startFallback
+  }).close
 }
 
 const stopPolling = () => {
+  stopSSE()
   if (pollingTimer) {
     clearInterval(pollingTimer)
     pollingTimer = null

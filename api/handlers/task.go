@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -13,9 +14,9 @@ type TaskHandler struct {
 	log         *logger.Logger
 }
 
-func NewTaskHandler(db *gorm.DB, log *logger.Logger) *TaskHandler {
+func NewTaskHandler(db *gorm.DB, log *logger.Logger, hub *events.TaskHub) *TaskHandler {
 	return &TaskHandler{
-		taskService: services.NewTaskService(db, log),
+		taskService: services.NewTaskService(db, log, hub),
 		log:         log,
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/ai"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/image"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/utils"
@@ -25,6 +26,7 @@ type ImageGenerationService struct {
 	log             *logger.Logger
 	config          *config.Config
 	promptI18n      *PromptI18n
+	events          *events.ImageGenerationHub
 }
 
 // truncateImageURL 截断图片 URL，避免 base64 格式的 URL 占满日志
@@ -45,7 +47,7 @@ func truncateImageURL(url string) string {
 	return url
 }
 
-func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService *ResourceTransferService, localStorage *storage.LocalStorage, log *logger.Logger) *ImageGenerationService {
+func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService *ResourceTransferService, localStorage *storage.LocalStorage, log *logger.Logger, events *events.ImageGenerationHub) *ImageGenerationService {
 	return &ImageGenerationService{
 		db:              db,
 		aiService:       NewAIService(db, log),
@@ -54,6 +56,7 @@ func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService 
 		config:          cfg,
 		promptI18n:      NewPromptI18n(cfg),
 		log:             log,
+		events:          events,
 	}
 }
 
@@ -142,6 +145,7 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
 
+	s.publishImageGeneration(imageGen.ID)
 	go s.ProcessImageGeneration(imageGen.ID)
 
 	return imageGen, nil
@@ -155,6 +159,7 @@ func (s *ImageGenerationService) ProcessImageGeneration(imageGenID uint) {
 	}
 
 	s.db.Model(&imageGen).Update("status", models.ImageStatusProcessing)
+	s.publishImageGeneration(imageGenID)
 
 	// 如果关联了background，同步更新background为generating状态
 	if imageGen.StoryboardID != nil {
@@ -232,6 +237,7 @@ func (s *ImageGenerationService) ProcessImageGeneration(imageGenID uint) {
 			"status":  models.ImageStatusProcessing,
 			"task_id": result.TaskID,
 		})
+		s.publishImageGeneration(imageGenID)
 		go s.pollTaskStatus(imageGenID, client, result.TaskID)
 		return
 	}
@@ -313,6 +319,7 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 
 	s.db.Model(&models.ImageGeneration{}).Where("id = ?", imageGenID).Updates(updates)
 	s.log.Infow("Image generation completed", "id", imageGenID)
+	s.publishImageGeneration(imageGenID)
 
 	// 如果关联了storyboard，同步更新storyboard的composed_image
 	if imageGen.StoryboardID != nil {
@@ -366,12 +373,25 @@ func (s *ImageGenerationService) updateImageGenError(imageGenID uint, errorMsg s
 		"error_msg": errorMsg,
 	})
 	s.log.Errorw("Image generation failed", "id", imageGenID, "error", errorMsg)
+	s.publishImageGeneration(imageGenID)
 
 	// 如果关联了scene，同步更新scene为失败状态
 	if imageGen.SceneID != nil {
 		s.db.Model(&models.Scene{}).Where("id = ?", *imageGen.SceneID).Update("status", "failed")
 		s.log.Warnw("Scene marked as failed", "scene_id", *imageGen.SceneID)
 	}
+}
+
+func (s *ImageGenerationService) publishImageGeneration(imageGenID uint) {
+	if s.events == nil {
+		return
+	}
+	var imageGen models.ImageGeneration
+	if err := s.db.Where("id = ?", imageGenID).First(&imageGen).Error; err != nil {
+		s.log.Warnw("Failed to publish image generation update", "error", err, "id", imageGenID)
+		return
+	}
+	s.events.Publish(&imageGen)
 }
 
 func (s *ImageGenerationService) getImageClient(provider string) (image.ImageClient, error) {

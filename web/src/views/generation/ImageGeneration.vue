@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -173,6 +173,7 @@ import type { ImageGeneration, ImageStatus } from '@/types/image'
 import type { Drama } from '@/types/drama'
 import GenerateImageDialog from './components/GenerateImageDialog.vue'
 import ImageDetailDialog from './components/ImageDetailDialog.vue'
+import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 
 const route = useRoute()
 const router = useRouter()
@@ -195,6 +196,64 @@ const pagination = reactive({
   page_size: 12
 })
 
+let imageStreamStop: (() => void) | null = null
+let reloadTimer: number | null = null
+
+const stopImageStream = () => {
+  if (imageStreamStop) {
+    imageStreamStop()
+    imageStreamStop = null
+  }
+  if (reloadTimer) {
+    clearTimeout(reloadTimer)
+    reloadTimer = null
+  }
+}
+
+const scheduleReload = () => {
+  if (reloadTimer) return
+  reloadTimer = window.setTimeout(() => {
+    reloadTimer = null
+    loadImages()
+  }, 500)
+}
+
+const startImageStream = () => {
+  stopImageStream()
+  const url = buildSSEUrl('/api/v1/events/image-generations', {
+    drama_id: filters.drama_id || undefined
+  })
+
+  imageStreamStop = subscribeSSE({
+    url,
+    event: 'image_generation',
+    onMessage: (imageGen) => {
+      if (filters.drama_id && String(imageGen.drama_id) !== filters.drama_id) return
+
+      if (filters.status && imageGen.status !== filters.status) {
+        images.value = images.value.filter(img => img.id !== imageGen.id)
+        return
+      }
+
+      const index = images.value.findIndex(img => img.id === imageGen.id)
+      if (index >= 0) {
+        images.value[index] = { ...images.value[index], ...imageGen }
+      } else {
+        scheduleReload()
+      }
+    },
+    fallback: () => {
+      const interval = window.setInterval(() => {
+        const hasProcessing = images.value.some(img => img.status === 'processing')
+        if (hasProcessing) {
+          loadImages()
+        }
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }).close
+}
+
 const loadImages = async () => {
   loading.value = true
   try {
@@ -206,6 +265,7 @@ const loadImages = async () => {
     })
     images.value = result.items
     total.value = result.pagination.total
+    startImageStream()
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
@@ -297,15 +357,10 @@ onMounted(() => {
   
   loadDramas()
   loadImages()
-  
-  const interval = setInterval(() => {
-    const hasProcessing = images.value.some(img => img.status === 'processing')
-    if (hasProcessing) {
-      loadImages()
-    }
-  }, 5000)
-  
-  return () => clearInterval(interval)
+})
+
+onUnmounted(() => {
+  stopImageStream()
 })
 </script>
 

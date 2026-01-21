@@ -6,6 +6,7 @@ import (
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -18,10 +19,10 @@ type ImageGenerationHandler struct {
 	log          *logger.Logger
 }
 
-func NewImageGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService, localStorage *storage.LocalStorage) *ImageGenerationHandler {
+func NewImageGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService, localStorage *storage.LocalStorage, taskHub *events.TaskHub, imageHub *events.ImageGenerationHub) *ImageGenerationHandler {
 	return &ImageGenerationHandler{
-		imageService: services.NewImageGenerationService(db, cfg, transferService, localStorage, log),
-		taskService:  services.NewTaskService(db, log),
+		imageService: services.NewImageGenerationService(db, cfg, transferService, localStorage, log, imageHub),
+		taskService:  services.NewTaskService(db, log, taskHub),
 		log:          log,
 	}
 }
