@@ -31,7 +31,13 @@
     </AppHeader>
 
     <!-- 当前阶段内容区域 -->
-    <div class="stage-area">
+    <div
+      class="stage-area"
+      v-loading="pageLoading"
+      :element-loading-text="$t('common.loading')"
+      element-loading-background="transparent"
+      element-loading-custom-class="glass-loading"
+    >
       <!-- 阶段 0: 剧本生成 -->
       <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">
         <div class="stage-body stage-body-fullscreen">
@@ -570,6 +576,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const drama = ref<Drama>()
+const pageLoading = ref(false)
 const currentStep = ref(0)
 const currentEpisodeNumber = ref(1) // 当前正在创作的集数
 const generatingCharacterIds = ref<(number | string)[]>([])
@@ -1307,13 +1314,20 @@ const goToEpisodeDetail = (episodeId: string) => {
   router.push(`/dramas/${drama.value?.id}/episodes/${episodeId}`)
 }
 
-const loadDramaData = async () => {
+const loadDramaData = async (showLoading = !drama.value) => {
   const dramaId = route.params.id as string
+  if (showLoading) {
+    pageLoading.value = true
+  }
   try {
     drama.value = await dramaAPI.get(dramaId)
   } catch (error: any) {
     ElMessage.error(error.message || '获取剧本信息失败')
     router.push('/dramas')
+  } finally {
+    if (showLoading) {
+      pageLoading.value = false
+    }
   }
 }
 

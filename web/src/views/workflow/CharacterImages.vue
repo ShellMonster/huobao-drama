@@ -16,7 +16,14 @@
       </template>
     </el-page-header>
 
-    <el-card shadow="never" class="main-card">
+    <el-card
+      shadow="never"
+      class="main-card"
+      v-loading="pageLoading"
+      :element-loading-text="$t('common.loading')"
+      element-loading-background="transparent"
+      element-loading-custom-class="glass-loading"
+    >
       <div class="toolbar">
         <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate">
           全选
@@ -86,6 +93,7 @@ const generatingIds = ref<(number | string)[]>([])
 const batchGenerating = ref(false)
 const selectedCharacters = ref<(number | string)[]>([])
 const selectAll = ref(false)
+const pageLoading = ref(false)
 
 const allImagesGenerated = computed(() => {
   return characters.value.length > 0 && characters.value.every(c => c.image_url)
@@ -229,6 +237,7 @@ const goToNextStep = () => {
 }
 
 onMounted(async () => {
+  pageLoading.value = true
   try {
     const drama = await dramaAPI.get(dramaId)
     if (drama.characters && drama.characters.length > 0) {
@@ -240,6 +249,8 @@ onMounted(async () => {
   } catch (error: any) {
     ElMessage.error(error.message || '加载角色失败')
     router.push(`/dramas/${dramaId}`)
+  } finally {
+    pageLoading.value = false
   }
 })
 

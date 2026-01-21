@@ -16,7 +16,13 @@
       </AppHeader>
 
       <!-- Tabs / 标签页 -->
-      <div class="tabs-wrapper">
+      <div
+        class="tabs-wrapper"
+        v-loading="pageLoading"
+        :element-loading-text="$t('common.loading')"
+        element-loading-background="transparent"
+        element-loading-custom-class="glass-loading"
+      >
         <el-tabs v-model="activeTab" class="management-tabs">
       <!-- 项目概览 -->
       <el-tab-pane :label="$t('drama.management.overview')" name="overview">
@@ -272,6 +278,7 @@ const route = useRoute()
 const drama = ref<Drama>()
 const activeTab = ref(route.query.tab as string || 'overview')
 const scenes = ref<any[]>([])
+const pageLoading = ref(false)
 
 const addCharacterDialogVisible = ref(false)
 const addSceneDialogVisible = ref(false)
@@ -298,13 +305,20 @@ const sortedEpisodes = computed(() => {
   return [...drama.value.episodes].sort((a, b) => a.episode_number - b.episode_number)
 })
 
-const loadDramaData = async () => {
+const loadDramaData = async (showLoading = !drama.value) => {
+  if (showLoading) {
+    pageLoading.value = true
+  }
   try {
     const data = await dramaAPI.get(route.params.id as string)
     drama.value = data
     loadScenes()
   } catch (error: any) {
     ElMessage.error(error.message || '加载项目数据失败')
+  } finally {
+    if (showLoading) {
+      pageLoading.value = false
+    }
   }
 }
 

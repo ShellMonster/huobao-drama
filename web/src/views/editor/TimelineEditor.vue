@@ -8,7 +8,13 @@
       <h2>{{ $t('timeline.title') }}</h2>
     </div>
     
-    <div class="editor-content">
+    <div
+      class="editor-content"
+      v-loading="pageLoading"
+      :element-loading-text="$t('common.loading')"
+      element-loading-background="transparent"
+      element-loading-custom-class="glass-loading"
+    >
       <VideoTimelineEditor 
         v-if="scenes.length > 0"
         :scenes="scenes" 
@@ -32,13 +38,17 @@ const router = useRouter()
 
 const episodeId = route.params.id as string
 const scenes = ref<any[]>([])
+const pageLoading = ref(false)
 
 const loadScenes = async () => {
+  pageLoading.value = true
   try {
     const res = await dramaAPI.getStoryboards(episodeId)
     scenes.value = res.storyboards || []
   } catch (error: any) {
     ElMessage.error($t('timeline.loadFailed'))
+  } finally {
+    pageLoading.value = false
   }
 }
 

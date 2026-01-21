@@ -34,6 +34,13 @@
         </template>
       </AppHeader>
 
+    <div
+      class="workflow-body"
+      v-loading="pageLoading"
+      :element-loading-text="$t('common.loading')"
+      element-loading-background="transparent"
+      element-loading-custom-class="glass-loading"
+    >
     <!-- 阶段 0: 章节内容 + 提取角色场景 -->
     <el-card v-show="currentStep === 0" shadow="never" class="stage-card stage-card-fullscreen">
       <div class="stage-body stage-body-fullscreen">
@@ -556,6 +563,7 @@
         </div>
       </div>
     </el-card>
+    </div>
 
     <!-- 阶段 3: 专业制作（占位，实际跳转到专业UI页面） -->
 
@@ -830,6 +838,7 @@ const dramaId = route.params.id as string
 const episodeNumber = parseInt(route.params.episodeNumber as string)
 
 const drama = ref<Drama>()
+const pageLoading = ref(false)
 
 // 生成 localStorage key
 const getStepStorageKey = () => `episode_workflow_step_${dramaId}_${episodeNumber}`
@@ -1074,7 +1083,10 @@ const loadSavedModelConfig = () => {
   }
 }
 
-const loadDramaData = async () => {
+const loadDramaData = async (showLoading = !drama.value) => {
+  if (showLoading) {
+    pageLoading.value = true
+  }
   try {
     const data = await dramaAPI.get(dramaId)
     drama.value = data
@@ -1089,6 +1101,10 @@ const loadDramaData = async () => {
     await checkAndStartPolling()
   } catch (error: any) {
     ElMessage.error(error.message || '加载项目数据失败')
+  } finally {
+    if (showLoading) {
+      pageLoading.value = false
+    }
   }
 }
 
