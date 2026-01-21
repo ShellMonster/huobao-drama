@@ -1039,6 +1039,7 @@ const framePrompts = ref<Record<FrameType, string>>({
   panel: '',
   action: ''
 })
+const framePromptLoadedMap = ref<Record<string, boolean>>({})
 const currentFramePrompt = ref('')
 const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
@@ -1053,6 +1054,17 @@ let imageStreamStop: (() => void) | null = null
 let imageRefreshTimer: number | null = null
 let framePromptRequestId = 0
 let framePromptLoadingRequestId = 0
+const getFramePromptLoadedKey = (storyboardId: number) => String(storyboardId)
+const markFramePromptLoaded = (storyboardId: number) => {
+  framePromptLoadedMap.value[getFramePromptLoadedKey(storyboardId)] = true
+}
+const isFramePromptLoaded = (storyboardId: number) =>
+  !!framePromptLoadedMap.value[getFramePromptLoadedKey(storyboardId)]
+const promptLoaded = computed(() => {
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return false
+  return isFramePromptLoaded(storyboardId)
+})
 const currentPromptGenerating = computed(() => {
   const storyboardId = currentStoryboard.value?.id
   if (!storyboardId) return false
@@ -1060,6 +1072,7 @@ const currentPromptGenerating = computed(() => {
 })
 const promptLoading = computed(() => {
   if (!currentStoryboard.value) return false
+  if (promptLoaded.value) return false
   return framePromptLoadingKey.value === `${currentStoryboard.value.id}_${selectedFrameType.value}`
 })
 const currentImageGenerating = computed(() => {
@@ -1582,7 +1595,8 @@ const loadFramePrompts = async (
   options: { showLoading?: boolean; frameType?: FrameType } = {}
 ) => {
   const requestId = ++framePromptRequestId
-  const loadingKey = options.showLoading
+  const shouldShowLoading = options.showLoading && !isFramePromptLoaded(storyboardId)
+  const loadingKey = shouldShowLoading
     ? `${storyboardId}_${options.frameType || selectedFrameType.value}`
     : null
 
@@ -1596,9 +1610,11 @@ const loadFramePrompts = async (
     if (requestId !== framePromptRequestId) return
     if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
     applyServerFramePrompts(storyboardId, result.frame_prompts || [])
+    markFramePromptLoaded(storyboardId)
   } catch (error: any) {
     console.error('加载帧提示词失败:', error)
   } finally {
+    markFramePromptLoaded(storyboardId)
     if (
       loadingKey &&
       framePromptLoadingKey.value === loadingKey &&
