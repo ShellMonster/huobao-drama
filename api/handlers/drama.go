@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/domain/models"
@@ -97,7 +98,10 @@ func (h *DramaHandler) ListDramas(c *gin.Context) {
 		query.PageSize = 20
 	}
 
-	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceDramaList, c.Request.URL.Query())
+	normalizedQuery := c.Request.URL.Query()
+	normalizedQuery.Set("page", strconv.Itoa(query.Page))
+	normalizedQuery.Set("page_size", strconv.Itoa(query.PageSize))
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceDramaList, normalizedQuery)
 	if entry, ok := cache.Get(cacheKey); ok {
 		c.Header("ETag", entry.ETag)
 		c.Header("Cache-Control", "private, max-age=0, must-revalidate")

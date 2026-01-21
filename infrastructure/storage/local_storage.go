@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,12 +51,33 @@ func (s *LocalStorage) Upload(file io.Reader, filename string, category string) 
 	return url, nil
 }
 
+func (s *LocalStorage) UploadBytes(data []byte, contentType string, category string) (string, error) {
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	ext := getFileExtension("", contentType)
+	timestamp := time.Now().Format("20060102_150405_000")
+	filename := fmt.Sprintf("%s%s", timestamp, ext)
+	return s.Upload(bytes.NewReader(data), filename, category)
+}
+
 func (s *LocalStorage) Delete(url string) error {
 	return nil
 }
 
 func (s *LocalStorage) GetURL(path string) string {
 	return fmt.Sprintf("%s/%s", s.baseURL, path)
+}
+
+func (s *LocalStorage) BaseURL() string {
+	return s.baseURL
+}
+
+func (s *LocalStorage) IsLocalURL(url string) bool {
+	if s.baseURL == "" {
+		return false
+	}
+	return strings.HasPrefix(url, s.baseURL+"/")
 }
 
 // DownloadFromURL 从远程URL下载文件到本地存储

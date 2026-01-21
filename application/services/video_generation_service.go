@@ -14,6 +14,7 @@ import (
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
+	"github.com/drama-generator/backend/pkg/utils"
 	"github.com/drama-generator/backend/pkg/video"
 	"gorm.io/gorm"
 )
@@ -357,23 +358,47 @@ func (s *VideoGenerationService) pollTaskStatus(videoGenID uint, taskID string, 
 	s.updateVideoGenError(videoGenID, "polling timeout")
 }
 
+func (s *VideoGenerationService) storeVideoToLocal(videoURL string) (string, error) {
+	if s.localStorage == nil {
+		return "", fmt.Errorf("local storage not available")
+	}
+	if videoURL == "" {
+		return "", fmt.Errorf("empty video url")
+	}
+	if s.localStorage.IsLocalURL(videoURL) {
+		return videoURL, nil
+	}
+	if utils.IsDataURI(videoURL) {
+		data, mimeType, err := utils.ParseDataURI(videoURL)
+		if err != nil {
+			return "", err
+		}
+		return s.localStorage.UploadBytes(data, mimeType, "videos")
+	}
+	if strings.HasPrefix(videoURL, "http://") || strings.HasPrefix(videoURL, "https://") {
+		return s.localStorage.DownloadFromURL(videoURL, "videos")
+	}
+	return "", fmt.Errorf("unsupported video url format")
+}
+
 func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoURL string, duration *int, width *int, height *int, firstFrameURL *string) {
 	var localVideoPath string
 
-	// 下载视频到本地存储（仅用于缓存，不更新数据库）
+	finalVideoURL := videoURL
 	if s.localStorage != nil && videoURL != "" {
-		downloadedPath, err := s.localStorage.DownloadFromURL(videoURL, "videos")
+		localURL, err := s.storeVideoToLocal(videoURL)
 		if err != nil {
-			s.log.Warnw("Failed to download video to local storage",
+			s.log.Warnw("Failed to store video to local storage",
 				"error", err,
 				"id", videoGenID,
 				"original_url", videoURL)
-		} else {
-			localVideoPath = downloadedPath
-			s.log.Infow("Video downloaded to local storage for caching",
+		} else if localURL != "" {
+			finalVideoURL = localURL
+			localVideoPath = localURL
+			s.log.Infow("Video stored to local storage",
 				"id", videoGenID,
 				"original_url", videoURL,
-				"local_path", localVideoPath)
+				"local_url", localURL)
 		}
 	}
 
@@ -413,7 +438,7 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 	// 数据库中保持使用原始URL
 	updates := map[string]interface{}{
 		"status":    models.VideoStatusCompleted,
-		"video_url": videoURL,
+		"video_url": finalVideoURL,
 	}
 	if duration != nil {
 		updates["duration"] = *duration
@@ -451,7 +476,7 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 
 				// 更新 Storyboard 的 video_url 和 duration
 				storyboardUpdates := map[string]interface{}{
-					"video_url": videoURL,
+					"video_url": finalVideoURL,
 				}
 				if duration != nil {
 					storyboardUpdates["duration"] = *duration
@@ -471,7 +496,7 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 	cache.BumpNamespace(cache.NamespaceVideoDetail)
 	cache.BumpNamespace(cache.NamespaceStoryboards)
 
-	s.log.Infow("Video generation completed", "id", videoGenID, "url", videoURL, "duration", duration)
+	s.log.Infow("Video generation completed", "id", videoGenID, "url", finalVideoURL, "duration", duration)
 }
 
 func (s *VideoGenerationService) updateVideoGenError(videoGenID uint, errorMsg string) {

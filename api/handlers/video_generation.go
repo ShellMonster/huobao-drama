@@ -132,12 +132,28 @@ func (h *VideoGenerationHandler) ListVideoGenerations(c *gin.Context) {
 
 	var dramaIDUint *uint
 	if dramaIDStr := c.Query("drama_id"); dramaIDStr != "" {
-		did, _ := strconv.ParseUint(dramaIDStr, 10, 32)
-		didUint := uint(did)
-		dramaIDUint = &didUint
+		did, err := strconv.ParseUint(dramaIDStr, 10, 32)
+		if err == nil {
+			didUint := uint(did)
+			dramaIDUint = &didUint
+		}
 	}
 
-	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceVideoList, c.Request.URL.Query())
+	normalizedQuery := c.Request.URL.Query()
+	normalizedQuery.Set("page", strconv.Itoa(page))
+	normalizedQuery.Set("page_size", strconv.Itoa(pageSize))
+	if storyboardID != nil {
+		normalizedQuery.Set("storyboard_id", strconv.FormatUint(uint64(*storyboardID), 10))
+	} else {
+		normalizedQuery.Del("storyboard_id")
+	}
+	if dramaIDUint != nil {
+		normalizedQuery.Set("drama_id", strconv.FormatUint(uint64(*dramaIDUint), 10))
+	} else {
+		normalizedQuery.Del("drama_id")
+	}
+
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceVideoList, normalizedQuery)
 	if entry, ok := cache.Get(cacheKey); ok {
 		c.Header("ETag", entry.ETag)
 		c.Header("Cache-Control", "private, max-age=0, must-revalidate")

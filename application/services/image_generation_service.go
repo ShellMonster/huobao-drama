@@ -49,6 +49,29 @@ func truncateImageURL(url string) string {
 	return url
 }
 
+func (s *ImageGenerationService) storeImageToLocal(imageURL string) (string, error) {
+	if s.localStorage == nil {
+		return "", fmt.Errorf("local storage not available")
+	}
+	if imageURL == "" {
+		return "", fmt.Errorf("empty image url")
+	}
+	if s.localStorage.IsLocalURL(imageURL) {
+		return imageURL, nil
+	}
+	if utils.IsDataURI(imageURL) {
+		data, mimeType, err := utils.ParseDataURI(imageURL)
+		if err != nil {
+			return "", err
+		}
+		return s.localStorage.UploadBytes(data, mimeType, "images")
+	}
+	if strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") {
+		return s.localStorage.DownloadFromURL(imageURL, "images")
+	}
+	return "", fmt.Errorf("unsupported image url format")
+}
+
 func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService *ResourceTransferService, localStorage *storage.LocalStorage, log *logger.Logger, events *events.ImageGenerationHub) *ImageGenerationService {
 	return &ImageGenerationService{
 		db:              db,
@@ -289,31 +312,31 @@ func (s *ImageGenerationService) pollTaskStatus(imageGenID uint, client image.Im
 func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result *image.ImageResult) {
 	now := time.Now()
 
-	// 下载图片到本地存储（仅用于缓存，不更新数据库）
-	// 仅下载 HTTP/HTTPS URL，跳过 data URI
-	if s.localStorage != nil && result.ImageURL != "" &&
-		(strings.HasPrefix(result.ImageURL, "http://") || strings.HasPrefix(result.ImageURL, "https://")) {
-		_, err := s.localStorage.DownloadFromURL(result.ImageURL, "images")
+	finalImageURL := result.ImageURL
+	if s.localStorage != nil && result.ImageURL != "" {
+		localURL, err := s.storeImageToLocal(result.ImageURL)
 		if err != nil {
 			errStr := err.Error()
 			if len(errStr) > 200 {
 				errStr = errStr[:200] + "..."
 			}
-			s.log.Warnw("Failed to download image to local storage",
+			s.log.Warnw("Failed to store image to local storage",
 				"error", errStr,
 				"id", imageGenID,
 				"original_url", truncateImageURL(result.ImageURL))
-		} else {
-			s.log.Infow("Image downloaded to local storage for caching",
+		} else if localURL != "" {
+			finalImageURL = localURL
+			s.log.Infow("Image stored to local storage",
 				"id", imageGenID,
-				"original_url", truncateImageURL(result.ImageURL))
+				"original_url", truncateImageURL(result.ImageURL),
+				"local_url", localURL)
 		}
 	}
 
-	// 数据库中保持使用原始URL
+	// 数据库中优先使用本地URL，失败时回退为原始URL
 	updates := map[string]interface{}{
 		"status":       models.ImageStatusCompleted,
-		"image_url":    result.ImageURL,
+		"image_url":    finalImageURL,
 		"completed_at": now,
 	}
 
@@ -337,12 +360,12 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 
 	// 如果关联了storyboard，同步更新storyboard的composed_image
 	if imageGen.StoryboardID != nil {
-		if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *imageGen.StoryboardID).Update("composed_image", result.ImageURL).Error; err != nil {
+		if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *imageGen.StoryboardID).Update("composed_image", finalImageURL).Error; err != nil {
 			s.log.Errorw("Failed to update storyboard composed_image", "error", err, "storyboard_id", *imageGen.StoryboardID)
 		} else {
 			s.log.Infow("Storyboard updated with composed image",
 				"storyboard_id", *imageGen.StoryboardID,
-				"composed_image", truncateImageURL(result.ImageURL))
+				"composed_image", truncateImageURL(finalImageURL))
 		}
 	}
 
@@ -350,25 +373,25 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 	if imageGen.SceneID != nil && imageGen.ImageType == string(models.ImageTypeScene) {
 		sceneUpdates := map[string]interface{}{
 			"status":    "generated",
-			"image_url": result.ImageURL,
+			"image_url": finalImageURL,
 		}
 		if err := s.db.Model(&models.Scene{}).Where("id = ?", *imageGen.SceneID).Updates(sceneUpdates).Error; err != nil {
 			s.log.Errorw("Failed to update scene", "error", err, "scene_id", *imageGen.SceneID)
 		} else {
 			s.log.Infow("Scene updated with generated image",
 				"scene_id", *imageGen.SceneID,
-				"image_url", truncateImageURL(result.ImageURL))
+				"image_url", truncateImageURL(finalImageURL))
 		}
 	}
 
 	// 如果关联了角色，同步更新角色的image_url
 	if imageGen.CharacterID != nil {
-		if err := s.db.Model(&models.Character{}).Where("id = ?", *imageGen.CharacterID).Update("image_url", result.ImageURL).Error; err != nil {
+		if err := s.db.Model(&models.Character{}).Where("id = ?", *imageGen.CharacterID).Update("image_url", finalImageURL).Error; err != nil {
 			s.log.Errorw("Failed to update character image_url", "error", err, "character_id", *imageGen.CharacterID)
 		} else {
 			s.log.Infow("Character updated with generated image",
 				"character_id", *imageGen.CharacterID,
-				"image_url", truncateImageURL(result.ImageURL))
+				"image_url", truncateImageURL(finalImageURL))
 		}
 	}
 
