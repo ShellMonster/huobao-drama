@@ -930,19 +930,17 @@ const goBack = () => {
     return
   }
 
-  const currentPath = route.fullPath
-  const hasHistory = typeof window !== 'undefined' && window.history.length > 1
-  if (hasHistory) {
+  const targetPath = router.resolve(target).path
+  const historyState = router.options.history.state as { back?: string } | null
+  const backPath = typeof historyState?.back === 'string' ? historyState.back : ''
+  const normalizedBack = backPath.split('?')[0].split('#')[0]
+
+  if (normalizedBack === targetPath) {
     router.back()
-    window.setTimeout(() => {
-      if (router.currentRoute.value.fullPath === currentPath) {
-        router.push(target)
-      }
-    }, 120)
     return
   }
 
-  router.push(target)
+  router.replace(target)
 }
 
 // 加载AI模型配置
