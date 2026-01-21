@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"net/http"
+
 	services2 "github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -23,6 +26,18 @@ func NewSceneHandler(db *gorm.DB, log *logger.Logger, imageGenService *services2
 func (h *SceneHandler) GetStoryboardsForEpisode(c *gin.Context) {
 	episodeID := c.Param("episode_id")
 
+	cacheKey := cache.NamespaceKey(cache.NamespaceStoryboards, episodeID)
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
+
 	storyboards, err := h.sceneService.GetScenesForEpisode(episodeID)
 	if err != nil {
 		h.log.Errorw("Failed to get storyboards for episode", "error", err, "episode_id", episodeID)
@@ -30,10 +45,15 @@ func (h *SceneHandler) GetStoryboardsForEpisode(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, gin.H{
+	payload := gin.H{
 		"storyboards": storyboards,
 		"total":       len(storyboards),
-	})
+	}
+	if entry, err := cache.Set(cacheKey, payload, cacheTTLStoryboards); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
+	response.Success(c, payload)
 }
 
 func (h *SceneHandler) CreateScene(c *gin.Context) {
@@ -59,6 +79,9 @@ func (h *SceneHandler) CreateScene(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	response.Created(c, scene)
 }
 
@@ -77,6 +100,9 @@ func (h *SceneHandler) UpdateScene(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	response.Success(c, gin.H{"message": "Scene updated successfully"})
 }
 
@@ -102,6 +128,9 @@ func (h *SceneHandler) UpdateSceneDetails(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	response.Success(c, gin.H{"message": "Scene updated successfully"})
 }
 
@@ -138,5 +167,8 @@ func (h *SceneHandler) DeleteScene(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	response.Success(c, gin.H{"message": "场景已删除"})
 }

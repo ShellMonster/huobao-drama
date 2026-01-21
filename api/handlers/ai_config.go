@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
@@ -36,6 +38,7 @@ func (h *AIConfigHandler) CreateConfig(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAIConfig)
 	response.Created(c, config)
 }
 
@@ -63,6 +66,18 @@ func (h *AIConfigHandler) GetConfig(c *gin.Context) {
 func (h *AIConfigHandler) ListConfigs(c *gin.Context) {
 
 	serviceType := c.Query("service_type")
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceAIConfig, c.Request.URL.Query())
+
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
 
 	configs, err := h.aiService.ListConfigs(serviceType)
 	if err != nil {
@@ -70,6 +85,10 @@ func (h *AIConfigHandler) ListConfigs(c *gin.Context) {
 		return
 	}
 
+	if entry, err := cache.Set(cacheKey, configs, cacheTTLAIConfig); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
 	response.Success(c, configs)
 }
 
@@ -97,6 +116,7 @@ func (h *AIConfigHandler) UpdateConfig(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAIConfig)
 	response.Success(c, config)
 }
 
@@ -117,6 +137,7 @@ func (h *AIConfigHandler) DeleteConfig(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAIConfig)
 	response.Success(c, gin.H{"message": "删除成功"})
 }
 

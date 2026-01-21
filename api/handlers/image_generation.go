@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/infrastructure/storage"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -158,12 +160,28 @@ func (h *ImageGenerationHandler) GetImageGeneration(c *gin.Context) {
 		return
 	}
 
+	cacheKey := cache.NamespaceKey(cache.NamespaceImageDetail, c.Param("id"))
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
+
 	imageGen, err := h.imageService.GetImageGeneration(uint(imageGenID))
 	if err != nil {
 		response.NotFound(c, "图片生成记录不存在")
 		return
 	}
 
+	if entry, err := cache.Set(cacheKey, imageGen, cacheTTLImageDetail); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
 	response.Success(c, imageGen)
 }
 
@@ -205,6 +223,18 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		dramaIDUint = &didUint
 	}
 
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceImageList, c.Request.URL.Query())
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
+
 	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, status, page, pageSize)
 
 	if err != nil {
@@ -213,7 +243,21 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		return
 	}
 
-	response.SuccessWithPagination(c, images, total, page, pageSize)
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+	payload := response.PaginationData{
+		Items: images,
+		Pagination: response.Pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+	if entry, err := cache.Set(cacheKey, payload, cacheTTLImageList); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
+	response.Success(c, payload)
 }
 
 func (h *ImageGenerationHandler) DeleteImageGeneration(c *gin.Context) {

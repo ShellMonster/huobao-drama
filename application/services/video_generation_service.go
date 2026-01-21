@@ -11,6 +11,7 @@ import (
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
 	"github.com/drama-generator/backend/infrastructure/storage"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/video"
@@ -171,6 +172,14 @@ func (s *VideoGenerationService) GenerateVideo(request *GenerateVideoRequest) (*
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceVideoList)
+	cache.BumpNamespace(cache.NamespaceVideoDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+	cache.BumpNamespace(cache.NamespaceVideoDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+
 	s.publishVideoGeneration(videoGen.ID)
 	go s.ProcessVideoGeneration(videoGen.ID)
 
@@ -186,6 +195,10 @@ func (s *VideoGenerationService) ProcessVideoGeneration(videoGenID uint) {
 
 	s.db.Model(&videoGen).Update("status", models.VideoStatusProcessing)
 	s.publishVideoGeneration(videoGenID)
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceVideoList)
 
 	client, err := s.getVideoClient(videoGen.Provider, videoGen.Model)
 	if err != nil {
@@ -452,6 +465,12 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 		}
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceVideoList)
+	cache.BumpNamespace(cache.NamespaceVideoDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+
 	s.log.Infow("Video generation completed", "id", videoGenID, "url", videoURL, "duration", duration)
 }
 
@@ -463,6 +482,12 @@ func (s *VideoGenerationService) updateVideoGenError(videoGenID uint, errorMsg s
 		s.log.Errorw("Failed to update video generation error", "error", err, "id", videoGenID)
 	}
 	s.publishVideoGeneration(videoGenID)
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceVideoList)
+	cache.BumpNamespace(cache.NamespaceVideoDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 }
 
 func (s *VideoGenerationService) publishVideoGeneration(videoGenID uint) {
@@ -703,7 +728,7 @@ func (s *VideoGenerationService) BatchGenerateVideosForEpisode(episodeID string)
 }
 
 func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var videoGen models.VideoGeneration
 		if err := tx.Where("id = ?", id).First(&videoGen).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -735,5 +760,14 @@ func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceVideoList)
+	cache.BumpNamespace(cache.NamespaceVideoDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+	return nil
 }

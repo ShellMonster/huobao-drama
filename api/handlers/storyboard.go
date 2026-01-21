@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -81,6 +82,9 @@ func (h *StoryboardHandler) processStoryboardGeneration(taskID, episodeID, model
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	h.log.Infow("Storyboard generation completed", "task_id", taskID, "total", result.Total)
 }
 
@@ -102,5 +106,8 @@ func (h *StoryboardHandler) UpdateStoryboard(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 	response.Success(c, gin.H{"message": "Storyboard updated successfully"})
 }

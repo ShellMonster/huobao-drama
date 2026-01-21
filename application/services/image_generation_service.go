@@ -11,6 +11,7 @@ import (
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/ai"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/image"
@@ -146,6 +147,14 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		return nil, fmt.Errorf("failed to create record: %w", err)
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+
 	s.publishImageGeneration(imageGen.ID)
 	go s.ProcessImageGeneration(imageGen.ID)
 
@@ -161,6 +170,10 @@ func (s *ImageGenerationService) ProcessImageGeneration(imageGenID uint) {
 
 	s.db.Model(&imageGen).Update("status", models.ImageStatusProcessing)
 	s.publishImageGeneration(imageGenID)
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
 
 	// 如果关联了background，同步更新background为generating状态
 	if imageGen.StoryboardID != nil {
@@ -358,6 +371,12 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 				"image_url", truncateImageURL(result.ImageURL))
 		}
 	}
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 }
 
 func (s *ImageGenerationService) updateImageGenError(imageGenID uint, errorMsg string) {
@@ -381,6 +400,12 @@ func (s *ImageGenerationService) updateImageGenError(imageGenID uint, errorMsg s
 		s.db.Model(&models.Scene{}).Where("id = ?", *imageGen.SceneID).Update("status", "failed")
 		s.log.Warnw("Scene marked as failed", "scene_id", *imageGen.SceneID)
 	}
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
 }
 
 func (s *ImageGenerationService) publishImageGeneration(imageGenID uint) {
@@ -549,7 +574,7 @@ func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *ui
 }
 
 func (s *ImageGenerationService) DeleteImageGeneration(imageGenID uint) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var imageGen models.ImageGeneration
 		if err := tx.Where("id = ?", imageGenID).First(&imageGen).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -603,7 +628,16 @@ func (s *ImageGenerationService) DeleteImageGeneration(imageGenID uint) error {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceStoryboards)
+	return nil
 }
 
 func (s *ImageGenerationService) GenerateImagesForScene(sceneID string) ([]*models.ImageGeneration, error) {

@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"net/http"
+
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
@@ -40,12 +43,27 @@ func (h *DramaHandler) CreateDrama(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceDramaStats)
 	response.Created(c, drama)
 }
 
 func (h *DramaHandler) GetDrama(c *gin.Context) {
 
 	dramaID := c.Param("id")
+
+	cacheKey := cache.NamespaceKey(cache.NamespaceDramaDetail, dramaID)
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
 
 	drama, err := h.dramaService.GetDrama(dramaID)
 	if err != nil {
@@ -57,6 +75,10 @@ func (h *DramaHandler) GetDrama(c *gin.Context) {
 		return
 	}
 
+	if entry, err := cache.Set(cacheKey, drama, cacheTTLDramaDetail); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
 	response.Success(c, drama)
 }
 
@@ -75,13 +97,38 @@ func (h *DramaHandler) ListDramas(c *gin.Context) {
 		query.PageSize = 20
 	}
 
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceDramaList, c.Request.URL.Query())
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
+
 	dramas, total, err := h.dramaService.ListDramas(&query)
 	if err != nil {
 		response.InternalError(c, "获取列表失败")
 		return
 	}
-
-	response.SuccessWithPagination(c, dramas, total, query.Page, query.PageSize)
+	totalPages := (total + int64(query.PageSize) - 1) / int64(query.PageSize)
+	payload := response.PaginationData{
+		Items: dramas,
+		Pagination: response.Pagination{
+			Page:       query.Page,
+			PageSize:   query.PageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+	if entry, err := cache.Set(cacheKey, payload, cacheTTLDramaList); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
+	response.Success(c, payload)
 }
 
 func (h *DramaHandler) UpdateDrama(c *gin.Context) {
@@ -104,6 +151,9 @@ func (h *DramaHandler) UpdateDrama(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceDramaStats)
 	response.Success(c, drama)
 }
 
@@ -120,10 +170,25 @@ func (h *DramaHandler) DeleteDrama(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceDramaStats)
 	response.Success(c, gin.H{"message": "删除成功"})
 }
 
 func (h *DramaHandler) GetDramaStats(c *gin.Context) {
+
+	cacheKey := cache.NamespaceKey(cache.NamespaceDramaStats, "all")
+	if entry, ok := cache.Get(cacheKey); ok {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
+			c.Status(http.StatusNotModified)
+			return
+		}
+		response.Success(c, entry.Data)
+		return
+	}
 
 	stats, err := h.dramaService.GetDramaStats()
 	if err != nil {
@@ -131,6 +196,10 @@ func (h *DramaHandler) GetDramaStats(c *gin.Context) {
 		return
 	}
 
+	if entry, err := cache.Set(cacheKey, stats, cacheTTLDramaStats); err == nil {
+		c.Header("ETag", entry.ETag)
+		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
+	}
 	response.Success(c, stats)
 }
 
@@ -153,6 +222,8 @@ func (h *DramaHandler) SaveOutline(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	response.Success(c, gin.H{"message": "保存成功"})
 }
 
@@ -202,6 +273,8 @@ func (h *DramaHandler) SaveCharacters(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	response.Success(c, gin.H{"message": "保存成功"})
 }
 
@@ -224,6 +297,8 @@ func (h *DramaHandler) SaveEpisodes(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	response.Success(c, gin.H{"message": "保存成功"})
 }
 
@@ -246,6 +321,8 @@ func (h *DramaHandler) SaveProgress(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	response.Success(c, gin.H{"message": "保存成功"})
 }
 
@@ -276,6 +353,8 @@ func (h *DramaHandler) FinalizeEpisode(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	response.Success(c, result)
 }
 
