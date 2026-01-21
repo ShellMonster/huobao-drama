@@ -156,7 +156,12 @@
           <el-col :span="6" v-for="character in drama?.characters" :key="character.id">
             <el-card shadow="hover" class="character-card">
               <div class="character-preview">
-                <img v-if="character.image_url" :src="fixImageUrl(character.image_url)" :alt="character.name" />
+                <img
+                  v-if="character.image_url"
+                  :src="fixImageUrl(character.image_url)"
+                  :alt="character.name"
+                  @error="handleImageError(character)"
+                />
                 <el-avatar v-else :size="120">{{ character.name[0] }}</el-avatar>
               </div>
 
@@ -190,7 +195,12 @@
           <el-col :span="6" v-for="scene in scenes" :key="scene.id">
             <el-card shadow="hover" class="scene-card">
               <div class="scene-preview">
-                <img v-if="scene.image_url" :src="fixImageUrl(scene.image_url)" :alt="scene.name" />
+                <img
+                  v-if="scene.image_url"
+                  :src="fixImageUrl(scene.image_url)"
+                  :alt="scene.name"
+                  @error="handleImageError(scene)"
+                />
                 <div v-else class="scene-placeholder">
                   <el-icon :size="48"><Picture /></el-icon>
                 </div>
@@ -368,8 +378,16 @@ const formatDate = (date?: string) => {
 
 const fixImageUrl = (url: string) => {
   if (!url) return ''
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('//')) {
+    return url
+  }
   if (url.startsWith('http')) return url
   return `${import.meta.env.VITE_API_BASE_URL}${url}`
+}
+
+const handleImageError = (item: { image_url?: string } | null | undefined) => {
+  if (!item) return
+  item.image_url = ''
 }
 
 const createNewEpisode = () => {
