@@ -1200,6 +1200,30 @@ const checkAndStartPolling = async () => {
       }
     }
   }
+
+  await resumeStoryboardTaskIfNeeded()
+}
+
+const resumeStoryboardTaskIfNeeded = async () => {
+  if (!currentEpisode.value?.id) return
+  if (generatingShots.value || taskStreamStop || pollTimer) return
+
+  try {
+    const tasks = await generationAPI.getResourceTasks(currentEpisode.value.id.toString())
+    const activeTask = tasks.find(task =>
+      task.type === 'storyboard_generation' &&
+      (task.status === 'pending' || task.status === 'processing')
+    )
+    if (!activeTask) return
+
+    generatingShots.value = true
+    taskProgress.value = activeTask.progress || 0
+    taskMessage.value = activeTask.message ||
+      (activeTask.status === 'pending' ? '任务排队中...' : `处理中... ${taskProgress.value}%`)
+    await pollTaskStatus(activeTask.id)
+  } catch (error) {
+    console.error('[轮询] 查询分镜任务失败:', error)
+  }
 }
 
 const saveChapterScript = async () => {

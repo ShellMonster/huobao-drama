@@ -25,6 +25,22 @@ export const generationAPI = {
       updated_at: string
       completed_at?: string
     }>(`/tasks/${taskId}`)
+  },
+
+  getResourceTasks(resourceId: string) {
+    return request.get<Array<{
+      id: string
+      type: string
+      status: string
+      progress: number
+      message?: string
+      error?: string
+      result?: string
+      created_at: string
+      updated_at: string
+      completed_at?: string
+      resource_id: string
+    }>>(`/tasks?resource_id=${resourceId}`)
   }
   
 }

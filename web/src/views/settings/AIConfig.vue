@@ -214,7 +214,7 @@ interface ProviderConfig {
 
 const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
   text: [
-    { id: 'openai', name: 'OpenAI', models: ['gpt-5.2', 'gemini-3-pro-preview'] },
+    { id: 'openai', name: 'OpenAI', models: ['gpt-5.2', 'gemini-3-pro-preview', 'gemini-3-flash-preview', 'claude-haiku-4-5-20251001'] },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
