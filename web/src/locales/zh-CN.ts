@@ -46,6 +46,7 @@ export default {
     success: '成功',
     failed: '失败',
     noData: '暂无数据',
+    name: '名称',
     pleaseSelect: '请选择',
     add: '添加',
     view: '查看',
@@ -69,7 +70,8 @@ export default {
     status: '状态',
     description: '描述',
     createdAt: '创建时间',
-    updatedAt: '更新时间'
+    updatedAt: '更新时间',
+    perPage: '每页'
   },
   settings: {
     title: '设置',
