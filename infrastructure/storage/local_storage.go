@@ -8,7 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/drama-generator/backend/pkg/utils"
 )
 
 type LocalStorage struct {
@@ -33,9 +34,7 @@ func (s *LocalStorage) Upload(file io.Reader, filename string, category string) 
 		return "", fmt.Errorf("failed to create category directory: %w", err)
 	}
 
-	timestamp := time.Now().Format("20060102_150405")
-	newFilename := fmt.Sprintf("%s_%s", timestamp, filename)
-	filePath := filepath.Join(dir, newFilename)
+	filePath := filepath.Join(dir, filename)
 
 	dst, err := os.Create(filePath)
 	if err != nil {
@@ -47,7 +46,7 @@ func (s *LocalStorage) Upload(file io.Reader, filename string, category string) 
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/%s/%s", s.baseURL, category, newFilename)
+	url := fmt.Sprintf("%s/%s/%s", s.baseURL, category, filename)
 	return url, nil
 }
 
@@ -56,9 +55,12 @@ func (s *LocalStorage) UploadBytes(data []byte, contentType string, category str
 		contentType = http.DetectContentType(data)
 	}
 	ext := getFileExtension("", contentType)
-	timestamp := time.Now().Format("20060102_150405_000")
-	filename := fmt.Sprintf("%s%s", timestamp, ext)
-	return s.Upload(bytes.NewReader(data), filename, category)
+	token, err := utils.NewRandomID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate file name: %w", err)
+	}
+	filename := fmt.Sprintf("%s%s", token, ext)
+	return s.saveReader(bytes.NewReader(data), category, filename)
 }
 
 func (s *LocalStorage) Delete(url string) error {
@@ -103,8 +105,11 @@ func (s *LocalStorage) DownloadFromURL(url, category string) (string, error) {
 	}
 
 	// 生成唯一文件名
-	timestamp := time.Now().Format("20060102_150405_000")
-	filename := fmt.Sprintf("%s%s", timestamp, ext)
+	token, err := utils.NewRandomID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate file name: %w", err)
+	}
+	filename := fmt.Sprintf("%s%s", token, ext)
 	filePath := filepath.Join(dir, filename)
 
 	// 保存文件
@@ -121,6 +126,24 @@ func (s *LocalStorage) DownloadFromURL(url, category string) (string, error) {
 	// 返回本地URL
 	localURL := fmt.Sprintf("%s/%s/%s", s.baseURL, category, filename)
 	return localURL, nil
+}
+
+func (s *LocalStorage) saveReader(reader io.Reader, category string, filename string) (string, error) {
+	dir := filepath.Join(s.basePath, category)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create category directory: %w", err)
+	}
+	filePath := filepath.Join(dir, filename)
+	dst, err := os.Create(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, reader); err != nil {
+		return "", fmt.Errorf("failed to save file: %w", err)
+	}
+	return fmt.Sprintf("%s/%s/%s", s.baseURL, category, filename), nil
 }
 
 // getFileExtension 从URL或Content-Type推断文件扩展名

@@ -321,7 +321,9 @@ func (s *VideoGenerationService) pollTaskStatus(videoGenID uint, taskID string, 
 		}
 
 		if provider == "minimax" && result.Completed && result.FileID != "" {
-			videoURL, err := s.storeMinimaxVideo(client, result.FileID)
+			episodeID, storyboardID := s.resolveVideoStorageContext(&videoGen)
+			videoCategory := buildVideoCategory("videos", videoGen.DramaID, episodeID, storyboardID)
+			videoURL, err := s.storeMinimaxVideo(client, result.FileID, videoCategory)
 			if err != nil {
 				s.updateVideoGenError(videoGenID, err.Error())
 				return
@@ -358,35 +360,64 @@ func (s *VideoGenerationService) pollTaskStatus(videoGenID uint, taskID string, 
 	s.updateVideoGenError(videoGenID, "polling timeout")
 }
 
-func (s *VideoGenerationService) storeVideoToLocal(videoURL string) (string, error) {
+func buildVideoCategory(base string, dramaID uint, episodeID uint, storyboardID uint) string {
+	return fmt.Sprintf("%s/dramas/%d/episodes/%d/storyboards/%d", base, dramaID, episodeID, storyboardID)
+}
+
+func (s *VideoGenerationService) resolveVideoStorageContext(videoGen *models.VideoGeneration) (uint, uint) {
+	if videoGen == nil {
+		return 0, 0
+	}
+	if videoGen.StoryboardID != nil {
+		storyboardID := *videoGen.StoryboardID
+		var storyboard models.Storyboard
+		if err := s.db.Select("episode_id").Where("id = ?", storyboardID).First(&storyboard).Error; err == nil {
+			return storyboard.EpisodeID, storyboardID
+		}
+		return 0, storyboardID
+	}
+	return 0, 0
+}
+
+func (s *VideoGenerationService) storeURLToLocal(url string, category string) (string, error) {
 	if s.localStorage == nil {
 		return "", fmt.Errorf("local storage not available")
 	}
-	if videoURL == "" {
-		return "", fmt.Errorf("empty video url")
+	if url == "" {
+		return "", fmt.Errorf("empty url")
 	}
-	if s.localStorage.IsLocalURL(videoURL) {
-		return videoURL, nil
+	if s.localStorage.IsLocalURL(url) {
+		return url, nil
 	}
-	if utils.IsDataURI(videoURL) {
-		data, mimeType, err := utils.ParseDataURI(videoURL)
+	if utils.IsDataURI(url) {
+		data, mimeType, err := utils.ParseDataURI(url)
 		if err != nil {
 			return "", err
 		}
-		return s.localStorage.UploadBytes(data, mimeType, "videos")
+		return s.localStorage.UploadBytes(data, mimeType, category)
 	}
-	if strings.HasPrefix(videoURL, "http://") || strings.HasPrefix(videoURL, "https://") {
-		return s.localStorage.DownloadFromURL(videoURL, "videos")
+	if strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://") {
+		return s.localStorage.DownloadFromURL(url, category)
 	}
-	return "", fmt.Errorf("unsupported video url format")
+	return "", fmt.Errorf("unsupported url format")
 }
 
 func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoURL string, duration *int, width *int, height *int, firstFrameURL *string) {
 	var localVideoPath string
 
+	var videoGen models.VideoGeneration
+	if err := s.db.First(&videoGen, videoGenID).Error; err != nil {
+		s.log.Errorw("Failed to load video generation", "error", err, "id", videoGenID)
+		return
+	}
+
+	episodeID, storyboardID := s.resolveVideoStorageContext(&videoGen)
+	videoCategory := buildVideoCategory("videos", videoGen.DramaID, episodeID, storyboardID)
+	frameCategory := buildVideoCategory("video_frames", videoGen.DramaID, episodeID, storyboardID)
+
 	finalVideoURL := videoURL
 	if s.localStorage != nil && videoURL != "" {
-		localURL, err := s.storeVideoToLocal(videoURL)
+		localURL, err := s.storeURLToLocal(videoURL, videoCategory)
 		if err != nil {
 			s.log.Warnw("Failed to store video to local storage",
 				"error", err,
@@ -420,19 +451,23 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 		}
 	}
 
-	// 下载首帧图片到本地存储（仅用于缓存，不更新数据库）
+	var finalFirstFrameURL *string
 	if firstFrameURL != nil && *firstFrameURL != "" && s.localStorage != nil {
-		_, err := s.localStorage.DownloadFromURL(*firstFrameURL, "video_frames")
+		localFrameURL, err := s.storeURLToLocal(*firstFrameURL, frameCategory)
 		if err != nil {
-			s.log.Warnw("Failed to download first frame to local storage",
+			s.log.Warnw("Failed to store first frame to local storage",
 				"error", err,
 				"id", videoGenID,
 				"original_url", *firstFrameURL)
 		} else {
-			s.log.Infow("First frame downloaded to local storage for caching",
+			finalFirstFrameURL = &localFrameURL
+			s.log.Infow("First frame stored to local storage",
 				"id", videoGenID,
-				"original_url", *firstFrameURL)
+				"original_url", *firstFrameURL,
+				"local_url", localFrameURL)
 		}
+	} else if firstFrameURL != nil {
+		finalFirstFrameURL = firstFrameURL
 	}
 
 	// 数据库中保持使用原始URL
@@ -449,8 +484,8 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 	if height != nil {
 		updates["height"] = *height
 	}
-	if firstFrameURL != nil {
-		updates["first_frame_url"] = *firstFrameURL
+	if finalFirstFrameURL != nil {
+		updates["first_frame_url"] = *finalFirstFrameURL
 	}
 
 	if err := s.db.Model(&models.VideoGeneration{}).Where("id = ?", videoGenID).Updates(updates).Error; err != nil {
@@ -459,33 +494,30 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 	}
 	s.publishVideoGeneration(videoGenID)
 
-	var videoGen models.VideoGeneration
-	if err := s.db.First(&videoGen, videoGenID).Error; err == nil {
-		if videoGen.StoryboardID != nil {
-			var storyboard models.Storyboard
-			if err := s.db.Where("id = ?", *videoGen.StoryboardID).First(&storyboard).Error; err != nil {
-				s.log.Warnw("Failed to load storyboard for video update", "storyboard_id", *videoGen.StoryboardID, "error", err)
-			} else {
-				if videoGen.OriginalStoryboardDuration == nil {
-					if err := s.db.Model(&models.VideoGeneration{}).
-						Where("id = ? AND original_storyboard_duration IS NULL", videoGenID).
-						Update("original_storyboard_duration", storyboard.Duration).Error; err != nil {
-						s.log.Warnw("Failed to store original storyboard duration", "video_id", videoGenID, "error", err)
-					}
+	if videoGen.StoryboardID != nil {
+		var storyboard models.Storyboard
+		if err := s.db.Where("id = ?", *videoGen.StoryboardID).First(&storyboard).Error; err != nil {
+			s.log.Warnw("Failed to load storyboard for video update", "storyboard_id", *videoGen.StoryboardID, "error", err)
+		} else {
+			if videoGen.OriginalStoryboardDuration == nil {
+				if err := s.db.Model(&models.VideoGeneration{}).
+					Where("id = ? AND original_storyboard_duration IS NULL", videoGenID).
+					Update("original_storyboard_duration", storyboard.Duration).Error; err != nil {
+					s.log.Warnw("Failed to store original storyboard duration", "video_id", videoGenID, "error", err)
 				}
+			}
 
-				// 更新 Storyboard 的 video_url 和 duration
-				storyboardUpdates := map[string]interface{}{
-					"video_url": finalVideoURL,
-				}
-				if duration != nil {
-					storyboardUpdates["duration"] = *duration
-				}
-				if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *videoGen.StoryboardID).Updates(storyboardUpdates).Error; err != nil {
-					s.log.Warnw("Failed to update storyboard", "storyboard_id", *videoGen.StoryboardID, "error", err)
-				} else {
-					s.log.Infow("Updated storyboard with video info", "storyboard_id", *videoGen.StoryboardID, "duration", duration)
-				}
+			// 更新 Storyboard 的 video_url 和 duration
+			storyboardUpdates := map[string]interface{}{
+				"video_url": finalVideoURL,
+			}
+			if duration != nil {
+				storyboardUpdates["duration"] = *duration
+			}
+			if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *videoGen.StoryboardID).Updates(storyboardUpdates).Error; err != nil {
+				s.log.Warnw("Failed to update storyboard", "storyboard_id", *videoGen.StoryboardID, "error", err)
+			} else {
+				s.log.Infow("Updated storyboard with video info", "storyboard_id", *videoGen.StoryboardID, "duration", duration)
 			}
 		}
 	}
@@ -527,7 +559,7 @@ func (s *VideoGenerationService) publishVideoGeneration(videoGenID uint) {
 	s.events.Publish(&videoGen)
 }
 
-func (s *VideoGenerationService) storeMinimaxVideo(client video.VideoClient, fileID string) (string, error) {
+func (s *VideoGenerationService) storeMinimaxVideo(client video.VideoClient, fileID string, category string) (string, error) {
 	if s.localStorage == nil {
 		return "", fmt.Errorf("local storage not available")
 	}
@@ -542,8 +574,12 @@ func (s *VideoGenerationService) storeMinimaxVideo(client video.VideoClient, fil
 	}
 	defer reader.Close()
 
-	filename := fmt.Sprintf("minimax_%s%s", fileID, minimaxVideoExtension(contentType))
-	return s.localStorage.Upload(reader, filename, "videos")
+	token, err := utils.NewRandomID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate file name: %w", err)
+	}
+	filename := fmt.Sprintf("%s%s", token, minimaxVideoExtension(contentType))
+	return s.localStorage.Upload(reader, filename, category)
 }
 
 func minimaxVideoExtension(contentType string) string {

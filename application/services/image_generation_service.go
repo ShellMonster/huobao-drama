@@ -49,7 +49,37 @@ func truncateImageURL(url string) string {
 	return url
 }
 
-func (s *ImageGenerationService) storeImageToLocal(imageURL string) (string, error) {
+func buildMediaCategory(base string, dramaID uint, episodeID uint, storyboardID uint) string {
+	return fmt.Sprintf("%s/dramas/%d/episodes/%d/storyboards/%d", base, dramaID, episodeID, storyboardID)
+}
+
+func (s *ImageGenerationService) resolveImageStorageContext(imageGen *models.ImageGeneration) (uint, uint) {
+	if imageGen == nil {
+		return 0, 0
+	}
+
+	if imageGen.StoryboardID != nil {
+		storyboardID := *imageGen.StoryboardID
+		var storyboard models.Storyboard
+		if err := s.db.Select("episode_id").Where("id = ?", storyboardID).First(&storyboard).Error; err == nil {
+			return storyboard.EpisodeID, storyboardID
+		}
+		return 0, storyboardID
+	}
+
+	if imageGen.SceneID != nil {
+		var scene models.Scene
+		if err := s.db.Select("episode_id").Where("id = ?", *imageGen.SceneID).First(&scene).Error; err == nil {
+			if scene.EpisodeID != nil {
+				return *scene.EpisodeID, 0
+			}
+		}
+	}
+
+	return 0, 0
+}
+
+func (s *ImageGenerationService) storeImageToLocal(imageURL string, category string) (string, error) {
 	if s.localStorage == nil {
 		return "", fmt.Errorf("local storage not available")
 	}
@@ -64,10 +94,10 @@ func (s *ImageGenerationService) storeImageToLocal(imageURL string) (string, err
 		if err != nil {
 			return "", err
 		}
-		return s.localStorage.UploadBytes(data, mimeType, "images")
+		return s.localStorage.UploadBytes(data, mimeType, category)
 	}
 	if strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") {
-		return s.localStorage.DownloadFromURL(imageURL, "images")
+		return s.localStorage.DownloadFromURL(imageURL, category)
 	}
 	return "", fmt.Errorf("unsupported image url format")
 }
@@ -312,9 +342,18 @@ func (s *ImageGenerationService) pollTaskStatus(imageGenID uint, client image.Im
 func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result *image.ImageResult) {
 	now := time.Now()
 
+	var imageGen models.ImageGeneration
+	if err := s.db.Where("id = ?", imageGenID).First(&imageGen).Error; err != nil {
+		s.log.Errorw("Failed to load image generation", "error", err, "id", imageGenID)
+		return
+	}
+
+	episodeID, storyboardID := s.resolveImageStorageContext(&imageGen)
+	category := buildMediaCategory("images", imageGen.DramaID, episodeID, storyboardID)
+
 	finalImageURL := result.ImageURL
 	if s.localStorage != nil && result.ImageURL != "" {
-		localURL, err := s.storeImageToLocal(result.ImageURL)
+		localURL, err := s.storeImageToLocal(result.ImageURL, category)
 		if err != nil {
 			errStr := err.Error()
 			if len(errStr) > 200 {
@@ -345,13 +384,6 @@ func (s *ImageGenerationService) completeImageGeneration(imageGenID uint, result
 	}
 	if result.Height > 0 {
 		updates["height"] = result.Height
-	}
-
-	// 更新image_generation记录
-	var imageGen models.ImageGeneration
-	if err := s.db.Where("id = ?", imageGenID).First(&imageGen).Error; err != nil {
-		s.log.Errorw("Failed to load image generation", "error", err, "id", imageGenID)
-		return
 	}
 
 	s.db.Model(&models.ImageGeneration{}).Where("id = ?", imageGenID).Updates(updates)
