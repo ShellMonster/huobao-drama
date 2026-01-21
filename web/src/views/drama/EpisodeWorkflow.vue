@@ -1142,6 +1142,19 @@ const checkAndStartPolling = async () => {
   // 检查角色的生成状态
   for (const char of currentEpisode.value.characters || []) {
     if (char.image_generation_status === 'pending' || char.image_generation_status === 'processing') {
+      if (generatingCharacterImages.value[char.id]) {
+        continue
+      }
+      if (char.image_generation_id) {
+        generatingCharacterImages.value[char.id] = true
+        pollImageStatus(char.image_generation_id, async () => {
+          await loadDramaData()
+          ElMessage.success(`${char.name}的图片生成完成！`)
+        }).finally(() => {
+          generatingCharacterImages.value[char.id] = false
+        })
+        continue
+      }
       // 查找对应的image_generation记录
       try {
         const imageGenList = await imageAPI.listImages({
@@ -1173,6 +1186,19 @@ const checkAndStartPolling = async () => {
   // 检查场景的生成状态
   for (const scene of currentEpisode.value.scenes || []) {
     if (scene.image_generation_status === 'pending' || scene.image_generation_status === 'processing') {
+      if (generatingSceneImages.value[scene.id]) {
+        continue
+      }
+      if (scene.image_generation_id) {
+        generatingSceneImages.value[scene.id] = true
+        pollImageStatus(scene.image_generation_id, async () => {
+          await loadDramaData()
+          ElMessage.success(`${scene.location}的图片生成完成！`)
+        }).finally(() => {
+          generatingSceneImages.value[scene.id] = false
+        })
+        continue
+      }
       // 查找对应的image_generation记录
       try {
         const imageGenList = await imageAPI.listImages({

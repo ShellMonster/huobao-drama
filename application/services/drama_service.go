@@ -116,6 +116,8 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 				// 找到生成中的记录，设置状态
 				statusStr := string(imageGen.Status)
 				drama.Episodes[i].Characters[j].ImageGenerationStatus = &statusStr
+				imageGenID := imageGen.ID
+				drama.Episodes[i].Characters[j].ImageGenerationID = &imageGenID
 				if imageGen.ErrorMsg != nil {
 					drama.Episodes[i].Characters[j].ImageGenerationError = imageGen.ErrorMsg
 				}
@@ -129,6 +131,8 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 				if err == nil {
 					statusStr := string(imageGen.Status)
 					drama.Episodes[i].Characters[j].ImageGenerationStatus = &statusStr
+					imageGenID := imageGen.ID
+					drama.Episodes[i].Characters[j].ImageGenerationID = &imageGenID
 					if imageGen.ErrorMsg != nil {
 						drama.Episodes[i].Characters[j].ImageGenerationError = imageGen.ErrorMsg
 					}
@@ -148,6 +152,8 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 				// 找到生成中的记录，设置状态
 				statusStr := string(imageGen.Status)
 				drama.Episodes[i].Scenes[j].ImageGenerationStatus = &statusStr
+				imageGenID := imageGen.ID
+				drama.Episodes[i].Scenes[j].ImageGenerationID = &imageGenID
 				if imageGen.ErrorMsg != nil {
 					drama.Episodes[i].Scenes[j].ImageGenerationError = imageGen.ErrorMsg
 				}
@@ -161,6 +167,8 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 				if err == nil {
 					statusStr := string(imageGen.Status)
 					drama.Episodes[i].Scenes[j].ImageGenerationStatus = &statusStr
+					imageGenID := imageGen.ID
+					drama.Episodes[i].Scenes[j].ImageGenerationID = &imageGenID
 					if imageGen.ErrorMsg != nil {
 						drama.Episodes[i].Scenes[j].ImageGenerationError = imageGen.ErrorMsg
 					}

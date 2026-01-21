@@ -55,6 +55,7 @@ type Character struct {
 	// 运行时字段（不存储到数据库）
 	ImageGenerationStatus *string `gorm:"-" json:"image_generation_status,omitempty"`
 	ImageGenerationError  *string `gorm:"-" json:"image_generation_error,omitempty"`
+	ImageGenerationID     *uint   `gorm:"-" json:"image_generation_id,omitempty"`
 }
 
 func (c *Character) TableName() string {
@@ -141,6 +142,7 @@ type Scene struct {
 	// 运行时字段（不存储到数据库）
 	ImageGenerationStatus *string `gorm:"-" json:"image_generation_status,omitempty"`
 	ImageGenerationError  *string `gorm:"-" json:"image_generation_error,omitempty"`
+	ImageGenerationID     *uint   `gorm:"-" json:"image_generation_id,omitempty"`
 }
 
 func (s *Scene) TableName() string {

@@ -38,6 +38,7 @@ export interface Character {
   image_url?: string
   image_generation_status?: string
   image_generation_error?: string
+  image_generation_id?: number
   created_at: string
   updated_at: string
 }
@@ -107,6 +108,7 @@ export interface Scene {
   status: string
   image_generation_status?: string
   image_generation_error?: string
+  image_generation_id?: number
   created_at: string
   updated_at: string
 }
