@@ -67,6 +67,7 @@ export default {
     confirmDelete: '确认删除',
     tip: '提示',
     status: '状态',
+    description: '描述',
     createdAt: '创建时间',
     updatedAt: '更新时间'
   },
