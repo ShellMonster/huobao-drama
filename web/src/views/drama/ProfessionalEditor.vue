@@ -1638,7 +1638,7 @@ watch(selectedFrameType, (newType) => {
   }
 
   if (!currentFramePrompt.value) {
-    void loadFramePrompts(currentStoryboard.value.id, { showLoading: true, frameType: newType })
+    void loadFramePrompts(currentStoryboard.value.id, { showLoading: false })
   }
 
   applyCachedImages(currentStoryboard.value.id, newType)
@@ -1698,11 +1698,9 @@ watch(currentStoryboard, async (newStoryboard) => {
   applyCachedVideoReferences(newStoryboard.id)
   applyCachedVideos(newStoryboard.id)
 
-  const shouldLoadPrompts = !currentFramePrompt.value
-
   await Promise.allSettled([
     loadStoryboardImages(newStoryboard.id, selectedFrameType.value),
-    loadFramePrompts(newStoryboard.id, { showLoading: shouldLoadPrompts, frameType: selectedFrameType.value }),
+    loadFramePrompts(newStoryboard.id, { showLoading: false }),
     loadVideoReferenceImages(newStoryboard.id),
     loadStoryboardVideos(newStoryboard.id)
   ])
