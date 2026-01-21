@@ -65,4 +65,4 @@ DOCKER_PUBLISH.md
 build.sh
 /data/storage/
 /web/package-lock.json
-.DS_Store
+.DS_Storevideo-model-params.md
