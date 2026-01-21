@@ -188,6 +188,10 @@ const total = ref(0)
 const showGenerateDialog = ref(false)
 const showDetailDialog = ref(false)
 const selectedImage = ref<ImageGeneration>()
+const imageLoadedMap = ref<Record<string, boolean>>({})
+const imageLoadingKey = ref<string | null>(null)
+let imageRequestId = 0
+let imageLoadingRequestId = 0
 
 const filters = reactive({
   drama_id: undefined as string | undefined,
@@ -198,6 +202,13 @@ const pagination = reactive({
   page: 1,
   page_size: 12
 })
+
+const getImageQueryKey = () => [
+  filters.drama_id || 'all',
+  filters.status || 'all',
+  pagination.page,
+  pagination.page_size
+].join(':')
 
 let imageStreamStop: (() => void) | null = null
 let reloadTimer: number | null = null
@@ -217,7 +228,7 @@ const scheduleReload = () => {
   if (reloadTimer) return
   reloadTimer = window.setTimeout(() => {
     reloadTimer = null
-    loadImages()
+    loadImages({ showLoading: false })
   }, 500)
 }
 
@@ -248,8 +259,8 @@ const startImageStream = () => {
     fallback: () => {
       const interval = window.setInterval(() => {
         const hasProcessing = images.value.some(img => img.status === 'processing')
-        if (hasProcessing) {
-          loadImages()
+      if (hasProcessing) {
+          loadImages({ showLoading: false })
         }
       }, 5000)
       return () => clearInterval(interval)
@@ -257,8 +268,15 @@ const startImageStream = () => {
   }).close
 }
 
-const loadImages = async () => {
-  loading.value = true
+const loadImages = async (options: { showLoading?: boolean } = {}) => {
+  const requestId = ++imageRequestId
+  const queryKey = getImageQueryKey()
+  const shouldShowLoading = options.showLoading !== false && !imageLoadedMap.value[queryKey]
+  if (shouldShowLoading) {
+    imageLoadingKey.value = queryKey
+    imageLoadingRequestId = requestId
+    loading.value = true
+  }
   try {
     const result = await imageAPI.listImages({
       drama_id: filters.drama_id,
@@ -272,7 +290,16 @@ const loadImages = async () => {
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
-    loading.value = false
+    imageLoadedMap.value[queryKey] = true
+    if (
+      shouldShowLoading &&
+      imageLoadingKey.value === queryKey &&
+      imageLoadingRequestId === requestId
+    ) {
+      loading.value = false
+      imageLoadingKey.value = null
+      imageLoadingRequestId = 0
+    }
   }
 }
 

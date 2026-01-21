@@ -191,9 +191,13 @@ const total = ref(0)
 const showGenerateDialog = ref(false)
 const showDetailDialog = ref(false)
 const selectedVideo = ref<VideoGeneration>()
+const videoLoadedMap = ref<Record<string, boolean>>({})
+const videoLoadingKey = ref<string | null>(null)
 let pollInterval: number | null = null
 let videoStreamStop: (() => void) | null = null
 let reloadTimer: number | null = null
+let videoRequestId = 0
+let videoLoadingRequestId = 0
 
 const filters = reactive({
   drama_id: undefined as string | undefined,
@@ -204,6 +208,13 @@ const pagination = reactive({
   page: 1,
   page_size: 12
 })
+
+const getVideoQueryKey = () => [
+  filters.drama_id || 'all',
+  filters.status || 'all',
+  pagination.page,
+  pagination.page_size
+].join(':')
 
 const stopVideoStream = () => {
   if (videoStreamStop) {
@@ -220,7 +231,7 @@ const scheduleReload = () => {
   if (reloadTimer) return
   reloadTimer = window.setTimeout(() => {
     reloadTimer = null
-    loadVideos()
+    loadVideos({ showLoading: false })
   }, 500)
 }
 
@@ -253,7 +264,7 @@ const startVideoStream = () => {
       pollInterval = window.setInterval(() => {
         const hasProcessing = videos.value.some(v => v.status === 'processing')
         if (hasProcessing) {
-          loadVideos()
+          loadVideos({ showLoading: false })
         }
       }, 10000)
       return () => {
@@ -266,8 +277,15 @@ const startVideoStream = () => {
   }).close
 }
 
-const loadVideos = async () => {
-  loading.value = true
+const loadVideos = async (options: { showLoading?: boolean } = {}) => {
+  const requestId = ++videoRequestId
+  const queryKey = getVideoQueryKey()
+  const shouldShowLoading = options.showLoading !== false && !videoLoadedMap.value[queryKey]
+  if (shouldShowLoading) {
+    videoLoadingKey.value = queryKey
+    videoLoadingRequestId = requestId
+    loading.value = true
+  }
   try {
     const result = await videoAPI.listVideos({
       drama_id: filters.drama_id,
@@ -281,7 +299,16 @@ const loadVideos = async () => {
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
-    loading.value = false
+    videoLoadedMap.value[queryKey] = true
+    if (
+      shouldShowLoading &&
+      videoLoadingKey.value === queryKey &&
+      videoLoadingRequestId === requestId
+    ) {
+      loading.value = false
+      videoLoadingKey.value = null
+      videoLoadingRequestId = 0
+    }
   }
 }
 
