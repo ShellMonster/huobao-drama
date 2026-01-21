@@ -42,6 +42,8 @@ type VideoGeneration struct {
 	CameraMotion *string `gorm:"type:varchar(100)" json:"camera_motion,omitempty"`
 	Seed         *int64  `json:"seed,omitempty"`
 
+	OriginalStoryboardDuration *int `gorm:"column:original_storyboard_duration" json:"original_storyboard_duration,omitempty"`
+
 	VideoURL  *string `gorm:"type:varchar(1000)" json:"video_url,omitempty"`
 	MinioURL  *string `gorm:"type:varchar(1000)" json:"minio_url,omitempty"`
 	LocalPath *string `gorm:"type:varchar(500)" json:"local_path,omitempty"`

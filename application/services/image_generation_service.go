@@ -598,9 +598,7 @@ func (s *ImageGenerationService) DeleteImageGeneration(imageGenID uint) error {
 			}
 		}
 
-		if err := tx.Model(&models.Asset{}).
-			Where("image_gen_id = ?", imageGenID).
-			Update("image_gen_id", gorm.Expr("NULL")).Error; err != nil {
+		if err := tx.Where("image_gen_id = ?", imageGenID).Delete(&models.Asset{}).Error; err != nil {
 			return err
 		}
 

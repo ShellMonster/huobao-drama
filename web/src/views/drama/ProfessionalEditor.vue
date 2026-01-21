@@ -296,7 +296,7 @@
                         </div>
                         <el-button class="image-delete-button" type="danger" size="small"
                           :loading="deletingImageIds.has(img.id)" @click.stop="deleteGeneratedImage(img)">
-                          删除
+                          {{ $t('common.delete') }}
                         </el-button>
                       </div>
                     </div>
@@ -708,7 +708,7 @@
                           </el-button>
                           <el-button type="danger" size="small" plain :loading="deletingVideoIds.has(video.id)"
                             :disabled="addingToAssets.has(video.id)" @click.stop="deleteGeneratedVideo(video)">
-                            删除
+                            {{ $t('common.delete') }}
                           </el-button>
                         </div>
                       </div>
@@ -2226,9 +2226,9 @@ const pruneVideoCaches = (videoId: number) => {
 const deleteGeneratedImage = async (image: ImageGeneration) => {
   if (deletingImageIds.value.has(image.id)) return
   try {
-    await ElMessageBox.confirm('确定要删除该图片吗？此操作不可恢复。', '删除确认', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm($t('message.deleteConfirm'), $t('common.confirmDelete'), {
+      confirmButtonText: $t('common.delete'),
+      cancelButtonText: $t('common.cancel'),
       type: 'warning'
     })
   } catch {
@@ -2247,9 +2247,9 @@ const deleteGeneratedImage = async (image: ImageGeneration) => {
       }
     }
 
-    ElMessage.success('删除成功')
+    ElMessage.success($t('message.deleteSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '删除失败')
+    ElMessage.error(error.message || $t('message.operationFailed'))
   } finally {
     deletingImageIds.value.delete(image.id)
   }
@@ -2258,9 +2258,9 @@ const deleteGeneratedImage = async (image: ImageGeneration) => {
 const deleteGeneratedVideo = async (video: VideoGeneration) => {
   if (deletingVideoIds.value.has(video.id)) return
   try {
-    await ElMessageBox.confirm('确定要删除该视频吗？此操作不可恢复。', '删除确认', {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm($t('message.deleteConfirm'), $t('common.confirmDelete'), {
+      confirmButtonText: $t('common.delete'),
+      cancelButtonText: $t('common.cancel'),
       type: 'warning'
     })
   } catch {
@@ -2284,9 +2284,9 @@ const deleteGeneratedVideo = async (video: VideoGeneration) => {
       }
     }
 
-    ElMessage.success('删除成功')
+    ElMessage.success($t('message.deleteSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '删除失败')
+    ElMessage.error(error.message || $t('message.operationFailed'))
   } finally {
     deletingVideoIds.value.delete(video.id)
   }

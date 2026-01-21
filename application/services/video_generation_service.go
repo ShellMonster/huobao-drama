@@ -424,17 +424,30 @@ func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoU
 	var videoGen models.VideoGeneration
 	if err := s.db.First(&videoGen, videoGenID).Error; err == nil {
 		if videoGen.StoryboardID != nil {
-			// 更新 Storyboard 的 video_url 和 duration
-			storyboardUpdates := map[string]interface{}{
-				"video_url": videoURL,
-			}
-			if duration != nil {
-				storyboardUpdates["duration"] = *duration
-			}
-			if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *videoGen.StoryboardID).Updates(storyboardUpdates).Error; err != nil {
-				s.log.Warnw("Failed to update storyboard", "storyboard_id", *videoGen.StoryboardID, "error", err)
+			var storyboard models.Storyboard
+			if err := s.db.Where("id = ?", *videoGen.StoryboardID).First(&storyboard).Error; err != nil {
+				s.log.Warnw("Failed to load storyboard for video update", "storyboard_id", *videoGen.StoryboardID, "error", err)
 			} else {
-				s.log.Infow("Updated storyboard with video info", "storyboard_id", *videoGen.StoryboardID, "duration", duration)
+				if videoGen.OriginalStoryboardDuration == nil {
+					if err := s.db.Model(&models.VideoGeneration{}).
+						Where("id = ? AND original_storyboard_duration IS NULL", videoGenID).
+						Update("original_storyboard_duration", storyboard.Duration).Error; err != nil {
+						s.log.Warnw("Failed to store original storyboard duration", "video_id", videoGenID, "error", err)
+					}
+				}
+
+				// 更新 Storyboard 的 video_url 和 duration
+				storyboardUpdates := map[string]interface{}{
+					"video_url": videoURL,
+				}
+				if duration != nil {
+					storyboardUpdates["duration"] = *duration
+				}
+				if err := s.db.Model(&models.Storyboard{}).Where("id = ?", *videoGen.StoryboardID).Updates(storyboardUpdates).Error; err != nil {
+					s.log.Warnw("Failed to update storyboard", "storyboard_id", *videoGen.StoryboardID, "error", err)
+				} else {
+					s.log.Infow("Updated storyboard with video info", "storyboard_id", *videoGen.StoryboardID, "duration", duration)
+				}
 			}
 		}
 	}
@@ -704,16 +717,20 @@ func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
 		}
 
 		if videoGen.StoryboardID != nil && videoGen.VideoURL != nil && *videoGen.VideoURL != "" {
+			storyboardUpdates := map[string]interface{}{
+				"video_url": gorm.Expr("NULL"),
+			}
+			if videoGen.OriginalStoryboardDuration != nil {
+				storyboardUpdates["duration"] = *videoGen.OriginalStoryboardDuration
+			}
 			if err := tx.Model(&models.Storyboard{}).
 				Where("id = ? AND video_url = ?", *videoGen.StoryboardID, *videoGen.VideoURL).
-				Update("video_url", gorm.Expr("NULL")).Error; err != nil {
+				Updates(storyboardUpdates).Error; err != nil {
 				return err
 			}
 		}
 
-		if err := tx.Model(&models.Asset{}).
-			Where("video_gen_id = ?", id).
-			Update("video_gen_id", gorm.Expr("NULL")).Error; err != nil {
+		if err := tx.Where("video_gen_id = ?", id).Delete(&models.Asset{}).Error; err != nil {
 			return err
 		}
 
