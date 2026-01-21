@@ -412,12 +412,16 @@ func (s *CharacterLibraryService) UpdateCharacter(characterID string, req interf
 	// 使用类型断言获取请求数据
 	if reqMap, ok := req.(*struct {
 		Name        *string `json:"name"`
+		Role        *string `json:"role"`
 		Appearance  *string `json:"appearance"`
 		Personality *string `json:"personality"`
 		Description *string `json:"description"`
 	}); ok {
 		if reqMap.Name != nil && *reqMap.Name != "" {
 			updates["name"] = *reqMap.Name
+		}
+		if reqMap.Role != nil && *reqMap.Role != "" {
+			updates["role"] = *reqMap.Role
 		}
 		if reqMap.Appearance != nil {
 			updates["appearance"] = *reqMap.Appearance

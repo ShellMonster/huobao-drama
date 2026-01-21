@@ -15,9 +15,6 @@
               <el-icon><Plus /></el-icon>
               {{ $t('character.add') }}
             </el-button>
-            <el-button type="primary" @click="saveCharacters" :loading="saving">
-              {{ $t('character.saveChanges') }}
-            </el-button>
           </div>
         </div>
       </template>
@@ -40,7 +37,7 @@
             <div class="character-details">
               <p><strong>{{ $t('character.personality') }}：</strong>{{ character.personality }}</p>
               <p><strong>{{ $t('character.appearance') }}：</strong>{{ character.appearance }}</p>
-              <p><strong>{{ $t('character.background') }}：</strong>{{ character.background }}</p>
+              <p><strong>{{ $t('character.description') }}：</strong>{{ character.description }}</p>
             </div>
 
             <template #footer>
@@ -63,51 +60,61 @@
     </el-card>
 
     <!-- 编辑对话框 -->
-    <el-dialog v-model="editDialogVisible" title="编辑角色" width="600px">
+    <el-dialog v-model="editDialogVisible" :title="dialogTitle" width="600px">
       <el-form :model="editForm" label-width="80px">
-        <el-form-item label="姓名">
+        <el-form-item :label="$t('character.name')">
           <el-input v-model="editForm.name" />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item :label="$t('character.role')">
           <el-input v-model="editForm.role" />
         </el-form-item>
-        <el-form-item label="性格">
+        <el-form-item :label="$t('character.personality')">
           <el-input v-model="editForm.personality" type="textarea" :rows="3" />
         </el-form-item>
-        <el-form-item label="外貌">
+        <el-form-item :label="$t('character.appearance')">
           <el-input v-model="editForm.appearance" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item :label="$t('character.description')">
+          <el-input v-model="editForm.description" type="textarea" :rows="3" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCharacter">保存</el-button>
+        <el-button type="primary" :loading="dialogSaving" @click="saveCharacter">保存</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { MagicStick } from '@element-plus/icons-vue'
-import { generationAPI } from '@/api/generation'
+import { dramaAPI } from '@/api/drama'
+import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
 
 const route = useRoute()
 const router = useRouter()
+const { t: $t } = useI18n()
 const dramaId = route.params.id as string
 
 const characters = ref<Character[]>([])
-const saving = ref(false)
+const dialogSaving = ref(false)
 const editDialogVisible = ref(false)
+const editingCharacterId = ref<number | null>(null)
 const editForm = reactive({
   name: '',
   role: '',
   personality: '',
   appearance: '',
-  background: ''
+  description: ''
+})
+
+const dialogTitle = computed(() => {
+  return editingCharacterId.value ? $t('character.edit') : $t('character.create')
 })
 
 const goBack = () => {
@@ -115,38 +122,74 @@ const goBack = () => {
 }
 
 const addCharacter = () => {
+  editingCharacterId.value = null
   Object.assign(editForm, {
     name: '',
     role: '',
     personality: '',
     appearance: '',
-    background: ''
+    description: ''
   })
   editDialogVisible.value = true
 }
 
-const saveCharacters = async () => {
-  saving.value = true
+const loadCharacters = async () => {
   try {
-    // TODO: 调用保存角色API
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('保存成功')
+    characters.value = await dramaAPI.getCharacters(dramaId)
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
-  } finally {
-    saving.value = false
+    ElMessage.error(error.message || '加载角色失败')
   }
 }
 
 const editCharacter = (character: Character) => {
-  Object.assign(editForm, character)
+  editingCharacterId.value = character.id
+  Object.assign(editForm, {
+    name: character.name || '',
+    role: character.role || '',
+    personality: character.personality || '',
+    appearance: character.appearance || '',
+    description: character.description || ''
+  })
   editDialogVisible.value = true
 }
 
-const saveCharacter = () => {
-  // TODO: 保存角色信息
-  editDialogVisible.value = false
-  ElMessage.success('保存成功')
+const saveCharacter = async () => {
+  const name = editForm.name.trim()
+  if (!name) {
+    ElMessage.warning('请输入角色名称')
+    return
+  }
+
+  dialogSaving.value = true
+  try {
+    if (editingCharacterId.value) {
+      await characterLibraryAPI.updateCharacter(editingCharacterId.value, {
+        name,
+        role: editForm.role,
+        appearance: editForm.appearance || '',
+        personality: editForm.personality || '',
+        description: editForm.description || ''
+      })
+    } else {
+      await dramaAPI.saveCharacters(dramaId, [
+        {
+          name,
+          role: editForm.role,
+          appearance: editForm.appearance || '',
+          personality: editForm.personality || '',
+          description: editForm.description || ''
+        }
+      ])
+    }
+
+    await loadCharacters()
+    editDialogVisible.value = false
+    ElMessage.success('保存成功')
+  } catch (error: any) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    dialogSaving.value = false
+  }
 }
 
 const generateCharacterImage = (character: Character) => {
@@ -158,7 +201,7 @@ const goToNextStep = () => {
 }
 
 onMounted(() => {
-  // TODO: 加载已有角色
+  loadCharacters()
 })
 </script>
 

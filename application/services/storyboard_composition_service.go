@@ -2,7 +2,9 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -65,6 +67,20 @@ type SceneCompositionInfo struct {
 	ImageGenerationStatus *string              `json:"image_generation_status,omitempty"`
 	VideoGenerationID     *uint                `json:"video_generation_id,omitempty"`
 	VideoGenerationStatus *string              `json:"video_generation_status,omitempty"`
+}
+
+type CreateSceneRequest struct {
+	DramaID   uint    `json:"drama_id"`
+	EpisodeID *uint   `json:"episode_id"`
+	Location  string  `json:"location"`
+	Time      string  `json:"time"`
+	Prompt    *string `json:"prompt"`
+}
+
+type UpdateSceneDetailsRequest struct {
+	Location *string `json:"location"`
+	Time     *string `json:"time"`
+	Prompt   *string `json:"prompt"`
 }
 
 func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]SceneCompositionInfo, error) {
@@ -258,6 +274,102 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 	}
 
 	return result, nil
+}
+
+func (s *StoryboardCompositionService) CreateScene(req *CreateSceneRequest) (*models.Scene, error) {
+	if req.DramaID == 0 {
+		return nil, fmt.Errorf("invalid drama id")
+	}
+
+	location := strings.TrimSpace(req.Location)
+	timeValue := strings.TrimSpace(req.Time)
+	if location == "" || timeValue == "" {
+		return nil, fmt.Errorf("location and time are required")
+	}
+
+	// 验证Drama存在
+	var drama models.Drama
+	if err := s.db.Where("id = ? ", req.DramaID).First(&drama).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("drama not found")
+		}
+		return nil, err
+	}
+
+	// 可选校验Episode归属
+	if req.EpisodeID != nil {
+		var episode models.Episode
+		if err := s.db.Where("id = ? AND drama_id = ?", *req.EpisodeID, req.DramaID).First(&episode).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("episode not found")
+			}
+			return nil, err
+		}
+	}
+
+	prompt := ""
+	if req.Prompt != nil {
+		prompt = strings.TrimSpace(*req.Prompt)
+	}
+	if prompt == "" {
+		prompt = fmt.Sprintf("%s, %s", location, timeValue)
+	}
+
+	scene := models.Scene{
+		DramaID:   req.DramaID,
+		EpisodeID: req.EpisodeID,
+		Location:  location,
+		Time:      timeValue,
+		Prompt:    prompt,
+		Status:    "pending",
+	}
+
+	if err := s.db.Create(&scene).Error; err != nil {
+		return nil, err
+	}
+
+	s.log.Infow("Scene created", "scene_id", scene.ID, "drama_id", req.DramaID)
+	return &scene, nil
+}
+
+func (s *StoryboardCompositionService) UpdateSceneDetails(sceneID string, req *UpdateSceneDetailsRequest) error {
+	var scene models.Scene
+	if err := s.db.Where("id = ?", sceneID).First(&scene).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("scene not found")
+		}
+		return err
+	}
+
+	updates := make(map[string]interface{})
+	if req.Location != nil {
+		location := strings.TrimSpace(*req.Location)
+		if location == "" {
+			return fmt.Errorf("location is required")
+		}
+		updates["location"] = location
+	}
+	if req.Time != nil {
+		timeValue := strings.TrimSpace(*req.Time)
+		if timeValue == "" {
+			return fmt.Errorf("time is required")
+		}
+		updates["time"] = timeValue
+	}
+	if req.Prompt != nil {
+		updates["prompt"] = strings.TrimSpace(*req.Prompt)
+	}
+
+	if len(updates) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+
+	if err := s.db.Model(&scene).Updates(updates).Error; err != nil {
+		return fmt.Errorf("failed to update scene: %w", err)
+	}
+
+	s.log.Infow("Scene details updated", "scene_id", sceneID, "updates", updates)
+	return nil
 }
 
 type UpdateSceneRequest struct {

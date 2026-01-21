@@ -198,7 +198,7 @@
                 <img
                   v-if="scene.image_url"
                   :src="fixImageUrl(scene.image_url)"
-                  :alt="scene.name"
+                  :alt="getSceneTitle(scene)"
                   @error="handleImageError(scene)"
                 />
                 <div v-else class="scene-placeholder">
@@ -207,8 +207,8 @@
               </div>
 
               <div class="scene-info">
-                <h4>{{ scene.name }}</h4>
-                <p class="desc">{{ scene.description }}</p>
+                <h4>{{ getSceneTitle(scene) }}</h4>
+                <p class="desc">{{ getSceneDescription(scene) }}</p>
               </div>
 
               <div class="scene-actions">
@@ -225,7 +225,7 @@
       </div>
 
       <!-- 添加角色对话框 -->
-    <el-dialog v-model="addCharacterDialogVisible" :title="$t('character.add')" width="600px">
+    <el-dialog v-model="addCharacterDialogVisible" :title="editingCharacterId ? $t('common.edit') : $t('character.add')" width="600px">
       <el-form :model="newCharacter" label-width="100px">
         <el-form-item :label="$t('character.name')">
           <el-input v-model="newCharacter.name" :placeholder="$t('character.name')" />
@@ -249,23 +249,26 @@
       </el-form>
       <template #footer>
         <el-button @click="addCharacterDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="addCharacter">{{ $t('common.confirm') }}</el-button>
+        <el-button type="primary" @click="saveCharacter">{{ $t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 添加场景对话框 -->
-    <el-dialog v-model="addSceneDialogVisible" :title="$t('common.add')" width="600px">
-      <el-form :model="newScene" label-width="100px">
-        <el-form-item :label="$t('common.name')">
-          <el-input v-model="newScene.name" :placeholder="$t('common.name')" />
+    <el-dialog v-model="sceneDialogVisible" :title="editingSceneId ? $t('common.edit') : $t('common.add')" width="600px">
+      <el-form :model="sceneForm" label-width="100px">
+        <el-form-item :label="$t('workflow.location')">
+          <el-input v-model="sceneForm.location" :placeholder="$t('workflow.locationPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="$t('workflow.time')">
+          <el-input v-model="sceneForm.time" :placeholder="$t('workflow.timeSetting')" />
         </el-form-item>
         <el-form-item :label="$t('common.description')">
-          <el-input v-model="newScene.description" type="textarea" :rows="4" :placeholder="$t('common.description')" />
+          <el-input v-model="sceneForm.prompt" type="textarea" :rows="4" :placeholder="$t('common.description')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="addSceneDialogVisible = false">{{ $t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="addScene">{{ $t('common.confirm') }}</el-button>
+        <el-button @click="sceneDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="sceneDialogSaving" @click="saveScene">{{ $t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
     </div>
@@ -278,6 +281,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Document, User, Picture, Plus } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
+import { sceneAPI } from '@/api/scene'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Drama } from '@/types/drama'
 import { AppHeader, StatCard, EmptyState } from '@/components/common'
@@ -291,7 +295,10 @@ const scenes = ref<any[]>([])
 const pageLoading = ref(false)
 
 const addCharacterDialogVisible = ref(false)
-const addSceneDialogVisible = ref(false)
+const editingCharacterId = ref<number | null>(null)
+const sceneDialogVisible = ref(false)
+const sceneDialogSaving = ref(false)
+const editingSceneId = ref<string | null>(null)
 
 const newCharacter = ref({
   name: '',
@@ -301,9 +308,10 @@ const newCharacter = ref({
   description: ''
 })
 
-const newScene = ref({
-  name: '',
-  description: ''
+const sceneForm = ref({
+  location: '',
+  time: '',
+  prompt: ''
 })
 
 const episodesCount = computed(() => drama.value?.episodes?.length || 0)
@@ -385,6 +393,17 @@ const fixImageUrl = (url: string) => {
   return `${import.meta.env.VITE_API_BASE_URL}${url}`
 }
 
+const getSceneTitle = (scene: any) => {
+  const location = scene.location || scene.name || ''
+  const timeValue = scene.time || ''
+  if (location && timeValue) return `${location} · ${timeValue}`
+  return location || timeValue || '-'
+}
+
+const getSceneDescription = (scene: any) => {
+  return scene.description || scene.prompt || ''
+}
+
 const handleImageError = (item: { image_url?: string } | null | undefined) => {
   if (!item) return
   item.image_url = ''
@@ -464,6 +483,7 @@ const deleteEpisode = async (episode: any) => {
 }
 
 const openAddCharacterDialog = () => {
+  editingCharacterId.value = null
   newCharacter.value = {
     name: '',
     role: 'supporting',
@@ -474,36 +494,56 @@ const openAddCharacterDialog = () => {
   addCharacterDialogVisible.value = true
 }
 
-const addCharacter = async () => {
+const saveCharacter = async () => {
   if (!newCharacter.value.name.trim()) {
     ElMessage.warning('请输入角色名称')
     return
   }
 
   try {
-    const existingCharacters = drama.value?.characters || []
-    const allCharacters = [
-      ...existingCharacters.map(c => ({
-        name: c.name,
-        role: c.role,
-        appearance: c.appearance,
-        personality: c.personality,
-        description: c.description
-      })),
-      newCharacter.value
-    ]
+    if (editingCharacterId.value) {
+      await characterLibraryAPI.updateCharacter(editingCharacterId.value, {
+        name: newCharacter.value.name.trim(),
+        role: newCharacter.value.role,
+        appearance: newCharacter.value.appearance,
+        personality: newCharacter.value.personality,
+        description: newCharacter.value.description
+      })
+      ElMessage.success('角色更新成功')
+    } else {
+      const existingCharacters = drama.value?.characters || []
+      const allCharacters = [
+        ...existingCharacters.map(c => ({
+          name: c.name,
+          role: c.role,
+          appearance: c.appearance,
+          personality: c.personality,
+          description: c.description
+        })),
+        newCharacter.value
+      ]
 
-    await dramaAPI.saveCharacters(drama.value!.id, allCharacters)
-    ElMessage.success('角色添加成功')
+      await dramaAPI.saveCharacters(drama.value!.id, allCharacters)
+      ElMessage.success('角色添加成功')
+    }
     addCharacterDialogVisible.value = false
+    editingCharacterId.value = null
     await loadDramaData()
   } catch (error: any) {
-    ElMessage.error(error.message || '添加失败')
+    ElMessage.error(error.message || '保存失败')
   }
 }
 
 const editCharacter = (character: any) => {
-  ElMessage.info('编辑功能开发中')
+  editingCharacterId.value = character?.id ?? null
+  newCharacter.value = {
+    name: character?.name || '',
+    role: character?.role || 'supporting',
+    appearance: character?.appearance || '',
+    personality: character?.personality || '',
+    description: character?.description || ''
+  }
+  addCharacterDialogVisible.value = true
 }
 
 const deleteCharacter = async (character: any) => {
@@ -540,31 +580,60 @@ const deleteCharacter = async (character: any) => {
 }
 
 const openAddSceneDialog = () => {
-  newScene.value = {
-    name: '',
-    description: ''
+  editingSceneId.value = null
+  sceneForm.value = {
+    location: '',
+    time: '',
+    prompt: ''
   }
-  addSceneDialogVisible.value = true
+  sceneDialogVisible.value = true
 }
 
-const addScene = async () => {
-  if (!newScene.value.name.trim()) {
-    ElMessage.warning('请输入场景名称')
+const saveScene = async () => {
+  const location = sceneForm.value.location.trim()
+  const timeValue = sceneForm.value.time.trim()
+
+  if (!location || !timeValue) {
+    ElMessage.warning('请输入场景地点和时间')
     return
   }
 
+  sceneDialogSaving.value = true
   try {
-    // TODO: 调用场景库API
-    ElMessage.success('场景添加成功')
-    addSceneDialogVisible.value = false
-    await loadScenes()
+    if (editingSceneId.value) {
+      await sceneAPI.updateDetails(editingSceneId.value, {
+        location,
+        time: timeValue,
+        prompt: sceneForm.value.prompt?.trim() || ''
+      })
+      ElMessage.success('场景更新成功')
+    } else {
+      await sceneAPI.create({
+        drama_id: Number(route.params.id),
+        location,
+        time: timeValue,
+        prompt: sceneForm.value.prompt?.trim() || ''
+      })
+      ElMessage.success('场景添加成功')
+    }
+
+    sceneDialogVisible.value = false
+    await loadDramaData()
   } catch (error: any) {
-    ElMessage.error(error.message || '添加失败')
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    sceneDialogSaving.value = false
   }
 }
 
 const editScene = (scene: any) => {
-  ElMessage.info('编辑功能开发中')
+  editingSceneId.value = scene.id?.toString() || null
+  sceneForm.value = {
+    location: scene.location || '',
+    time: scene.time || '',
+    prompt: scene.prompt || scene.description || ''
+  }
+  sceneDialogVisible.value = true
 }
 
 const deleteScene = async (scene: any) => {
@@ -575,7 +644,7 @@ const deleteScene = async (scene: any) => {
 
   try {
     await ElMessageBox.confirm(
-      `确定要删除场景"${scene.name || scene.location}"吗？此操作不可恢复。`,
+      `确定要删除场景"${getSceneTitle(scene)}"吗？此操作不可恢复。`,
       '删除确认',
       {
         confirmButtonText: '确定',
@@ -586,7 +655,7 @@ const deleteScene = async (scene: any) => {
 
     await dramaAPI.deleteScene(scene.id.toString())
     ElMessage.success('场景已删除')
-    await loadScenes()
+    await loadDramaData()
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除场景失败:', error)

@@ -220,6 +220,7 @@ func (h *CharacterLibraryHandler) UpdateCharacter(c *gin.Context) {
 
 	var req struct {
 		Name        *string `json:"name"`
+		Role        *string `json:"role"`
 		Appearance  *string `json:"appearance"`
 		Personality *string `json:"personality"`
 		Description *string `json:"description"`

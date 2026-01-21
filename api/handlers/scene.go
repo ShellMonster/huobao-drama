@@ -36,6 +36,32 @@ func (h *SceneHandler) GetStoryboardsForEpisode(c *gin.Context) {
 	})
 }
 
+func (h *SceneHandler) CreateScene(c *gin.Context) {
+	var req services2.CreateSceneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+
+	scene, err := h.sceneService.CreateScene(&req)
+	if err != nil {
+		h.log.Errorw("Failed to create scene", "error", err)
+		switch err.Error() {
+		case "invalid drama id", "location and time are required":
+			response.BadRequest(c, err.Error())
+		case "drama not found":
+			response.NotFound(c, "剧本不存在")
+		case "episode not found":
+			response.NotFound(c, "章节不存在")
+		default:
+			response.InternalError(c, err.Error())
+		}
+		return
+	}
+
+	response.Created(c, scene)
+}
+
 func (h *SceneHandler) UpdateScene(c *gin.Context) {
 	sceneID := c.Param("scene_id")
 
@@ -48,6 +74,31 @@ func (h *SceneHandler) UpdateScene(c *gin.Context) {
 	if err := h.sceneService.UpdateScene(sceneID, &req); err != nil {
 		h.log.Errorw("Failed to update scene", "error", err, "scene_id", sceneID)
 		response.InternalError(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"message": "Scene updated successfully"})
+}
+
+func (h *SceneHandler) UpdateSceneDetails(c *gin.Context) {
+	sceneID := c.Param("scene_id")
+
+	var req services2.UpdateSceneDetailsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+
+	if err := h.sceneService.UpdateSceneDetails(sceneID, &req); err != nil {
+		h.log.Errorw("Failed to update scene details", "error", err, "scene_id", sceneID)
+		switch err.Error() {
+		case "scene not found":
+			response.NotFound(c, "场景不存在")
+		case "location is required", "time is required", "no fields to update":
+			response.BadRequest(c, err.Error())
+		default:
+			response.InternalError(c, err.Error())
+		}
 		return
 	}
 

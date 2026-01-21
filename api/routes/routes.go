@@ -136,7 +136,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 		// 场景路由
 		scenes := api.Group("/scenes")
 		{
+			scenes.POST("", sceneHandler.CreateScene)
 			scenes.PUT("/:scene_id", sceneHandler.UpdateScene)
+			scenes.PUT("/:scene_id/details", sceneHandler.UpdateSceneDetails)
 			scenes.DELETE("/:scene_id", sceneHandler.DeleteScene)
 			scenes.POST("/generate-image", sceneHandler.GenerateSceneImage)
 		}
