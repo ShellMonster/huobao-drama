@@ -2,11 +2,13 @@ package image
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -21,13 +23,28 @@ func NewGeminiImageSDKClient(baseURL, apiKey, model string) (*GeminiImageSDKClie
 		model = "gemini-3-pro-image-preview"
 	}
 
+	httpClient := &http.Client{
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			DisableKeepAlives:   true,
+			ForceAttemptHTTP2:   false,
+			MaxIdleConns:        0,
+			MaxIdleConnsPerHost: 0,
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+	}
+
 	config := &genai.ClientConfig{
-		APIKey:  strings.TrimSpace(apiKey),
-		Backend: genai.BackendGeminiAPI,
+		APIKey:     strings.TrimSpace(apiKey),
+		Backend:    genai.BackendGeminiAPI,
+		HTTPClient: httpClient,
 	}
 	if strings.TrimSpace(baseURL) != "" {
+		apiBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 		config.HTTPOptions = genai.HTTPOptions{
-			BaseURL: strings.TrimSpace(baseURL),
+			BaseURL: apiBase,
 		}
 	}
 
@@ -86,10 +103,13 @@ func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 	}}
 
 	config := &genai.GenerateContentConfig{
-		ResponseModalities: []string{"IMAGE"},
+		ResponseModalities: []string{"TEXT", "IMAGE"},
 	}
 
-	resp, err := c.client.Models.GenerateContent(context.Background(), model, contents, config)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	resp, err := c.client.Models.GenerateContent(ctx, model, contents, config)
 	if err != nil {
 		return nil, err
 	}
