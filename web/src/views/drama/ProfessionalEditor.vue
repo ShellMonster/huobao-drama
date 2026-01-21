@@ -1096,6 +1096,8 @@ const deletingVideoIds = ref<Set<number>>(new Set())
 const videoCache = ref<Record<string, VideoGeneration[]>>({})
 const videoAssets = ref<Asset[]>([])
 const loadingVideos = ref(false)
+const videoLoadedMap = ref<Record<string, boolean>>({})
+const videoLoadingKey = ref<string | null>(null)
 const timelineEditorRef = ref<InstanceType<typeof VideoTimelineEditor> | null>(null)
 const videoReferenceImages = ref<ImageGeneration[]>([])
 const videoReferenceCache = ref<Record<string, ImageGeneration[]>>({})
@@ -1111,6 +1113,8 @@ let videoPollingTimer: any = null
 let videoStreamStop: (() => void) | null = null
 let videoRefreshTimer: number | null = null
 let mergePollingTimer: any = null  // 视频合成列表轮询定时器
+let videoRequestId = 0
+let videoLoadingRequestId = 0
 
 // 视频合成列表
 const videoMerges = ref<VideoMerge[]>([])
@@ -1558,6 +1562,7 @@ const applyCachedVideos = (storyboardId: number) => {
   const cached = videoCache.value[cacheKey]
   if (!cached) return
   generatedVideos.value = cached
+  videoLoadedMap.value[cacheKey] = true
   const hasPendingOrProcessing = cached.some(
     video => video.status === 'pending' || video.status === 'processing'
   )
@@ -1731,7 +1736,7 @@ watch(currentStoryboard, async (newStoryboard) => {
     loadStoryboardImages(newStoryboard.id, selectedFrameType.value, { showLoading: false }),
     loadFramePrompts(newStoryboard.id, { showLoading: false }),
     loadVideoReferenceImages(newStoryboard.id),
-    loadStoryboardVideos(newStoryboard.id)
+    loadStoryboardVideos(newStoryboard.id, { showLoading: false })
   ])
 })
 
@@ -2607,18 +2612,28 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
 }
 
 // 加载分镜的视频列表
-const loadStoryboardVideos = async (storyboardId: number) => {
-  loadingVideos.value = true
+const loadStoryboardVideos = async (
+  storyboardId: number,
+  options: { showLoading?: boolean } = {}
+) => {
+  const requestId = ++videoRequestId
+  const cacheKey = String(storyboardId)
   const shouldApply = () => currentStoryboard.value?.id === storyboardId
+  const shouldShowLoading = options.showLoading !== false && !videoLoadedMap.value[cacheKey]
+  if (shouldApply() && shouldShowLoading) {
+    videoLoadingKey.value = cacheKey
+    videoLoadingRequestId = requestId
+    loadingVideos.value = true
+  }
   try {
     const result = await videoAPI.listVideos({
       storyboard_id: storyboardId.toString(),
       page: 1,
       page_size: 50
     })
-    videoCache.value[String(storyboardId)] = result.items || []
+    videoCache.value[cacheKey] = result.items || []
     if (!shouldApply()) return
-    generatedVideos.value = videoCache.value[String(storyboardId)]
+    generatedVideos.value = videoCache.value[cacheKey]
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedVideos.value.some(
@@ -2630,8 +2645,16 @@ const loadStoryboardVideos = async (storyboardId: number) => {
   } catch (error: any) {
     console.error('加载视频列表失败:', error)
   } finally {
-    if (shouldApply()) {
+    videoLoadedMap.value[cacheKey] = true
+    if (
+      shouldApply() &&
+      shouldShowLoading &&
+      videoLoadingKey.value === cacheKey &&
+      videoLoadingRequestId === requestId
+    ) {
       loadingVideos.value = false
+      videoLoadingKey.value = null
+      videoLoadingRequestId = 0
     }
   }
 }
