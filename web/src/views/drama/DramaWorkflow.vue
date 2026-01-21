@@ -542,7 +542,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -572,12 +572,33 @@ import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const dramaId = route.params.id as string
 const drama = ref<Drama>()
 const pageLoading = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
 const currentStep = ref(0)
 const currentEpisodeNumber = ref(1) // 当前正在创作的集数
 const generatingCharacterIds = ref<(number | string)[]>([])
@@ -1365,25 +1386,41 @@ const goToEpisodeDetail = (episodeId: string) => {
   router.push(`/dramas/${drama.value?.id}/episodes/${episodeId}`)
 }
 
+const hydrateDramaFromCache = () => {
+  const cached = getCache<Drama>(getDramaCacheKey(), cacheTTL)
+  if (!cached) return false
+  drama.value = cached
+  return true
+}
+
 const loadDramaData = async (showLoading = !drama.value) => {
-  const dramaId = route.params.id as string
   if (showLoading) {
-    pageLoading.value = true
+    startPageLoading()
   }
   try {
-    drama.value = await dramaAPI.get(dramaId)
+    const data = await dramaAPI.get(dramaId)
+    drama.value = data
+    setCache(getDramaCacheKey(), data)
   } catch (error: any) {
     ElMessage.error(error.message || '获取剧本信息失败')
     router.push('/dramas')
   } finally {
     if (showLoading) {
-      pageLoading.value = false
+      stopPageLoading()
     }
   }
 }
 
 onMounted(() => {
-  loadDramaData()
+  const hasCache = hydrateDramaFromCache()
+  loadDramaData(!hasCache)
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

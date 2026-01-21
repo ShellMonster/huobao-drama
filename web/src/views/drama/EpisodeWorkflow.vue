@@ -829,6 +829,7 @@ import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -838,6 +839,25 @@ const episodeNumber = parseInt(route.params.episodeNumber as string)
 
 const drama = ref<Drama>()
 const pageLoading = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
 
 // 生成 localStorage key
 const getStepStorageKey = () => `episode_workflow_step_${dramaId}_${episodeNumber}`
@@ -1082,13 +1102,21 @@ const loadSavedModelConfig = () => {
   }
 }
 
+const hydrateDramaFromCache = () => {
+  const cached = getCache<Drama>(getDramaCacheKey(), cacheTTL)
+  if (!cached) return false
+  drama.value = cached
+  return true
+}
+
 const loadDramaData = async (showLoading = !drama.value) => {
   if (showLoading) {
-    pageLoading.value = true
+    startPageLoading()
   }
   try {
     const data = await dramaAPI.get(dramaId)
     drama.value = data
+    setCache(getDramaCacheKey(), data)
     
     if (!hasScript.value) {
       scriptContent.value = ''
@@ -1102,7 +1130,7 @@ const loadDramaData = async (showLoading = !drama.value) => {
     ElMessage.error(error.message || '加载项目数据失败')
   } finally {
     if (showLoading) {
-      pageLoading.value = false
+      stopPageLoading()
     }
   }
 }
@@ -1929,7 +1957,8 @@ watch(currentStep, (newStep) => {
 })
 
 onMounted(() => {
-  loadDramaData()
+  const hasCache = hydrateDramaFromCache()
+  loadDramaData(!hasCache)
   loadSavedModelConfig()
   loadAIConfigs()
 })
@@ -1939,6 +1968,10 @@ onBeforeUnmount(() => {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
+  }
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
   }
 })
 </script>

@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -98,6 +98,7 @@ import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
 import { LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,6 +108,8 @@ const dramaId = route.params.id as string
 const characters = ref<Character[]>([])
 const dialogSaving = ref(false)
 const pageLoading = ref(false)
+const cacheTTL = 30 * 1000
+let loadingTimer: number | null = null
 const editDialogVisible = ref(false)
 const editingCharacterId = ref<number | null>(null)
 const editForm = reactive({
@@ -137,14 +140,41 @@ const addCharacter = () => {
   editDialogVisible.value = true
 }
 
+const getCharactersCacheKey = () => `drama:characters:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
+
 const loadCharacters = async () => {
-  pageLoading.value = true
+  const cacheKey = getCharactersCacheKey()
+  const cached = getCache<Character[]>(cacheKey, cacheTTL)
+  if (cached) {
+    characters.value = cached
+  } else {
+    startPageLoading()
+  }
   try {
-    characters.value = await dramaAPI.getCharacters(dramaId)
+    const result = await dramaAPI.getCharacters(dramaId)
+    characters.value = result
+    setCache(cacheKey, result)
   } catch (error: any) {
     ElMessage.error(error.message || '加载角色失败')
   } finally {
-    pageLoading.value = false
+    if (!cached) {
+      stopPageLoading()
+    }
   }
 }
 
@@ -209,6 +239,13 @@ const goToNextStep = () => {
 
 onMounted(() => {
   loadCharacters()
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

@@ -71,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit, Picture } from '@element-plus/icons-vue'
@@ -80,6 +80,7 @@ import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
 import { LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -91,6 +92,61 @@ const batchGenerating = ref(false)
 const selectedCharacters = ref<(number | string)[]>([])
 const selectAll = ref(false)
 const pageLoading = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
+
+const applyDramaCharacters = (drama: any, redirectOnEmpty: boolean) => {
+  if (drama.characters && drama.characters.length > 0) {
+    characters.value = drama.characters
+    return
+  }
+  if (redirectOnEmpty) {
+    ElMessage.warning('未找到角色信息，请先完成剧本生成')
+    router.push(`/dramas/${dramaId}`)
+  }
+}
+
+const hydrateDramaFromCache = () => {
+  const cached = getCache<any>(getDramaCacheKey(), cacheTTL)
+  if (!cached) return false
+  applyDramaCharacters(cached, false)
+  return true
+}
+
+const loadDrama = async (showLoading = true) => {
+  if (showLoading) {
+    startPageLoading()
+  }
+  try {
+    const drama = await dramaAPI.get(dramaId)
+    applyDramaCharacters(drama, true)
+    setCache(getDramaCacheKey(), drama)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载角色失败')
+    router.push(`/dramas/${dramaId}`)
+  } finally {
+    if (showLoading) {
+      stopPageLoading()
+    }
+  }
+}
 
 const allImagesGenerated = computed(() => {
   return characters.value.length > 0 && characters.value.every(c => c.image_url)
@@ -282,27 +338,17 @@ const goToNextStep = () => {
 }
 
 onMounted(async () => {
-  pageLoading.value = true
-  try {
-    const drama = await dramaAPI.get(dramaId)
-    if (drama.characters && drama.characters.length > 0) {
-      characters.value = drama.characters
-    } else {
-      ElMessage.warning('未找到角色信息，请先完成剧本生成')
-      router.push(`/dramas/${dramaId}`)
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载角色失败')
-    router.push(`/dramas/${dramaId}`)
-  } finally {
-    pageLoading.value = false
-  }
+  const hasCache = hydrateDramaFromCache()
+  await loadDrama(!hasCache)
 })
 
 // 组件销毁时清理轮询
-import { onBeforeUnmount } from 'vue'
 onBeforeUnmount(() => {
   stopPolling()
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

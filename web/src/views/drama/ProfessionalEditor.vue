@@ -969,6 +969,7 @@ import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
 import type { Drama, Episode, Storyboard } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
 import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -996,6 +997,26 @@ const showVideoPreview = ref(false)
 const previewVideo = ref<VideoGeneration | null>(null)
 const addingToAssets = ref<Set<number>>(new Set())
 const loadingStoryboards = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+const getStoryboardsCacheKey = () => `storyboards:drama:${dramaId}:episode:${episodeNumber}`
+
+const startStoryboardsLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    loadingStoryboards.value = true
+  }, 200)
+}
+
+const stopStoryboardsLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  loadingStoryboards.value = false
+}
 
 const currentPlayState = ref<'playing' | 'paused'>('paused')
 const currentTime = ref(0)
@@ -2743,12 +2764,40 @@ const removeCharacterFromShot = async (charId: number) => {
   }
 }
 
-const loadData = async () => {
-  loadingStoryboards.value = true
+const hydrateEditorFromCache = () => {
+  const cachedDrama = getCache<Drama>(getDramaCacheKey(), cacheTTL)
+  const cachedStoryboards = getCache<Storyboard[]>(getStoryboardsCacheKey(), cacheTTL)
+
+  if (cachedDrama) {
+    drama.value = cachedDrama
+    const ep = cachedDrama.episodes?.find(e => e.episode_number === episodeNumber)
+    if (ep) {
+      episode.value = ep
+      episodeId.value = Number(ep.id)
+    }
+    characters.value = cachedDrama.characters || []
+    availableScenes.value = cachedDrama.scenes || []
+  }
+
+  if (cachedStoryboards) {
+    storyboards.value = cachedStoryboards
+    if (storyboards.value.length > 0 && !currentStoryboardId.value) {
+      currentStoryboardId.value = storyboards.value[0].id
+    }
+  }
+
+  return !!(cachedDrama || cachedStoryboards)
+}
+
+const loadData = async (showLoading = storyboards.value.length === 0) => {
+  if (showLoading) {
+    startStoryboardsLoading()
+  }
   try {
     // 加载剧集信息
     const dramaRes = await dramaAPI.get(dramaId.toString())
     drama.value = dramaRes
+    setCache(getDramaCacheKey(), dramaRes)
 
     // 找到当前章节
     const ep = dramaRes.episodes?.find(e => e.episode_number === episodeNumber)
@@ -2759,7 +2808,7 @@ const loadData = async () => {
     }
 
     episode.value = ep
-    episodeId.value = ep.id
+    episodeId.value = Number(ep.id)
 
     const [storyboardsRes] = await Promise.all([
       dramaAPI.getStoryboards(ep.id.toString()),
@@ -2768,6 +2817,7 @@ const loadData = async () => {
 
     // API返回格式: {storyboards: [...], total: number}
     storyboards.value = storyboardsRes?.storyboards || []
+    setCache(getStoryboardsCacheKey(), storyboards.value)
 
     // 默认选中第一个分镜
     if (storyboards.value.length > 0 && !currentStoryboardId.value) {
@@ -2783,7 +2833,9 @@ const loadData = async () => {
   } catch (error: any) {
     ElMessage.error('加载数据失败: ' + (error.message || '未知错误'))
   } finally {
-    loadingStoryboards.value = false
+    if (showLoading) {
+      stopStoryboardsLoading()
+    }
   }
 }
 
@@ -3030,7 +3082,8 @@ const formatDateTime = (dateStr: string) => {
 }
 
 onMounted(async () => {
-  await loadData()
+  const hasCache = hydrateEditorFromCache()
+  await loadData(!hasCache)
   await loadVideoModels()
   await loadVideoMerges()
 
@@ -3043,6 +3096,10 @@ onBeforeUnmount(() => {
   stopVideoPolling()
   stopMergePolling()
   window.removeEventListener('storage', handleVideoConfigStorage)
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

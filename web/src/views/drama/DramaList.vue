@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -123,6 +123,7 @@ import {
 import { dramaAPI } from '@/api/drama'
 import type { Drama, DramaListQuery } from '@/types/drama'
 import { AppHeader, ProjectCard, ActionButton, CreateDramaDialog, EmptyState, LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const router = useRouter()
 const loading = ref(false)
@@ -134,20 +135,50 @@ const queryParams = ref<DramaListQuery>({
   page_size: 12
 })
 
+const listCacheTTL = 30 * 1000
+let loadingTimer: number | null = null
+
+const getListCacheKey = () => `drama:list:${queryParams.value.page}:${queryParams.value.page_size}`
+
+const startLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    loading.value = true
+  }, 200)
+}
+
+const stopLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  loading.value = false
+}
+
 // Create dialog state / 创建弹窗状态
 const createDialogVisible = ref(false)
 
 // Load drama list / 加载短剧列表
 const loadDramas = async () => {
-  loading.value = true
+  const cacheKey = getListCacheKey()
+  const cached = getCache<{ items: Drama[]; total: number }>(cacheKey, listCacheTTL)
+  if (cached) {
+    dramas.value = cached.items || []
+    total.value = cached.total || 0
+  } else {
+    startLoading()
+  }
   try {
     const res = await dramaAPI.list(queryParams.value)
     dramas.value = res.items || []
     total.value = res.pagination?.total || 0
+    setCache(cacheKey, { items: dramas.value, total: total.value })
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
   } finally {
-    loading.value = false
+    if (!cached) {
+      stopLoading()
+    }
   }
 }
 
@@ -219,6 +250,13 @@ const deleteDrama = async (id: string) => {
 
 onMounted(() => {
   loadDramas()
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

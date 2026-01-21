@@ -60,11 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dramaAPI } from '@/api/drama'
 import { LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -72,6 +73,8 @@ const dramaId = route.params.id as string
 
 const activeTab = ref('basic')
 const pageLoading = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
 const saving = ref(false)
 const deleting = ref(false)
 const form = reactive({
@@ -80,6 +83,54 @@ const form = reactive({
   genre: '',
   status: 'draft' as any
 })
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
+
+const applyDramaToForm = (drama: any) => {
+  form.title = drama.title || ''
+  form.description = drama.description || ''
+  form.genre = drama.genre || ''
+  form.status = drama.status || 'draft'
+}
+
+const hydrateDramaFromCache = () => {
+  const cached = getCache<any>(getDramaCacheKey(), cacheTTL)
+  if (!cached) return false
+  applyDramaToForm(cached)
+  return true
+}
+
+const loadDrama = async (showLoading = true) => {
+  if (showLoading) {
+    startPageLoading()
+  }
+  try {
+    const drama = await dramaAPI.get(dramaId)
+    applyDramaToForm(drama)
+    setCache(getDramaCacheKey(), drama)
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载失败')
+  } finally {
+    if (showLoading) {
+      stopPageLoading()
+    }
+  }
+}
 
 const goBack = () => {
   router.push(`/dramas/${dramaId}`)
@@ -90,6 +141,7 @@ const saveSettings = async () => {
   try {
     await dramaAPI.update(dramaId, form)
     ElMessage.success('设置保存成功')
+    setCache(getDramaCacheKey(), { ...form, id: dramaId })
   } catch (error: any) {
     ElMessage.error(error.message || '保存失败')
   } finally {
@@ -123,14 +175,14 @@ const deleteProject = async () => {
 }
 
 onMounted(async () => {
-  pageLoading.value = true
-  try {
-    const drama = await dramaAPI.get(dramaId)
-    Object.assign(form, drama)
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
-  } finally {
-    pageLoading.value = false
+  const hasCache = hydrateDramaFromCache()
+  await loadDrama(!hasCache)
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
   }
 })
 </script>

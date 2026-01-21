@@ -24,13 +24,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
 import { LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,16 +39,44 @@ const router = useRouter()
 const episodeId = route.params.id as string
 const scenes = ref<any[]>([])
 const pageLoading = ref(false)
+const cacheTTL = 30 * 1000
+let loadingTimer: number | null = null
+
+const getScenesCacheKey = () => `storyboards:episode:${episodeId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
 
 const loadScenes = async () => {
-  pageLoading.value = true
+  const cacheKey = getScenesCacheKey()
+  const cached = getCache<{ storyboards: any[] }>(cacheKey, cacheTTL)
+  if (cached) {
+    scenes.value = cached.storyboards || []
+  } else {
+    startPageLoading()
+  }
   try {
     const res = await dramaAPI.getStoryboards(episodeId)
     scenes.value = res.storyboards || []
+    setCache(cacheKey, { storyboards: scenes.value })
   } catch (error: any) {
     ElMessage.error($t('timeline.loadFailed'))
   } finally {
-    pageLoading.value = false
+    if (!cached) {
+      stopPageLoading()
+    }
   }
 }
 
@@ -57,6 +86,13 @@ const goBack = () => {
 
 onMounted(() => {
   loadScenes()
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
 })
 </script>
 

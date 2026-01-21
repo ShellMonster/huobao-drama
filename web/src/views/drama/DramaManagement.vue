@@ -276,7 +276,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Document, User, Picture, Plus } from '@element-plus/icons-vue'
@@ -285,14 +285,35 @@ import { sceneAPI } from '@/api/scene'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Drama } from '@/types/drama'
 import { AppHeader, StatCard, EmptyState, LoadingSection } from '@/components/common'
+import { getCache, setCache } from '@/utils/cache'
 
 const router = useRouter()
 const route = useRoute()
+const dramaId = route.params.id as string
 
 const drama = ref<Drama>()
 const activeTab = ref(route.query.tab as string || 'overview')
 const scenes = ref<any[]>([])
 const pageLoading = ref(false)
+const cacheTTL = 60 * 1000
+let loadingTimer: number | null = null
+
+const getDramaCacheKey = () => `drama:detail:${dramaId}`
+
+const startPageLoading = () => {
+  if (loadingTimer) return
+  loadingTimer = window.setTimeout(() => {
+    pageLoading.value = true
+  }, 200)
+}
+
+const stopPageLoading = () => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
+  }
+  pageLoading.value = false
+}
 
 const addCharacterDialogVisible = ref(false)
 const editingCharacterId = ref<number | null>(null)
@@ -323,19 +344,28 @@ const sortedEpisodes = computed(() => {
   return [...drama.value.episodes].sort((a, b) => a.episode_number - b.episode_number)
 })
 
+const hydrateDramaFromCache = () => {
+  const cached = getCache<Drama>(getDramaCacheKey(), cacheTTL)
+  if (!cached) return false
+  drama.value = cached
+  loadScenes()
+  return true
+}
+
 const loadDramaData = async (showLoading = !drama.value) => {
   if (showLoading) {
-    pageLoading.value = true
+    startPageLoading()
   }
   try {
-    const data = await dramaAPI.get(route.params.id as string)
+    const data = await dramaAPI.get(dramaId)
     drama.value = data
     loadScenes()
+    setCache(getDramaCacheKey(), data)
   } catch (error: any) {
     ElMessage.error(error.message || '加载项目数据失败')
   } finally {
     if (showLoading) {
-      pageLoading.value = false
+      stopPageLoading()
     }
   }
 }
@@ -665,12 +695,19 @@ const deleteScene = async (scene: any) => {
 }
 
 onMounted(() => {
-  loadDramaData()
-  loadScenes()
+  const hasCache = hydrateDramaFromCache()
+  loadDramaData(!hasCache)
 
   // 如果有query参数指定tab，切换到对应tab
   if (route.query.tab) {
     activeTab.value = route.query.tab as string
+  }
+})
+
+onBeforeUnmount(() => {
+  if (loadingTimer) {
+    window.clearTimeout(loadingTimer)
+    loadingTimer = null
   }
 })
 </script>
