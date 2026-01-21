@@ -959,6 +959,10 @@ const goBack = () => {
   }
 
   const targetPath = router.resolve(target).path
+  if (route.path === targetPath) {
+    router.back()
+    return
+  }
   const historyState = router.options.history.state as { back?: string } | null
   const backPath = typeof historyState?.back === 'string' ? historyState.back : ''
   const normalizedBack = backPath.split('?')[0].split('#')[0]
@@ -968,7 +972,7 @@ const goBack = () => {
     return
   }
 
-  router.replace(target)
+  router.push(target)
 }
 
 // 加载AI模型配置

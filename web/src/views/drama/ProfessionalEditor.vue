@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <AppHeader :fixed="false" :show-logo="false" @config-updated="loadVideoModels">
       <template #left>
-        <el-button text @click="goBack" class="back-btn">
+        <el-button text @click="goBack" class="back-btn" native-type="button">
           <el-icon><ArrowLeft /></el-icon>
           <span>{{ $t('editor.backToEpisode') }}</span>
         </el-button>
@@ -1046,8 +1046,12 @@ const generatingImageMap = ref<Record<string, boolean>>({})
 const generatedImages = ref<ImageGeneration[]>([])
 const deletingImageIds = ref<Set<number>>(new Set())
 const imageCache = ref<Record<string, ImageGeneration[]>>({})
+const imageLoadedMap = ref<Record<string, boolean>>({})
+const imageLoadingKey = ref<string | null>(null)
 const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类型
 const loadingImages = ref(false)
+let imageRequestId = 0
+let imageLoadingRequestId = 0
 let pollingTimer: any = null
 let pollingFrameType: FrameType | null = null // 记录正在轮询的帧类型
 let imageStreamStop: (() => void) | null = null
@@ -1527,11 +1531,20 @@ const getImageCacheKey = (storyboardId: number, frameType?: string) => {
   return `${storyboardId}_${frameType || 'all'}`
 }
 
+const markImagesLoaded = (storyboardId: number, frameType?: string) => {
+  imageLoadedMap.value[getImageCacheKey(storyboardId, frameType)] = true
+}
+
+const isImagesLoaded = (storyboardId: number, frameType?: string) => {
+  return !!imageLoadedMap.value[getImageCacheKey(storyboardId, frameType)]
+}
+
 const applyCachedImages = (storyboardId: number, frameType?: string) => {
   const cacheKey = getImageCacheKey(storyboardId, frameType)
   const cached = imageCache.value[cacheKey]
   if (!cached) return
   generatedImages.value = cached
+  markImagesLoaded(storyboardId, frameType)
   const hasPendingOrProcessing = cached.some(
     img => img.status === 'pending' || img.status === 'processing'
   )
@@ -1660,7 +1673,7 @@ watch(selectedFrameType, (newType) => {
   applyCachedImages(currentStoryboard.value.id, newType)
 
   // 重新加载该帧类型的图片
-  loadStoryboardImages(currentStoryboard.value.id, newType)
+  loadStoryboardImages(currentStoryboard.value.id, newType, { showLoading: false })
 
   // 重置切换标志
   setTimeout(() => {
@@ -1715,7 +1728,7 @@ watch(currentStoryboard, async (newStoryboard) => {
   applyCachedVideos(newStoryboard.id)
 
   await Promise.allSettled([
-    loadStoryboardImages(newStoryboard.id, selectedFrameType.value),
+    loadStoryboardImages(newStoryboard.id, selectedFrameType.value, { showLoading: false }),
     loadFramePrompts(newStoryboard.id, { showLoading: false }),
     loadVideoReferenceImages(newStoryboard.id),
     loadStoryboardVideos(newStoryboard.id)
@@ -1914,12 +1927,22 @@ const getStoryboardLabel = (storyboard: Storyboard | null, fallbackId?: number |
 }
 
 // 加载分镜的图片列表
-const loadStoryboardImages = async (storyboardId: number, frameType?: string) => {
-  loadingImages.value = true
+const loadStoryboardImages = async (
+  storyboardId: number,
+  frameType?: string,
+  options: { showLoading?: boolean } = {}
+) => {
+  const requestId = ++imageRequestId
   const cacheKey = getImageCacheKey(storyboardId, frameType)
   const shouldApply = () =>
     currentStoryboard.value?.id === storyboardId &&
     (!frameType || selectedFrameType.value === frameType)
+  const shouldShowLoading = options.showLoading !== false && !isImagesLoaded(storyboardId, frameType)
+  if (shouldApply() && shouldShowLoading) {
+    imageLoadingKey.value = cacheKey
+    imageLoadingRequestId = requestId
+    loadingImages.value = true
+  }
   try {
     const params: any = {
       storyboard_id: storyboardId,
@@ -1945,8 +1968,16 @@ const loadStoryboardImages = async (storyboardId: number, frameType?: string) =>
   } catch (error: any) {
     console.error('加载图片列表失败:', error)
   } finally {
-    if (shouldApply()) {
+    markImagesLoaded(storyboardId, frameType)
+    if (
+      shouldApply() &&
+      shouldShowLoading &&
+      imageLoadingKey.value === cacheKey &&
+      imageLoadingRequestId === requestId
+    ) {
       loadingImages.value = false
+      imageLoadingKey.value = null
+      imageLoadingRequestId = 0
     }
   }
 }
@@ -2920,10 +2951,23 @@ const uploadImage = () => {
 }
 
 const goBack = () => {
-  router.replace({
+  const hasValidParams = Number.isFinite(dramaId) && Number.isFinite(episodeNumber)
+  if (!hasValidParams) {
+    router.push({ name: 'DramaList' })
+    return
+  }
+
+  const target = {
     name: 'EpisodeWorkflowNew',
     params: { id: dramaId, episodeNumber }
-  })
+  }
+  const targetPath = router.resolve(target).path
+  if (route.path === targetPath) {
+    router.back()
+    return
+  }
+
+  router.push(target)
 }
 
 // 加载视频合成列表
