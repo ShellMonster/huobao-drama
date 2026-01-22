@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/drama-generator/backend/api/routes"
+	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/infrastructure/database"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/config"
@@ -40,6 +41,17 @@ func main() {
 		logr.Fatal("Failed to migrate database", "error", err)
 	}
 	logr.Info("Database tables migrated successfully")
+
+	styleService := services.NewStyleService(db, logr)
+	if err := styleService.EnsureDefaults(); err != nil {
+		logr.Warn("Failed to seed styles", "error", err)
+	}
+	if err := styleService.RefreshStyleCatalog(); err != nil {
+		logr.Warn("Failed to refresh style catalog", "error", err)
+	}
+	if err := services.MigrateLegacyStylePlaceholders(db, logr); err != nil {
+		logr.Warn("Failed to migrate legacy style prompts", "error", err)
+	}
 
 	// 初始化本地存储
 	var localStorage *storage.LocalStorage

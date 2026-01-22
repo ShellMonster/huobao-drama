@@ -72,3 +72,5 @@ build.sh
 *.csv
 # Prompt梳理文档
 *.md
+data/drama_generator.db-shm
+data/drama_generator.db-wal

@@ -121,6 +121,9 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.VideoGeneration{},
 		&models.VideoMerge{},
 
+		// 风格配置
+		&models.Style{},
+
 		// AI配置
 		&models.AIServiceConfig{},
 		&models.AIServiceProvider{},

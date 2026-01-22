@@ -62,9 +62,9 @@ type FramePromptResponse struct {
 }
 
 type PrevLastFramePreview struct {
-	SourceStoryboardID     uint                `json:"source_storyboard_id"`
-	SourceStoryboardNumber int                 `json:"source_storyboard_number"`
-	Prompt                 *string             `json:"prompt,omitempty"`
+	SourceStoryboardID     uint                 `json:"source_storyboard_id"`
+	SourceStoryboardNumber int                  `json:"source_storyboard_number"`
+	Prompt                 *string              `json:"prompt,omitempty"`
 	Images                 []PrevLastFrameImage `json:"images,omitempty"`
 }
 
@@ -234,6 +234,15 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 		}
 	}
 
+	styleKey := ""
+	var episode models.Episode
+	if err := s.db.Select("drama_id").Where("id = ?", storyboard.EpisodeID).First(&episode).Error; err == nil {
+		var drama models.Drama
+		if err := s.db.Select("style").Where("id = ?", episode.DramaID).First(&drama).Error; err == nil {
+			styleKey = drama.Style
+		}
+	}
+
 	response := &FramePromptResponse{
 		FrameType: req.FrameType,
 	}
@@ -242,13 +251,16 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 	switch req.FrameType {
 	case FrameTypeFirst:
 		response.SingleFrame = s.generateFirstFrame(storyboard, scene, model)
+		response.SingleFrame.Prompt = applyStyleToPrompt(response.SingleFrame.Prompt, styleKey)
 		// 保存单帧提示词
 		s.saveFramePrompt(req.StoryboardID, string(req.FrameType), response.SingleFrame.Prompt, response.SingleFrame.Description, "")
 	case FrameTypeKey:
 		response.SingleFrame = s.generateKeyFrame(storyboard, scene, model)
+		response.SingleFrame.Prompt = applyStyleToPrompt(response.SingleFrame.Prompt, styleKey)
 		s.saveFramePrompt(req.StoryboardID, string(req.FrameType), response.SingleFrame.Prompt, response.SingleFrame.Description, "")
 	case FrameTypeLast:
 		response.SingleFrame = s.generateLastFrame(storyboard, scene, model)
+		response.SingleFrame.Prompt = applyStyleToPrompt(response.SingleFrame.Prompt, styleKey)
 		s.saveFramePrompt(req.StoryboardID, string(req.FrameType), response.SingleFrame.Prompt, response.SingleFrame.Description, "")
 	case FrameTypePanel:
 		count := req.PanelCount
@@ -256,6 +268,9 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 			count = 3
 		}
 		response.MultiFrame = s.generatePanelFrames(storyboard, scene, count, model)
+		for i := range response.MultiFrame.Frames {
+			response.MultiFrame.Frames[i].Prompt = applyStyleToPrompt(response.MultiFrame.Frames[i].Prompt, styleKey)
+		}
 		// 保存多帧提示词（合并为一条记录）
 		var prompts []string
 		for _, frame := range response.MultiFrame.Frames {
@@ -265,6 +280,9 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 		s.saveFramePrompt(req.StoryboardID, string(req.FrameType), combinedPrompt, "分镜板组合提示词", response.MultiFrame.Layout)
 	case FrameTypeAction:
 		response.MultiFrame = s.generateActionSequence(storyboard, scene, model)
+		for i := range response.MultiFrame.Frames {
+			response.MultiFrame.Frames[i].Prompt = applyStyleToPrompt(response.MultiFrame.Frames[i].Prompt, styleKey)
+		}
 		var prompts []string
 		for _, frame := range response.MultiFrame.Frames {
 			prompts = append(prompts, frame.Prompt)
@@ -623,6 +641,6 @@ func (s *FramePromptService) buildFallbackPrompt(sb models.Storyboard, scene *mo
 		parts = append(parts, *sb.Atmosphere)
 	}
 
-	parts = append(parts, "anime style", suffix)
+	parts = append(parts, "{{STYLE}}", suffix)
 	return strings.Join(parts, ", ")
 }

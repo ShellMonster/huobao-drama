@@ -27,6 +27,26 @@ CREATE TABLE IF NOT EXISTS dramas (
 CREATE INDEX IF NOT EXISTS idx_dramas_status ON dramas(status);
 CREATE INDEX IF NOT EXISTS idx_dramas_deleted_at ON dramas(deleted_at);
 
+-- 风格表
+CREATE TABLE IF NOT EXISTS styles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    prompt_zh TEXT,
+    prompt_en TEXT,
+    preview_url TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME
+);
+
+CREATE INDEX IF NOT EXISTS idx_styles_key ON styles(key);
+CREATE INDEX IF NOT EXISTS idx_styles_active ON styles(is_active);
+CREATE INDEX IF NOT EXISTS idx_styles_deleted_at ON styles(deleted_at);
+
 -- 章节表
 CREATE TABLE IF NOT EXISTS episodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -484,6 +504,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_service_providers_deleted_at ON ai_service_pro
 -- ======================================
 -- 7. 初始数据
 -- ======================================
+
+-- 插入默认风格
+INSERT OR IGNORE INTO styles (key, name, prompt_zh, prompt_en, preview_url, sort_order, is_active, is_default) VALUES
+('realistic', '真人都市风格', '真人都市风格，写实摄影质感，电影光效', 'realistic modern urban photography style, cinematic lighting, natural textures', '/static/styles/realistic.jpg', 0, 1, 1),
+('anime_cinematic', '电影感动漫风格', '电影感动漫风格', 'cinematic anime style', '/static/styles/anime_cinematic.jpg', 10, 1, 0),
+('anime_isekai', '日漫异世界风格', '日漫异世界风格，明亮色彩，精细线条', 'Japanese isekai anime style, vibrant colors, clean linework', '/static/styles/anime_isekai.jpg', 20, 1, 0),
+('fantasy_cartoon', '奇幻卡通风格', '奇幻卡通风格，夸张造型，丰富色彩', 'fantasy cartoon style, whimsical shapes, rich colors', '/static/styles/fantasy_cartoon.jpg', 30, 1, 0),
+('ink_wash', '古风水墨风格', '古风水墨风格，宣纸纹理，留白', 'Chinese ink wash painting style, ink texture, rice paper grain, minimal', '/static/styles/ink_wash.jpg', 40, 1, 0);
 
 -- 插入默认AI服务提供商
 INSERT OR IGNORE INTO ai_service_providers (name, display_name, service_type, default_url, description) VALUES

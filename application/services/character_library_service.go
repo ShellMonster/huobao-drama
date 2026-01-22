@@ -319,8 +319,10 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 	prompt += ", studio lighting, professional photography"
 
 	// 添加质量和风格要求
-	prompt += ", high quality, detailed, anime style, character design"
+	prompt += ", high quality, detailed, {{STYLE}}, character design"
 	prompt += ", no complex background, no scenery, focus on character"
+
+	prompt = applyStyleToPrompt(prompt, drama.Style)
 
 	// 调用图片生成服务
 	dramaIDStr := fmt.Sprintf("%d", character.DramaID)

@@ -10,4 +10,5 @@ const (
 	NamespaceImageDetail = "images:get"
 	NamespaceVideoDetail = "videos:get"
 	NamespaceStoryboards = "storyboards:episode"
+	NamespaceStyles      = "styles:list"
 )

@@ -138,7 +138,7 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 	sceneListLabel := s.promptI18n.FormatUserPrompt("scene_list_label")
 	sceneConstraint := s.promptI18n.FormatUserPrompt("scene_constraint")
 
-prompt := fmt.Sprintf(`%s
+	prompt := fmt.Sprintf(`%s
 
 %s%s
 
@@ -409,7 +409,7 @@ prompt := fmt.Sprintf(`%s
 }
 
 // generateImagePrompt 生成专门用于图片生成的提示词（首帧静态画面）
-func (s *StoryboardService) generateImagePrompt(sb Storyboard) string {
+func (s *StoryboardService) generateImagePrompt(sb Storyboard, styleKey string) string {
 	var parts []string
 
 	// 1. 完整的场景背景描述
@@ -434,13 +434,13 @@ func (s *StoryboardService) generateImagePrompt(sb Storyboard) string {
 		parts = append(parts, sb.Emotion)
 	}
 
-	// 4. 动漫风格
-	parts = append(parts, "anime style, first frame")
+	// 4. 风格占位符
+	parts = append(parts, "{{STYLE}}, first frame")
 
 	if len(parts) > 0 {
-		return strings.Join(parts, ", ")
+		return applyStyleToPrompt(strings.Join(parts, ", "), styleKey)
 	}
-	return "anime scene"
+	return applyStyleToPrompt("{{STYLE}} scene", styleKey)
 }
 
 // extractInitialPose 提取初始静态姿态（去除动作过程）
@@ -553,7 +553,7 @@ func extractCompositionType(shotType string) string {
 }
 
 // generateVideoPrompt 生成专门用于视频生成的提示词（包含运镜和动态元素）
-func (s *StoryboardService) generateVideoPrompt(sb Storyboard) string {
+func (s *StoryboardService) generateVideoPrompt(sb Storyboard, styleKey string) string {
 	var parts []string
 
 	// 1. 人物动作
@@ -610,12 +610,12 @@ func (s *StoryboardService) generateVideoPrompt(sb Storyboard) string {
 	}
 
 	// 9. 视频风格要求
-	parts = append(parts, "Style: cinematic anime style, smooth camera motion, natural character movement")
+	parts = append(parts, "Style: {{STYLE}}, smooth camera motion, natural character movement")
 
 	if len(parts) > 0 {
-		return strings.Join(parts, ". ")
+		return applyStyleToPrompt(strings.Join(parts, ". "), styleKey)
 	}
-	return "Anime style video scene"
+	return applyStyleToPrompt("{{STYLE}} video scene", styleKey)
 }
 
 func (s *StoryboardService) saveStoryboards(episodeID string, storyboards []Storyboard) error {
@@ -624,6 +624,15 @@ func (s *StoryboardService) saveStoryboards(episodeID string, storyboards []Stor
 	if err != nil {
 		s.log.Errorw("Invalid episode ID", "episode_id", episodeID, "error", err)
 		return fmt.Errorf("无效的章节ID: %s", episodeID)
+	}
+
+	styleKey := ""
+	var episode models.Episode
+	if err := s.db.Select("drama_id").Where("id = ?", uint(epID)).First(&episode).Error; err == nil {
+		var drama models.Drama
+		if err := s.db.Select("style").Where("id = ?", episode.DramaID).First(&drama).Error; err == nil {
+			styleKey = drama.Style
+		}
 	}
 
 	// 防御性检查：如果AI返回的分镜数量为0，不应该删除旧分镜
@@ -703,8 +712,8 @@ func (s *StoryboardService) saveStoryboards(episodeID string, storyboards []Stor
 				sb.ShotType, sb.Movement, sb.Action, sb.Dialogue, sb.Result, sb.Emotion)
 
 			// 生成两种专用提示词
-			imagePrompt := s.generateImagePrompt(sb) // 专用于图片生成
-			videoPrompt := s.generateVideoPrompt(sb) // 专用于视频生成
+			imagePrompt := s.generateImagePrompt(sb, styleKey) // 专用于图片生成
+			videoPrompt := s.generateVideoPrompt(sb, styleKey) // 专用于视频生成
 
 			// 处理 dialogue 字段
 			var dialoguePtr *string

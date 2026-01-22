@@ -55,6 +55,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	framePromptHandler := handlers2.NewFramePromptHandler(framePromptService, log)
 	audioExtractionHandler := handlers2.NewAudioExtractionHandler(log, cfg.Storage.LocalPath)
 	settingsHandler := handlers2.NewSettingsHandler(cfg, log)
+	styleHandler := handlers2.NewStyleHandler(db, log)
 	eventHandler := handlers2.NewEventHandler(eventHub, log)
 
 	api := r.Group("/api/v1")
@@ -215,6 +216,11 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 		{
 			settings.GET("/language", settingsHandler.GetLanguage)
 			settings.PUT("/language", settingsHandler.UpdateLanguage)
+		}
+
+		styles := api.Group("/styles")
+		{
+			styles.GET("", styleHandler.ListStyles)
 		}
 	}
 

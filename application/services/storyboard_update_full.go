@@ -122,9 +122,18 @@ func (s *StoryboardService) UpdateStoryboard(storyboardID string, updates map[st
 		sb.Duration = storyboard.Duration
 	}
 
+	styleKey := ""
+	var episode models.Episode
+	if err := s.db.Select("drama_id").Where("id = ?", storyboard.EpisodeID).First(&episode).Error; err == nil {
+		var drama models.Drama
+		if err := s.db.Select("style").Where("id = ?", episode.DramaID).First(&drama).Error; err == nil {
+			styleKey = drama.Style
+		}
+	}
+
 	// 只重新生成video_prompt
 	// image_prompt不自动更新，因为可能对应多张已生成的帧图片
-	videoPrompt := s.generateVideoPrompt(sb)
+	videoPrompt := s.generateVideoPrompt(sb, styleKey)
 
 	updateData["video_prompt"] = videoPrompt
 

@@ -3,7 +3,7 @@
   <el-dialog
     v-model="visible"
     :title="$t('drama.createNew')"
-    width="520px"
+    width="960px"
     :close-on-click-modal="false"
     class="create-dialog"
     @closed="handleClosed"
@@ -18,27 +18,41 @@
       class="create-form"
       @submit.prevent="handleSubmit"
     >
-      <el-form-item :label="$t('drama.projectName')" prop="title" required>
-        <el-input 
-          v-model="form.title" 
-          :placeholder="$t('drama.projectNamePlaceholder')"
-          size="large"
-          maxlength="100"
-          show-word-limit
-        />
-      </el-form-item>
+      <div class="create-layout">
+        <div class="form-left">
+          <el-form-item :label="$t('drama.projectName')" prop="title" required>
+            <el-input 
+              v-model="form.title" 
+              :placeholder="$t('drama.projectNamePlaceholder')"
+              size="large"
+              maxlength="100"
+              show-word-limit
+            />
+          </el-form-item>
 
-      <el-form-item :label="$t('drama.projectDesc')" prop="description">
-        <el-input 
-          v-model="form.description" 
-          type="textarea" 
-          :rows="4"
-          :placeholder="$t('drama.projectDescPlaceholder')"
-          maxlength="500"
-          show-word-limit
-          resize="none"
-        />
-      </el-form-item>
+          <el-form-item :label="$t('drama.projectDesc')" prop="description">
+            <el-input 
+              v-model="form.description" 
+              type="textarea" 
+              :rows="6"
+              :placeholder="$t('drama.projectDescPlaceholder')"
+              maxlength="500"
+              show-word-limit
+              resize="none"
+            />
+          </el-form-item>
+        </div>
+
+        <div class="form-right">
+          <el-form-item label="项目风格" prop="style" class="style-form-item">
+            <el-skeleton v-if="stylesLoading" :rows="3" animated />
+            <template v-else>
+              <StylePicker v-if="styles.length > 0" v-model="form.style" :styles="styles" :columns="3" />
+              <div v-else class="style-empty">暂无可用风格</div>
+            </template>
+          </el-form-item>
+        </div>
+      </div>
     </el-form>
 
     <template #footer>
@@ -50,6 +64,7 @@
           type="primary" 
           size="large"
           :loading="loading"
+          :disabled="stylesLoading || styles.length === 0"
           @click="handleSubmit"
         >
           <el-icon v-if="!loading"><Plus /></el-icon>
@@ -67,6 +82,9 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import type { CreateDramaRequest } from '@/types/drama'
+import type { StyleOption } from '@/types/style'
+import { styleAPI } from '@/api/style'
+import StylePicker from './StylePicker.vue'
 
 /**
  * CreateDramaDialog - Reusable dialog for creating new drama projects
@@ -84,6 +102,8 @@ const emit = defineEmits<{
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const stylesLoading = ref(false)
+const styles = ref<StyleOption[]>([])
 
 // v-model binding / 双向绑定
 const visible = ref(props.modelValue)
@@ -97,7 +117,8 @@ watch(visible, (val) => {
 // Form data / 表单数据
 const form = reactive<CreateDramaRequest>({
   title: '',
-  description: ''
+  description: '',
+  style: ''
 })
 
 // Validation rules / 验证规则
@@ -112,8 +133,37 @@ const rules: FormRules = {
 const handleClosed = () => {
   form.title = ''
   form.description = ''
+  form.style = ''
   formRef.value?.resetFields()
 }
+
+const applyDefaultStyle = () => {
+  if (styles.value.length === 0) {
+    form.style = ''
+    return
+  }
+  const defaultStyle = styles.value.find((style) => style.is_default) || styles.value[0]
+  form.style = defaultStyle?.key || ''
+}
+
+const loadStyles = async () => {
+  if (stylesLoading.value) return
+  stylesLoading.value = true
+  try {
+    styles.value = await styleAPI.list()
+    applyDefaultStyle()
+  } catch (error: any) {
+    styles.value = []
+  } finally {
+    stylesLoading.value = false
+  }
+}
+
+watch(visible, (val) => {
+  if (val) {
+    loadStyles()
+  }
+})
 
 // Close dialog / 关闭弹窗
 const handleClose = () => {
@@ -150,6 +200,7 @@ const handleSubmit = async () => {
    ======================================== */
 .create-dialog :deep(.el-dialog) {
   border-radius: var(--radius-xl);
+  max-width: calc(100vw - 48px);
 }
 
 .create-dialog :deep(.el-dialog__header) {
@@ -220,6 +271,31 @@ const handleSubmit = async () => {
   background: transparent;
 }
 
+.create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 24px;
+  align-items: start;
+}
+
+.form-right {
+  padding-left: 16px;
+  border-left: 1px solid var(--border-primary);
+}
+
+.style-form-item :deep(.el-form-item__label) {
+  margin-bottom: 0.75rem;
+}
+
+.style-empty {
+  padding: 12px;
+  border: 1px dashed var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* ========================================
    Footer Styles / 底部样式
    ======================================== */
@@ -231,5 +307,16 @@ const handleSubmit = async () => {
 
 .dialog-footer .el-button {
   min-width: 100px;
+}
+
+@media (max-width: 900px) {
+  .create-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .form-right {
+    padding-left: 0;
+    border-left: none;
+  }
 }
 </style>

@@ -28,6 +28,7 @@ type CreateDramaRequest struct {
 	Title       string `json:"title" binding:"required,min=1,max=100"`
 	Description string `json:"description"`
 	Genre       string `json:"genre"`
+	Style       string `json:"style"`
 	Tags        string `json:"tags"`
 }
 
@@ -35,6 +36,7 @@ type UpdateDramaRequest struct {
 	Title       string `json:"title" binding:"omitempty,min=1,max=100"`
 	Description string `json:"description"`
 	Genre       string `json:"genre"`
+	Style       string `json:"style"`
 	Tags        string `json:"tags"`
 	Status      string `json:"status" binding:"omitempty,oneof=draft planning production completed archived"`
 }
@@ -51,6 +53,7 @@ func (s *DramaService) CreateDrama(req *CreateDramaRequest) (*models.Drama, erro
 	drama := &models.Drama{
 		Title:  req.Title,
 		Status: "draft",
+		Style:  normalizeStyleKey(req.Style),
 	}
 
 	if req.Description != "" {
@@ -270,6 +273,9 @@ func (s *DramaService) UpdateDrama(dramaID string, req *UpdateDramaRequest) (*mo
 	}
 	if req.Tags != "" {
 		updates["tags"] = req.Tags
+	}
+	if req.Style != "" {
+		updates["style"] = normalizeStyleKey(req.Style)
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status
