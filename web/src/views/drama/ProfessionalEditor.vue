@@ -1724,15 +1724,18 @@ const reusePrevLastAvailable = computed(() => {
   return number > 1
 })
 
-const reusePrevLastImages = computed<ImageGeneration[]>(() => {
-  return currentStoryboard.value?.prev_last_images || []
-})
-
 type VideoReferenceImage = ImageGeneration & { reuse_prev?: boolean }
 
-const buildReusePrevLastReferences = (storyboard: Storyboard | null): VideoReferenceImage[] => {
-  if (!storyboard?.reuse_prev_last_frame) return []
-  const items = storyboard.prev_last_images || []
+const reusePrevLastImages = computed<ImageGeneration[]>(() => {
+  const explicit = currentStoryboard.value?.prev_last_images || []
+  if (explicit.length > 0) {
+    return explicit as ImageGeneration[]
+  }
+  return (videoReferenceImages.value || []).filter((img) => img.reuse_prev)
+})
+
+const buildReusePrevLastReferences = (items: ImageGeneration[]): VideoReferenceImage[] => {
+  if (items.length === 0) return []
   return items.map((img) => ({
     ...(img as ImageGeneration),
     frame_type: 'first',
@@ -1742,12 +1745,22 @@ const buildReusePrevLastReferences = (storyboard: Storyboard | null): VideoRefer
 
 const videoReferenceImagesView = computed<VideoReferenceImage[]>(() => {
   const base = videoReferenceImages.value || []
-  const reuse = buildReusePrevLastReferences(currentStoryboard.value)
-  if (reuse.length === 0) return base
+  const reuse = buildReusePrevLastReferences(reusePrevLastImages.value)
   const merged = new Map<number, VideoReferenceImage>()
   base.forEach((img) => merged.set(img.id, img))
   reuse.forEach((img) => merged.set(img.id, img))
-  return Array.from(merged.values())
+  let result = Array.from(merged.values())
+
+  if (currentStoryboard.value?.reuse_prev_last_frame) {
+    const hasReuseFirst = result.some((img) => img.frame_type === 'first' && img.reuse_prev)
+    if (hasReuseFirst) {
+      result = result.filter((img) => img.frame_type !== 'first' || img.reuse_prev)
+    } else {
+      result = result.filter((img) => img.frame_type !== 'first')
+    }
+  }
+
+  return result
 })
 
 const isReusePrevVideoReference = (image: VideoReferenceImage) => !!image.reuse_prev
@@ -3045,6 +3058,7 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
   try {
     const result = await imageAPI.listImages({
       storyboard_id: storyboardId,
+      include_reuse_prev_last: true,
       page: 1,
       page_size: 100
     })

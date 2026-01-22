@@ -630,6 +630,48 @@ func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *ui
 	return images, total, nil
 }
 
+func (s *ImageGenerationService) ListReusePrevLastImages(storyboardID uint) ([]models.ImageGeneration, *uint, error) {
+	if storyboardID == 0 {
+		return nil, nil, nil
+	}
+
+	var storyboard models.Storyboard
+	if err := s.db.Select("id", "episode_id", "storyboard_number", "reuse_prev_last_frame").
+		First(&storyboard, storyboardID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+
+	if !storyboard.ReusePrevLastFrame {
+		return nil, nil, nil
+	}
+
+	var prev models.Storyboard
+	if err := s.db.Select("id", "storyboard_number").
+		Where("episode_id = ? AND storyboard_number < ?", storyboard.EpisodeID, storyboard.StoryboardNumber).
+		Order("storyboard_number DESC").
+		First(&prev).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+
+	var images []models.ImageGeneration
+	if err := s.db.Where(
+		"storyboard_id = ? AND frame_type = ? AND status = ?",
+		prev.ID,
+		models.FrameTypeLast,
+		models.ImageStatusCompleted,
+	).Order("created_at DESC").Find(&images).Error; err != nil {
+		return nil, nil, err
+	}
+
+	return images, &prev.ID, nil
+}
+
 func (s *ImageGenerationService) DeleteImageGeneration(imageGenID uint) error {
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		var imageGen models.ImageGeneration

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
@@ -15,6 +16,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type imageListItem struct {
+	models.ImageGeneration
+	ReusePrev          bool  `json:"reuse_prev,omitempty"`
+	SourceStoryboardID *uint `json:"source_storyboard_id,omitempty"`
+}
 
 type ImageGenerationHandler struct {
 	imageService *services.ImageGenerationService
@@ -208,6 +215,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 
 	frameType := c.Query("frame_type")
 	status := c.Query("status")
+	includeReusePrevLast := c.Query("include_reuse_prev_last") == "true"
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
@@ -245,6 +253,11 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	} else {
 		normalizedQuery.Del("drama_id")
 	}
+	if includeReusePrevLast {
+		normalizedQuery.Set("include_reuse_prev_last", "true")
+	} else {
+		normalizedQuery.Del("include_reuse_prev_last")
+	}
 
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceImageList, normalizedQuery)
 	sceneIDVal := interface{}(nil)
@@ -267,6 +280,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		"status", status,
 		"page", page,
 		"page_size", pageSize,
+		"include_reuse_prev_last", includeReusePrevLast,
 	}
 	withFields := func(extra ...interface{}) []interface{} {
 		fields := make([]interface{}, 0, len(logFields)+len(extra))
@@ -301,21 +315,49 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		response.InternalError(c, err.Error())
 		return
 	}
+	var items interface{} = images
+	totalWithReuse := total
+	itemsCount := len(images)
+	if includeReusePrevLast && storyboardID != nil {
+		reuseImages, sourceID, reuseErr := h.imageService.ListReusePrevLastImages(*storyboardID)
+		if reuseErr != nil {
+			h.log.Warnw("Failed to load reuse previous last images", withFields("error", reuseErr)...)
+		} else if len(reuseImages) > 0 {
+			merged := make([]imageListItem, 0, len(images)+len(reuseImages))
+			for _, img := range images {
+				merged = append(merged, imageListItem{ImageGeneration: img})
+			}
+			for _, img := range reuseImages {
+				copyImg := img
+				frameTypeFirst := models.FrameTypeFirst
+				copyImg.FrameType = &frameTypeFirst
+				copyImg.StoryboardID = storyboardID
+				merged = append(merged, imageListItem{
+					ImageGeneration:    copyImg,
+					ReusePrev:          true,
+					SourceStoryboardID: sourceID,
+				})
+			}
+			items = merged
+			totalWithReuse = total + int64(len(reuseImages))
+			itemsCount = len(merged)
+		}
+	}
 	h.log.Infow("List images db query done", withFields(
 		"cache_key", cacheKey,
 		"db_duration_ms", time.Since(dbStart).Milliseconds(),
 		"duration_ms", time.Since(start).Milliseconds(),
-		"total", total,
-		"items", len(images),
+		"total", totalWithReuse,
+		"items", itemsCount,
 	)...)
 
-	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+	totalPages := (totalWithReuse + int64(pageSize) - 1) / int64(pageSize)
 	payload := response.PaginationData{
-		Items: images,
+		Items: items,
 		Pagination: response.Pagination{
 			Page:       page,
 			PageSize:   pageSize,
-			Total:      total,
+			Total:      totalWithReuse,
 			TotalPages: totalPages,
 		},
 	}

@@ -1,6 +1,7 @@
 export interface ImageGeneration {
   id: number
   storyboard_id?: number
+  source_storyboard_id?: number
   scene_id?: string
   drama_id: string
   character_id?: number
@@ -27,6 +28,7 @@ export interface ImageGeneration {
   created_at: string
   updated_at: string
   completed_at?: string
+  reuse_prev?: boolean
 }
 
 export type ImageStatus = 'pending' | 'processing' | 'completed' | 'failed'
@@ -60,6 +62,7 @@ export interface ImageGenerationListParams {
   storyboard_id?: number
   frame_type?: string
   status?: ImageStatus
+  include_reuse_prev_last?: boolean
   page?: number
   page_size?: number
 }
