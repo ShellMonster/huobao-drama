@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,6 +81,39 @@ func (s *LocalStorage) IsLocalURL(url string) bool {
 		return false
 	}
 	return strings.HasPrefix(url, s.baseURL+"/")
+}
+
+// ResolvePath converts a local URL back to the filesystem path.
+func (s *LocalStorage) ResolvePath(rawURL string) (string, error) {
+	if !s.IsLocalURL(rawURL) {
+		return "", fmt.Errorf("not a local url")
+	}
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parse url: %w", err)
+	}
+	baseURL, err := url.Parse(s.baseURL)
+	if err != nil {
+		return "", fmt.Errorf("parse base url: %w", err)
+	}
+
+	rel := strings.TrimPrefix(parsedURL.Path, baseURL.Path)
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
+		return "", fmt.Errorf("invalid local url path")
+	}
+
+	return filepath.Join(s.basePath, filepath.FromSlash(rel)), nil
+}
+
+// ToDataURL reads a local URL and converts it to a data URI.
+func (s *LocalStorage) ToDataURL(rawURL string) (string, error) {
+	path, err := s.ResolvePath(rawURL)
+	if err != nil {
+		return "", err
+	}
+	return utils.EncodeFileToDataURI(path)
 }
 
 // DownloadFromURL 从远程URL下载文件到本地存储

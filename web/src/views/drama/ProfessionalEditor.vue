@@ -1740,6 +1740,10 @@ const clearFramePromptGenerating = (storyboardId: number) => {
 const applyFramePromptTask = (task: FramePromptTask, options: { notify?: boolean } = {}) => {
   const key = getFramePromptTaskKey(task.storyboard_id, task.frame_type)
   framePromptTasks.value[key] = task
+  const storyboardLabel = getStoryboardLabel(
+    storyboards.value.find(item => item.id === task.storyboard_id) || null,
+    task.storyboard_id
+  )
 
   if (task.status === 'pending' || task.status === 'processing') {
     generatingPromptMap.value[key] = true
@@ -1765,7 +1769,7 @@ const applyFramePromptTask = (task: FramePromptTask, options: { notify?: boolean
     }
     if (options.notify !== false && isLocal) {
       const label = getFrameTypeLabel(task.frame_type)
-      ElMessage.success(`${label}提示词生成完成`)
+      ElMessage.success(`${storyboardLabel}${label}提示词生成完成`)
       localFramePromptTaskIds.value.delete(task.id)
     }
     return
@@ -1774,7 +1778,7 @@ const applyFramePromptTask = (task: FramePromptTask, options: { notify?: boolean
   if (task.status === 'failed') {
     if (options.notify !== false && localFramePromptTaskIds.value.has(task.id)) {
       const label = getFrameTypeLabel(task.frame_type)
-      ElMessage.error(`${label}提示词生成失败: ${task.error_msg || '未知错误'}`)
+      ElMessage.error(`${storyboardLabel}${label}提示词生成失败: ${task.error_msg || '未知错误'}`)
       localFramePromptTaskIds.value.delete(task.id)
     }
   }
@@ -2367,14 +2371,14 @@ const generateFrameImage = async () => {
     const refMsg = referenceImages.length > 0
       ? ` (已添加${referenceImages.length}张参考图)`
       : ''
-    ElMessage.success(`图片生成任务已提交${refMsg}`)
+    ElMessage.success(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}图片生成任务已提交${refMsg}`)
 
     // 启动轮询
     if (isSameView) {
       startPolling()
     }
   } catch (error: any) {
-    ElMessage.error('生成失败: ' + (error.message || '未知错误'))
+    ElMessage.error(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}图片生成失败: ${error.message || '未知错误'}`)
   } finally {
     generatingImageMap.value[loadingKey] = false
   }
@@ -2719,6 +2723,8 @@ const generateVideo = async () => {
     return
   }
 
+  const storyboardLabel = getStoryboardLabel(currentStoryboard.value, currentStoryboard.value.id)
+
   // 检查参考图模式
   if (selectedReferenceMode.value !== 'none' && selectedImagesForVideo.value.length === 0) {
     ElMessage.warning('请选择参考图片')
@@ -2798,12 +2804,12 @@ const generateVideo = async () => {
         CACHE_TTL_MS
       )
     }
-    ElMessage.success('视频生成任务已提交')
+    ElMessage.success(`${storyboardLabel}视频生成任务已提交`)
 
     // 启动视频轮询
     startVideoPolling()
   } catch (error: any) {
-    ElMessage.error('生成失败: ' + (error.message || '未知错误'))
+    ElMessage.error(`${storyboardLabel}视频生成失败: ${error.message || '未知错误'}`)
   } finally {
     generatingVideo.value = false
   }

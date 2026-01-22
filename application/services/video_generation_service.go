@@ -236,32 +236,83 @@ func (s *VideoGenerationService) ProcessVideoGeneration(videoGenID uint) {
 		opts = append(opts, video.WithSeed(*videoGen.Seed))
 	}
 
+	imageURL := ""
+	if videoGen.ImageURL != nil {
+		imageURL = *videoGen.ImageURL
+	}
+	firstFrameURL := ""
+	if videoGen.FirstFrameURL != nil {
+		firstFrameURL = *videoGen.FirstFrameURL
+	}
+	lastFrameURL := ""
+	if videoGen.LastFrameURL != nil {
+		lastFrameURL = *videoGen.LastFrameURL
+	}
+	var referenceImageURLs []string
+	if videoGen.ReferenceImageURLs != nil {
+		_ = json.Unmarshal([]byte(*videoGen.ReferenceImageURLs), &referenceImageURLs)
+	}
+
+	if s.localStorage != nil {
+		imageURL, err = s.toDataURLIfLocal(imageURL)
+		if err != nil {
+			s.log.Errorw("Failed to convert image url to data url", "error", err, "id", videoGenID)
+			s.updateVideoGenError(videoGenID, err.Error())
+			return
+		}
+		firstFrameURL, err = s.toDataURLIfLocal(firstFrameURL)
+		if err != nil {
+			s.log.Errorw("Failed to convert first frame url to data url", "error", err, "id", videoGenID)
+			s.updateVideoGenError(videoGenID, err.Error())
+			return
+		}
+		lastFrameURL, err = s.toDataURLIfLocal(lastFrameURL)
+		if err != nil {
+			s.log.Errorw("Failed to convert last frame url to data url", "error", err, "id", videoGenID)
+			s.updateVideoGenError(videoGenID, err.Error())
+			return
+		}
+		referenceImageURLs, err = s.toDataURLSlice(referenceImageURLs)
+		if err != nil {
+			s.log.Errorw("Failed to convert reference images to data url", "error", err, "id", videoGenID)
+			s.updateVideoGenError(videoGenID, err.Error())
+			return
+		}
+	}
+
 	// 根据参考图模式添加相应的选项
 	if videoGen.ReferenceMode != nil {
 		switch *videoGen.ReferenceMode {
 		case "first_last":
 			// 首尾帧模式
-			if videoGen.FirstFrameURL != nil {
-				opts = append(opts, video.WithFirstFrame(*videoGen.FirstFrameURL))
+			if firstFrameURL != "" {
+				opts = append(opts, video.WithFirstFrame(firstFrameURL))
 			}
-			if videoGen.LastFrameURL != nil {
-				opts = append(opts, video.WithLastFrame(*videoGen.LastFrameURL))
+			if lastFrameURL != "" {
+				opts = append(opts, video.WithLastFrame(lastFrameURL))
 			}
 		case "multiple":
 			// 多图模式
-			if videoGen.ReferenceImageURLs != nil {
-				var imageURLs []string
-				if err := json.Unmarshal([]byte(*videoGen.ReferenceImageURLs), &imageURLs); err == nil {
-					opts = append(opts, video.WithReferenceImages(imageURLs))
-				}
+			if len(referenceImageURLs) > 0 {
+				opts = append(opts, video.WithReferenceImages(referenceImageURLs))
 			}
 		}
 	}
 
-	// 构造imageURL参数（单图模式使用，其他模式传空字符串）
-	imageURL := ""
-	if videoGen.ImageURL != nil {
-		imageURL = *videoGen.ImageURL
+	// 向后兼容：如果没有指定模式，根据提供的参数自动判断
+	if videoGen.ReferenceMode == nil {
+		if imageURL != "" {
+			opts = append(opts, video.WithFirstFrame(imageURL))
+		} else if firstFrameURL != "" || lastFrameURL != "" {
+			if firstFrameURL != "" {
+				opts = append(opts, video.WithFirstFrame(firstFrameURL))
+			}
+			if lastFrameURL != "" {
+				opts = append(opts, video.WithLastFrame(lastFrameURL))
+			}
+		} else if len(referenceImageURLs) > 0 {
+			opts = append(opts, video.WithReferenceImages(referenceImageURLs))
+		}
 	}
 
 	result, err := client.GenerateVideo(imageURL, videoGen.Prompt, opts...)
@@ -400,6 +451,38 @@ func (s *VideoGenerationService) storeURLToLocal(url string, category string) (s
 		return s.localStorage.DownloadFromURL(url, category)
 	}
 	return "", fmt.Errorf("unsupported url format")
+}
+
+func (s *VideoGenerationService) toDataURLIfLocal(url string) (string, error) {
+	if url == "" {
+		return "", nil
+	}
+	if utils.IsDataURI(url) {
+		return url, nil
+	}
+	if s.localStorage == nil || !s.localStorage.IsLocalURL(url) {
+		return url, nil
+	}
+	return s.localStorage.ToDataURL(url)
+}
+
+func (s *VideoGenerationService) toDataURLSlice(urls []string) ([]string, error) {
+	if len(urls) == 0 {
+		return urls, nil
+	}
+	converted := make([]string, 0, len(urls))
+	for _, raw := range urls {
+		url := strings.TrimSpace(raw)
+		if url == "" {
+			continue
+		}
+		dataURL, err := s.toDataURLIfLocal(url)
+		if err != nil {
+			return nil, err
+		}
+		converted = append(converted, dataURL)
+	}
+	return converted, nil
 }
 
 func (s *VideoGenerationService) completeVideoGeneration(videoGenID uint, videoURL string, duration *int, width *int, height *int, firstFrameURL *string) {

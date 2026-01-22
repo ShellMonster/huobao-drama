@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/utils"
 	"github.com/volcengine/volc-sdk-golang/service/visual"
 )
 
@@ -104,12 +105,38 @@ func (c *JimengCVClient) GenerateVideo(imageURL, prompt string, opts ...VideoOpt
 
 	frames := mapDurationToFrames(options.Duration)
 
+	useBinary := false
+	for _, image := range images {
+		if utils.IsDataURI(image) {
+			useBinary = true
+			break
+		}
+	}
+
+	var binaryImages []string
+	if useBinary {
+		for _, image := range images {
+			if !utils.IsDataURI(image) {
+				return nil, fmt.Errorf("jimeng requires all images to be data uri when using base64 input")
+			}
+			_, payload, err := utils.ExtractDataURIPayload(image)
+			if err != nil {
+				return nil, fmt.Errorf("parse data uri: %w", err)
+			}
+			binaryImages = append(binaryImages, payload)
+		}
+	}
+
 	requestBody := jimengSubmitRequest{
 		ReqKey:      reqKey,
 		Prompt:      strings.TrimSpace(prompt),
-		ImageURLs:   images,
 		Frames:      &frames,
 		AspectRatio: "",
+	}
+	if useBinary {
+		requestBody.BinaryDataBase64 = binaryImages
+	} else {
+		requestBody.ImageURLs = images
 	}
 
 	if options.Seed != 0 {
