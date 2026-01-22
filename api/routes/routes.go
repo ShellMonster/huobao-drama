@@ -118,6 +118,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 		upload := api.Group("/upload")
 		{
 			upload.POST("/image", uploadHandler.UploadImage)
+			upload.POST("/style", uploadHandler.UploadStyleImage)
 		}
 
 		// 分镜头路由
@@ -221,6 +222,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 		styles := api.Group("/styles")
 		{
 			styles.GET("", styleHandler.ListStyles)
+			styles.POST("", styleHandler.CreateStyle)
+			styles.PUT("/:id", styleHandler.UpdateStyle)
+			styles.DELETE("/:id", styleHandler.DeleteStyle)
 		}
 	}
 

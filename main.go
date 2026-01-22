@@ -46,6 +46,9 @@ func main() {
 	if err := styleService.EnsureDefaults(cfg.Storage.LocalPath, cfg.Storage.BaseURL); err != nil {
 		logr.Warn("Failed to seed styles", "error", err)
 	}
+	if err := services.MigrateLegacyStyleKeys(db, logr); err != nil {
+		logr.Warn("Failed to migrate legacy style keys", "error", err)
+	}
 	if err := styleService.RefreshStyleCatalog(); err != nil {
 		logr.Warn("Failed to refresh style catalog", "error", err)
 	}

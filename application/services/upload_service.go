@@ -72,6 +72,11 @@ func (s *UploadService) UploadCharacterImage(file io.Reader, fileName, contentTy
 	return s.UploadFile(file, fileName, contentType, "characters")
 }
 
+// UploadStyleImage 上传风格预览图
+func (s *UploadService) UploadStyleImage(file io.Reader, fileName, contentType string) (string, error) {
+	return s.UploadFile(file, fileName, contentType, "styles")
+}
+
 // DeleteFile 删除本地文件
 func (s *UploadService) DeleteFile(fileURL string) error {
 	// 从URL中提取相对路径

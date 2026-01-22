@@ -483,7 +483,7 @@ func (p *PromptI18n) FormatUserPrompt(key string, args ...interface{}) string {
 			"character_list_label":   "【本剧可用角色列表】",
 			"scene_list_label":       "【本剧已提取的场景背景列表】",
 			"task_instruction":       "将小说剧本按**独立动作单元**拆解为分镜头方案。",
-			"character_constraint":   "**重要**：在characters字段中，只能使用上述角色列表中的角色ID（数字），不得自创角色或使用其他ID。",
+			"character_constraint":   "**重要**：在characters字段中，只能使用上述角色列表中的角色ID（数字），不得自创角色或使用其他ID。除characters字段外，所有文本字段（title、action、dialogue、result、emotion等）只能使用角色名称，不得出现角色ID、括号数字或编号。",
 			"scene_constraint":       "**重要**：在scene_id字段中，必须从上述背景列表中选择最匹配的背景ID（数字）。如果没有合适的背景，则填null。",
 			"shot_description_label": "镜头描述: %s",
 			"scene_label":            "场景: %s, %s",

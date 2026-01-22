@@ -66,6 +66,11 @@ const routes: RouteRecordRaw[] = [
     path: '/settings/ai-config',
     name: 'AIConfig',
     component: () => import('../views/settings/AIConfig.vue')
+  },
+  {
+    path: '/settings/styles',
+    name: 'StyleManagement',
+    component: () => import('../views/settings/StyleManagement.vue')
   }
 ]
 

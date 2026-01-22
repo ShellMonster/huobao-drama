@@ -2283,6 +2283,8 @@ onBeforeUnmount(() => {
       display: flex;
       align-items: center;
       gap: 16px;
+      flex-wrap: nowrap;
+      min-width: 0;
 
       h3 {
         display: flex;
@@ -2292,6 +2294,8 @@ onBeforeUnmount(() => {
         font-size: 16px;
         font-weight: 600;
         color: var(--text-primary);
+        white-space: nowrap;
+        flex-shrink: 0;
 
         .el-icon {
           color: var(--accent);
@@ -2301,6 +2305,9 @@ onBeforeUnmount(() => {
 
       .el-alert {
         border-radius: 4px;
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
       }
     }
 

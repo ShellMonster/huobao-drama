@@ -20,60 +20,46 @@ type styleDefinition struct {
 	IsDefault  bool
 }
 
-const fallbackDefaultStyleKey = "realistic"
-const stylePlaceholder = "{{STYLE}}"
+const (
+	fallbackDefaultStyleKey = "c65ac50bb5eba9a88cde3dd51919440e"
+	realisticStyleKey       = "4e8ccfcdeb7abda4f35eea94759e00df"
+	stylePlaceholder        = "{{STYLE}}"
+)
 
 var (
-	styleCatalogMu sync.RWMutex
-	styleCatalog   = map[string]styleDefinition{
-		"realistic": {
-			Key:        "realistic",
-			Name:       "真人都市风格",
-			PromptZh:   "真人都市风格，写实摄影质感，电影光效",
-			PromptEn:   "realistic modern urban photography style, cinematic lighting, natural textures",
-			PreviewURL: "/static/styles/realistic.jpg",
-			SortOrder:  0,
-			IsDefault:  true,
-		},
-		"anime_cinematic": {
-			Key:        "anime_cinematic",
-			Name:       "电影感动漫风格",
-			PromptZh:   "电影感动漫风格",
-			PromptEn:   "cinematic anime style",
-			PreviewURL: "/static/styles/anime_cinematic.jpg",
-			SortOrder:  10,
-		},
-		"anime_isekai": {
-			Key:        "anime_isekai",
-			Name:       "日漫异世界风格",
-			PromptZh:   "日漫异世界风格，明亮色彩，精细线条",
-			PromptEn:   "Japanese isekai anime style, vibrant colors, clean linework",
-			PreviewURL: "/static/styles/anime_isekai.jpg",
-			SortOrder:  20,
-		},
-		"fantasy_cartoon": {
-			Key:        "fantasy_cartoon",
-			Name:       "奇幻卡通风格",
-			PromptZh:   "奇幻卡通风格，夸张造型，丰富色彩",
-			PromptEn:   "fantasy cartoon style, whimsical shapes, rich colors",
-			PreviewURL: "/static/styles/fantasy_cartoon.jpg",
-			SortOrder:  30,
-		},
-		"ink_wash": {
-			Key:        "ink_wash",
-			Name:       "古风水墨风格",
-			PromptZh:   "古风水墨风格，宣纸纹理，留白",
-			PromptEn:   "Chinese ink wash painting style, ink texture, rice paper grain, minimal",
-			PreviewURL: "/static/styles/ink_wash.jpg",
-			SortOrder:  40,
-		},
-	}
+	styleCatalogMu  sync.RWMutex
+	styleCatalog    = buildDefaultStyleCatalog()
 	defaultStyleKey = fallbackDefaultStyleKey
 )
 
 var styleAliases = map[string]string{
-	"anime":           "anime_cinematic",
-	"realistic_urban": "realistic",
+	"realistic":       realisticStyleKey,
+	"realistic_urban": realisticStyleKey,
+	"anime_cinematic": realisticStyleKey,
+	"anime_isekai":    realisticStyleKey,
+	"fantasy_cartoon": realisticStyleKey,
+	"ink_wash":        realisticStyleKey,
+}
+
+func buildDefaultStyleCatalog() map[string]styleDefinition {
+	seeds := DefaultStyleSeeds()
+	catalog := make(map[string]styleDefinition, len(seeds))
+	for idx, seed := range seeds {
+		key := hashStyleKey(seed.ImageURL)
+		if key == "" || seed.Name == "" {
+			continue
+		}
+		catalog[key] = styleDefinition{
+			Key:        key,
+			Name:       seed.Name,
+			PromptZh:   seed.Name,
+			PromptEn:   seed.Name,
+			PreviewURL: fmt.Sprintf("/static/styles/%s.webp", key),
+			SortOrder:  idx,
+			IsDefault:  idx == 0,
+		}
+	}
+	return catalog
 }
 
 func normalizeStyleKey(styleKey string) string {
@@ -182,6 +168,7 @@ func DefaultStyles() []models.Style {
 			SortOrder:  def.SortOrder,
 			IsActive:   true,
 			IsDefault:  def.IsDefault,
+			IsSystem:   true,
 		})
 	}
 	return styles

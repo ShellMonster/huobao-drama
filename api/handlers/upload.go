@@ -78,6 +78,52 @@ func (h *UploadHandler) UploadImage(c *gin.Context) {
 	})
 }
 
+// UploadStyleImage 上传风格预览图
+func (h *UploadHandler) UploadStyleImage(c *gin.Context) {
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		response.BadRequest(c, "请选择文件")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	allowedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/jpg":  true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
+	}
+
+	if !allowedTypes[contentType] {
+		response.BadRequest(c, "只支持图片格式 (jpg, png, gif, webp)")
+		return
+	}
+
+	if header.Size > 10*1024*1024 {
+		response.BadRequest(c, "文件大小不能超过10MB")
+		return
+	}
+
+	fileURL, err := h.uploadService.UploadStyleImage(file, header.Filename, contentType)
+	if err != nil {
+		h.log.Errorw("Failed to upload style image", "error", err)
+		response.InternalError(c, "上传失败")
+		return
+	}
+
+	response.Success(c, gin.H{
+		"url":      fileURL,
+		"filename": header.Filename,
+		"size":     header.Size,
+	})
+}
+
 // UploadCharacterImage 上传角色图片（带角色ID）
 func (h *UploadHandler) UploadCharacterImage(c *gin.Context) {
 	characterID := c.Param("id")

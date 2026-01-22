@@ -4,10 +4,66 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
+
+var legacyStyleKeys = []string{
+	"realistic",
+	"anime_cinematic",
+	"anime_isekai",
+	"fantasy_cartoon",
+	"ink_wash",
+}
+
+func MigrateLegacyStyleKeys(db *gorm.DB, log *logger.Logger) error {
+	if len(legacyStyleKeys) == 0 {
+		return nil
+	}
+
+	var updated int64
+	if err := db.Model(&models.Drama{}).
+		Where("style IN ?", legacyStyleKeys).
+		Count(&updated).Error; err != nil {
+		return err
+	}
+	if updated > 0 {
+		if err := db.Model(&models.Drama{}).
+			Where("style IN ?", legacyStyleKeys).
+			Update("style", realisticStyleKey).Error; err != nil {
+			return err
+		}
+	}
+
+	var removed int64
+	if err := db.Model(&models.Style{}).
+		Where("key IN ?", legacyStyleKeys).
+		Count(&removed).Error; err != nil {
+		return err
+	}
+	if removed > 0 {
+		if err := db.Where("key IN ?", legacyStyleKeys).
+			Delete(&models.Style{}).Error; err != nil {
+			return err
+		}
+		if err := ensureDefaultStyle(db); err != nil {
+			return err
+		}
+	}
+
+	if updated > 0 {
+		cache.BumpNamespace(cache.NamespaceDramaDetail)
+		cache.BumpNamespace(cache.NamespaceDramaList)
+	}
+	if updated > 0 || removed > 0 {
+		cache.BumpNamespace(cache.NamespaceStyles)
+		log.Infow("Legacy style key migration completed", "dramas_updated", updated, "styles_removed", removed)
+	}
+
+	return nil
+}
 
 type promptRow struct {
 	ID     uint   `gorm:"column:id"`

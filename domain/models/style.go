@@ -16,6 +16,7 @@ type Style struct {
 	SortOrder  int            `gorm:"default:0" json:"sort_order"`
 	IsActive   bool           `gorm:"default:true" json:"is_active"`
 	IsDefault  bool           `gorm:"default:false" json:"is_default"`
+	IsSystem   bool           `gorm:"default:false" json:"is_system"`
 	CreatedAt  time.Time      `gorm:"not null;autoCreateTime" json:"created_at"`
 	UpdatedAt  time.Time      `gorm:"not null;autoUpdateTime" json:"updated_at"`
 	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`

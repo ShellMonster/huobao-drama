@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS dramas (
     title TEXT NOT NULL,
     description TEXT,
     genre TEXT,
-    style TEXT NOT NULL DEFAULT 'realistic',
+    style TEXT NOT NULL DEFAULT 'c65ac50bb5eba9a88cde3dd51919440e',
     total_episodes INTEGER NOT NULL DEFAULT 1,
     total_duration INTEGER NOT NULL DEFAULT 0, -- 总时长(秒)
     status TEXT NOT NULL DEFAULT 'draft', -- draft, in_progress, completed
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS styles (
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
     is_default INTEGER NOT NULL DEFAULT 0,
+    is_system INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME
@@ -506,12 +507,31 @@ CREATE INDEX IF NOT EXISTS idx_ai_service_providers_deleted_at ON ai_service_pro
 -- ======================================
 
 -- 插入默认风格
-INSERT OR IGNORE INTO styles (key, name, prompt_zh, prompt_en, preview_url, sort_order, is_active, is_default) VALUES
-('realistic', '真人都市风格', '真人都市风格，写实摄影质感，电影光效', 'realistic modern urban photography style, cinematic lighting, natural textures', '/static/styles/realistic.jpg', 0, 1, 1),
-('anime_cinematic', '电影感动漫风格', '电影感动漫风格', 'cinematic anime style', '/static/styles/anime_cinematic.jpg', 10, 1, 0),
-('anime_isekai', '日漫异世界风格', '日漫异世界风格，明亮色彩，精细线条', 'Japanese isekai anime style, vibrant colors, clean linework', '/static/styles/anime_isekai.jpg', 20, 1, 0),
-('fantasy_cartoon', '奇幻卡通风格', '奇幻卡通风格，夸张造型，丰富色彩', 'fantasy cartoon style, whimsical shapes, rich colors', '/static/styles/fantasy_cartoon.jpg', 30, 1, 0),
-('ink_wash', '古风水墨风格', '古风水墨风格，宣纸纹理，留白', 'Chinese ink wash painting style, ink texture, rice paper grain, minimal', '/static/styles/ink_wash.jpg', 40, 1, 0);
+INSERT OR IGNORE INTO styles (key, name, prompt_zh, prompt_en, preview_url, sort_order, is_active, is_default, is_system) VALUES
+('c65ac50bb5eba9a88cde3dd51919440e', '日漫异世界风格', '日漫异世界风格', '日漫异世界风格', '/static/styles/c65ac50bb5eba9a88cde3dd51919440e.webp', 0, 1, 1, 1),
+('0d5be543fa3e5c52c89770dfb49ddf0d', '奇幻卡通风格', '奇幻卡通风格', '奇幻卡通风格', '/static/styles/0d5be543fa3e5c52c89770dfb49ddf0d.webp', 1, 1, 0, 1),
+('2b934bb31ae7c8284d171325d1889061', '国漫仙侠风格', '国漫仙侠风格', '国漫仙侠风格', '/static/styles/2b934bb31ae7c8284d171325d1889061.webp', 2, 1, 0, 1),
+('a334e2f3fc261f609efbfbedcd93e084', 'CG史诗风格', 'CG史诗风格', 'CG史诗风格', '/static/styles/a334e2f3fc261f609efbfbedcd93e084.webp', 3, 1, 0, 1),
+('0350ede07729bc44d8012870cd1a8c69', '极细线条韩漫', '极细线条韩漫', '极细线条韩漫', '/static/styles/0350ede07729bc44d8012870cd1a8c69.webp', 4, 1, 0, 1),
+('a7e81d4427342b7cd053bc31c7371cbe', '韩漫古装风格', '韩漫古装风格', '韩漫古装风格', '/static/styles/a7e81d4427342b7cd053bc31c7371cbe.webp', 5, 1, 0, 1),
+('3bc9b93627f8776e849ee5f74550ab36', '韩漫都市风格', '韩漫都市风格', '韩漫都市风格', '/static/styles/3bc9b93627f8776e849ee5f74550ab36.webp', 6, 1, 0, 1),
+('3f7c0529571c7813285db2311e61d8d9', '动漫通用风格', '动漫通用风格', '动漫通用风格', '/static/styles/3f7c0529571c7813285db2311e61d8d9.webp', 7, 1, 0, 1),
+('3fbb6d37027bd270acac91ac3cd27730', '古风水墨风格', '古风水墨风格', '古风水墨风格', '/static/styles/3fbb6d37027bd270acac91ac3cd27730.webp', 8, 1, 0, 1),
+('2313a1434b390e16f01d206b21178559', '国风卡通风格', '国风卡通风格', '国风卡通风格', '/static/styles/2313a1434b390e16f01d206b21178559.webp', 9, 1, 0, 1),
+('c8eb0313394c85d67850f8db356fe06f', '都市动漫风格', '都市动漫风格', '都市动漫风格', '/static/styles/c8eb0313394c85d67850f8db356fe06f.webp', 10, 1, 0, 1),
+('a3a06c49e073ade9a956cd01cef7de23', '校园卡通风格', '校园卡通风格', '校园卡通风格', '/static/styles/a3a06c49e073ade9a956cd01cef7de23.webp', 11, 1, 0, 1),
+('024214c4680e15cb3c83f02578bc86e7', 'CG都市风格', 'CG都市风格', 'CG都市风格', '/static/styles/024214c4680e15cb3c83f02578bc86e7.webp', 12, 1, 0, 1),
+('4319da77cb350756364bae6b18b227b8', '美漫风格', '美漫风格', '美漫风格', '/static/styles/4319da77cb350756364bae6b18b227b8.webp', 13, 1, 0, 1),
+('230784217a7c9ee272539486beecdb1d', '2d平面风格', '2d平面风格', '2d平面风格', '/static/styles/230784217a7c9ee272539486beecdb1d.webp', 14, 1, 0, 1),
+('a52eb3f98a5bdfaaa9da74030211197a', '唯美光影二次元', '唯美光影二次元', '唯美光影二次元', '/static/styles/a52eb3f98a5bdfaaa9da74030211197a.webp', 15, 1, 0, 1),
+('a068b41a8d1f2f10965e790fa92abfde', '和风热血漫', '和风热血漫', '和风热血漫', '/static/styles/a068b41a8d1f2f10965e790fa92abfde.webp', 16, 1, 0, 1),
+('8c69d9245fcdb8bdc0ccdaf08a33f1a8', '硬核美漫风', '硬核美漫风', '硬核美漫风', '/static/styles/8c69d9245fcdb8bdc0ccdaf08a33f1a8.webp', 17, 1, 0, 1),
+('045a77e07de154a2a85de87b66f427fc', '潮酷水墨漫', '潮酷水墨漫', '潮酷水墨漫', '/static/styles/045a77e07de154a2a85de87b66f427fc.webp', 18, 1, 0, 1),
+('8145bb200a42807a8663a51a1744a12b', '暗黑战斗风', '暗黑战斗风', '暗黑战斗风', '/static/styles/8145bb200a42807a8663a51a1744a12b.webp', 19, 1, 0, 1),
+('1779bf725acc75ff431f9a01bfdbd18b', '赛博故障风', '赛博故障风', '赛博故障风', '/static/styles/1779bf725acc75ff431f9a01bfdbd18b.webp', 20, 1, 0, 1),
+('68f285cba691b3ae1707a071ff20aff1', '精品韩漫风', '精品韩漫风', '精品韩漫风', '/static/styles/68f285cba691b3ae1707a071ff20aff1.webp', 21, 1, 0, 1),
+('4279bfef4e82476dab4121a030790dfa', '史诗CG写实', '史诗CG写实', '史诗CG写实', '/static/styles/4279bfef4e82476dab4121a030790dfa.webp', 22, 1, 0, 1),
+('4e8ccfcdeb7abda4f35eea94759e00df', '现实摄影', '现实摄影', '现实摄影', '/static/styles/4e8ccfcdeb7abda4f35eea94759e00df.webp', 23, 1, 0, 1);
 
 -- 插入默认AI服务提供商
 INSERT OR IGNORE INTO ai_service_providers (name, display_name, service_type, default_url, description) VALUES
