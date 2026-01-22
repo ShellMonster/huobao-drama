@@ -138,6 +138,66 @@ func (h *EventHandler) StreamVideoGenerations(c *gin.Context) {
 	streamSSE(c, "video_generation", ch)
 }
 
+func (h *EventHandler) StreamFramePromptTasks(c *gin.Context) {
+	taskIDs, err := parseUintSet(c.Query("task_ids"))
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "error": gin.H{"message": err.Error()}})
+		return
+	}
+	storyboardID := parseUintPointer(c.Query("storyboard_id"))
+	frameType := strings.TrimSpace(c.Query("frame_type"))
+
+	filter := func(task *models.FramePromptTask) bool {
+		if len(taskIDs) > 0 {
+			if _, ok := taskIDs[task.ID]; !ok {
+				return false
+			}
+		}
+		if storyboardID != nil && task.StoryboardID != *storyboardID {
+			return false
+		}
+		if frameType != "" && task.FrameType != frameType {
+			return false
+		}
+		return true
+	}
+
+	_, ch, unsubscribe := h.hub.FramePromptTasks.Subscribe(filter)
+	defer unsubscribe()
+
+	streamSSE(c, "frame_prompt_task", ch)
+}
+
+func (h *EventHandler) StreamVideoMerges(c *gin.Context) {
+	mergeIDs, err := parseUintSet(c.Query("merge_ids"))
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "error": gin.H{"message": err.Error()}})
+		return
+	}
+	episodeID := parseUintPointer(c.Query("episode_id"))
+	dramaID := parseUintPointer(c.Query("drama_id"))
+
+	filter := func(merge *models.VideoMerge) bool {
+		if len(mergeIDs) > 0 {
+			if _, ok := mergeIDs[merge.ID]; !ok {
+				return false
+			}
+		}
+		if episodeID != nil && merge.EpisodeID != *episodeID {
+			return false
+		}
+		if dramaID != nil && merge.DramaID != *dramaID {
+			return false
+		}
+		return true
+	}
+
+	_, ch, unsubscribe := h.hub.VideoMerges.Subscribe(filter)
+	defer unsubscribe()
+
+	streamSSE(c, "video_merge", ch)
+}
+
 func streamSSE[T any](c *gin.Context, eventName string, ch <-chan T) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

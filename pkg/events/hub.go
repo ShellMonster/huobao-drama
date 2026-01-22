@@ -175,10 +175,124 @@ func (h *VideoGenerationHub) Publish(videoGen *models.VideoGeneration) {
 	}
 }
 
+type FramePromptTaskHub struct {
+	mu   sync.RWMutex
+	subs map[string]*framePromptSubscriber
+}
+
+type framePromptSubscriber struct {
+	ch     chan *models.FramePromptTask
+	filter func(*models.FramePromptTask) bool
+}
+
+func NewFramePromptTaskHub() *FramePromptTaskHub {
+	return &FramePromptTaskHub{
+		subs: make(map[string]*framePromptSubscriber),
+	}
+}
+
+func (h *FramePromptTaskHub) Subscribe(filter func(*models.FramePromptTask) bool) (string, <-chan *models.FramePromptTask, func()) {
+	id := uuid.New().String()
+	ch := make(chan *models.FramePromptTask, 20)
+
+	h.mu.Lock()
+	h.subs[id] = &framePromptSubscriber{ch: ch, filter: filter}
+	h.mu.Unlock()
+
+	unsubscribe := func() {
+		h.mu.Lock()
+		if sub, ok := h.subs[id]; ok {
+			delete(h.subs, id)
+			close(sub.ch)
+		}
+		h.mu.Unlock()
+	}
+
+	return id, ch, unsubscribe
+}
+
+func (h *FramePromptTaskHub) Publish(task *models.FramePromptTask) {
+	if task == nil {
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, sub := range h.subs {
+		if sub.filter != nil && !sub.filter(task) {
+			continue
+		}
+		taskCopy := *task
+		select {
+		case sub.ch <- &taskCopy:
+		default:
+		}
+	}
+}
+
+type VideoMergeHub struct {
+	mu   sync.RWMutex
+	subs map[string]*videoMergeSubscriber
+}
+
+type videoMergeSubscriber struct {
+	ch     chan *models.VideoMerge
+	filter func(*models.VideoMerge) bool
+}
+
+func NewVideoMergeHub() *VideoMergeHub {
+	return &VideoMergeHub{
+		subs: make(map[string]*videoMergeSubscriber),
+	}
+}
+
+func (h *VideoMergeHub) Subscribe(filter func(*models.VideoMerge) bool) (string, <-chan *models.VideoMerge, func()) {
+	id := uuid.New().String()
+	ch := make(chan *models.VideoMerge, 20)
+
+	h.mu.Lock()
+	h.subs[id] = &videoMergeSubscriber{ch: ch, filter: filter}
+	h.mu.Unlock()
+
+	unsubscribe := func() {
+		h.mu.Lock()
+		if sub, ok := h.subs[id]; ok {
+			delete(h.subs, id)
+			close(sub.ch)
+		}
+		h.mu.Unlock()
+	}
+
+	return id, ch, unsubscribe
+}
+
+func (h *VideoMergeHub) Publish(merge *models.VideoMerge) {
+	if merge == nil {
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for _, sub := range h.subs {
+		if sub.filter != nil && !sub.filter(merge) {
+			continue
+		}
+		mergeCopy := *merge
+		select {
+		case sub.ch <- &mergeCopy:
+		default:
+		}
+	}
+}
+
 type EventHub struct {
-	Tasks            *TaskHub
-	ImageGenerations *ImageGenerationHub
-	VideoGenerations *VideoGenerationHub
+	Tasks             *TaskHub
+	ImageGenerations  *ImageGenerationHub
+	VideoGenerations  *VideoGenerationHub
+	FramePromptTasks  *FramePromptTaskHub
+	VideoMerges       *VideoMergeHub
 }
 
 func NewEventHub() *EventHub {
@@ -186,5 +300,7 @@ func NewEventHub() *EventHub {
 		Tasks:            NewTaskHub(),
 		ImageGenerations: NewImageGenerationHub(),
 		VideoGenerations: NewVideoGenerationHub(),
+		FramePromptTasks: NewFramePromptTaskHub(),
+		VideoMerges:      NewVideoMergeHub(),
 	}
 }

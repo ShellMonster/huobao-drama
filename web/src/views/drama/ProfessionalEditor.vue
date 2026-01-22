@@ -954,7 +954,15 @@ import {
   Timer, Calendar, Clock, Loading, WarningFilled, Delete
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
-import { generateFramePrompt, getStoryboardFramePrompts, type FramePromptRecord, type FrameType } from '@/api/frame'
+import {
+  generateFramePrompt,
+  getStoryboardFramePrompts,
+  getStoryboardFramePromptTasks,
+  type FramePromptRecord,
+  type FramePromptTask,
+  type FramePromptTaskStatus,
+  type FrameType
+} from '@/api/frame'
 import { imageAPI } from '@/api/image'
 import { videoAPI } from '@/api/video'
 import { aiAPI } from '@/api/ai'
@@ -1040,6 +1048,8 @@ const framePrompts = ref<Record<FrameType, string>>({
   action: ''
 })
 const framePromptLoadedMap = ref<Record<string, boolean>>({})
+const framePromptTasks = ref<Record<string, FramePromptTask>>({})
+const localFramePromptTaskIds = ref<Set<number>>(new Set())
 const currentFramePrompt = ref('')
 const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
@@ -1058,6 +1068,8 @@ let imageStreamStop: (() => void) | null = null
 let imageRefreshTimer: number | null = null
 let framePromptRequestId = 0
 let framePromptLoadingRequestId = 0
+let framePromptStreamStop: (() => void) | null = null
+let framePromptPollTimer: number | null = null
 const getFramePromptLoadedKey = (storyboardId: number) => String(storyboardId)
 const markFramePromptLoaded = (storyboardId: number) => {
   framePromptLoadedMap.value[getFramePromptLoadedKey(storyboardId)] = true
@@ -1113,6 +1125,7 @@ let videoPollingTimer: any = null
 let videoStreamStop: (() => void) | null = null
 let videoRefreshTimer: number | null = null
 let mergePollingTimer: any = null  // 视频合成列表轮询定时器
+let mergeStreamStop: (() => void) | null = null
 let videoRequestId = 0
 let videoLoadingRequestId = 0
 
@@ -1644,6 +1657,107 @@ const loadFramePrompts = async (
   }
 }
 
+const getFramePromptTaskKey = (storyboardId: number, frameType: FrameType) => {
+  return `${storyboardId}_${frameType}`
+}
+
+const clearFramePromptGenerating = (storyboardId: number) => {
+  const prefix = `${storyboardId}_`
+  Object.keys(generatingPromptMap.value).forEach((key) => {
+    if (key.startsWith(prefix)) {
+      delete generatingPromptMap.value[key]
+    }
+  })
+}
+
+const applyFramePromptTask = (task: FramePromptTask, options: { notify?: boolean } = {}) => {
+  const key = getFramePromptTaskKey(task.storyboard_id, task.frame_type)
+  framePromptTasks.value[key] = task
+
+  if (task.status === 'pending' || task.status === 'processing') {
+    generatingPromptMap.value[key] = true
+    return
+  }
+
+  delete generatingPromptMap.value[key]
+
+  if (task.status === 'completed') {
+    const isLocal = localFramePromptTaskIds.value.has(task.id)
+    if (isLocal) {
+      const storageKey = getPromptStorageKey(task.storyboard_id, task.frame_type)
+      if (storageKey) {
+        sessionStorage.removeItem(storageKey)
+      }
+      framePrompts.value[task.frame_type] = ''
+      if (currentStoryboard.value?.id === task.storyboard_id && selectedFrameType.value === task.frame_type) {
+        currentFramePrompt.value = ''
+      }
+    }
+    if (currentStoryboard.value?.id === task.storyboard_id) {
+      void loadFramePrompts(task.storyboard_id, { showLoading: false, frameType: task.frame_type })
+    }
+    if (options.notify !== false && isLocal) {
+      const label = getFrameTypeLabel(task.frame_type)
+      ElMessage.success(`${label}提示词生成完成`)
+      localFramePromptTaskIds.value.delete(task.id)
+    }
+    return
+  }
+
+  if (task.status === 'failed') {
+    if (options.notify !== false && localFramePromptTaskIds.value.has(task.id)) {
+      const label = getFrameTypeLabel(task.frame_type)
+      ElMessage.error(`${label}提示词生成失败: ${task.error_msg || '未知错误'}`)
+      localFramePromptTaskIds.value.delete(task.id)
+    }
+  }
+}
+
+const loadFramePromptTasks = async (storyboardId: number) => {
+  try {
+    const statuses: FramePromptTaskStatus[] = ['pending', 'processing', 'failed']
+    const result = await getStoryboardFramePromptTasks(storyboardId, statuses)
+    clearFramePromptGenerating(storyboardId)
+    result.tasks.forEach((task) => applyFramePromptTask(task, { notify: false }))
+  } catch (error: any) {
+    console.error('加载帧提示词任务失败:', error)
+  }
+}
+
+const stopFramePromptStream = () => {
+  if (framePromptStreamStop) {
+    framePromptStreamStop()
+    framePromptStreamStop = null
+  }
+  if (framePromptPollTimer) {
+    window.clearInterval(framePromptPollTimer)
+    framePromptPollTimer = null
+  }
+}
+
+const startFramePromptPolling = (storyboardId: number) => {
+  if (framePromptPollTimer) return
+  framePromptPollTimer = window.setInterval(() => {
+    void loadFramePromptTasks(storyboardId)
+  }, 3000)
+}
+
+const startFramePromptStream = (storyboardId: number) => {
+  stopFramePromptStream()
+
+  const url = buildSSEUrl('/api/v1/events/frame-prompt-tasks', {
+    storyboard_id: storyboardId
+  })
+  framePromptStreamStop = subscribeSSE({
+    url,
+    event: 'frame_prompt_task',
+    onMessage: (task: FramePromptTask) => {
+      applyFramePromptTask(task)
+    },
+    fallback: () => startFramePromptPolling(storyboardId)
+  }).close
+}
+
 // 监听帧类型切换，从存储中加载或清空
 watch(selectedFrameType, (newType) => {
   // 切换帧类型时，停止之前的轮询，避免旧结果覆盖新帧类型
@@ -1695,6 +1809,7 @@ watch(currentStoryboard, async (newStoryboard) => {
     videoReferenceImages.value = []
     framePromptLoadingKey.value = null
     framePromptLoadingRequestId = 0
+    stopFramePromptStream()
     return
   }
 
@@ -1735,9 +1850,12 @@ watch(currentStoryboard, async (newStoryboard) => {
   await Promise.allSettled([
     loadStoryboardImages(newStoryboard.id, selectedFrameType.value, { showLoading: false }),
     loadFramePrompts(newStoryboard.id, { showLoading: false }),
+    loadFramePromptTasks(newStoryboard.id),
     loadVideoReferenceImages(newStoryboard.id),
     loadStoryboardVideos(newStoryboard.id, { showLoading: false })
   ])
+
+  startFramePromptStream(newStoryboard.id)
 })
 
 // 监听提示词变化，自动保存到sessionStorage
@@ -1874,37 +1992,17 @@ const extractFramePrompt = async () => {
     }
 
     const result = await generateFramePrompt(targetStoryboardId, params)
+    localFramePromptTaskIds.value.add(result.task.id)
+    applyFramePromptTask(result.task, { notify: false })
 
-    // 根据记录的帧类型提取prompt，确保更新到正确的位置
-    let extractedPrompt = ''
-    if (result.single_frame) {
-      extractedPrompt = result.single_frame.prompt
-    } else if (result.multi_frame && result.multi_frame.frames) {
-      // 多帧情况，将所有帧的prompt合并
-      extractedPrompt = result.multi_frame.frames
-        .map((frame: any, index: number) => `${frame.description}: ${frame.prompt}`)
-        .join('\n\n')
-    }
-
-    const storageKey = getPromptStorageKey(targetStoryboardId, targetFrameType)
-    if (storageKey) {
-      sessionStorage.setItem(storageKey, extractedPrompt)
-    }
-
-    const isSameStoryboard = currentStoryboard.value?.id === targetStoryboardId
-    if (isSameStoryboard) {
-      framePrompts.value[targetFrameType] = extractedPrompt
-      // 只在当前仍然选中该帧类型时才更新显示
-      if (selectedFrameType.value === targetFrameType) {
-        currentFramePrompt.value = extractedPrompt
-      }
-    }
-
-    ElMessage.success(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词提取成功`)
+    ElMessage.success(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词生成已提交`)
   } catch (error: any) {
+    delete generatingPromptMap.value[loadingKey]
     ElMessage.error(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词提取失败: ${error.message || '未知错误'}`)
   } finally {
-    generatingPromptMap.value[loadingKey] = false
+    if (!generatingPromptMap.value[loadingKey]) {
+      delete generatingPromptMap.value[loadingKey]
+    }
   }
 }
 
@@ -3012,9 +3110,9 @@ const loadVideoMerges = async () => {
     )
 
     if (hasProcessingTasks) {
-      startMergePolling()
+      startMergeStream()
     } else {
-      stopMergePolling()
+      stopMergeUpdates()
     }
   } catch (error: any) {
     console.error('加载视频合成列表失败:', error)
@@ -3024,7 +3122,35 @@ const loadVideoMerges = async () => {
   }
 }
 
-// 启动视频合成列表轮询
+const startMergeStream = () => {
+  if (!episodeId.value || mergeStreamStop) return
+  const url = buildSSEUrl('/api/v1/events/video-merges', {
+    episode_id: episodeId.value
+  })
+
+  mergeStreamStop = subscribeSSE({
+    url,
+    event: 'video_merge',
+    onMessage: (merge: VideoMerge) => {
+      const index = videoMerges.value.findIndex(item => item.id === merge.id)
+      if (index >= 0) {
+        videoMerges.value[index] = merge
+      } else {
+        videoMerges.value.unshift(merge)
+      }
+
+      const hasProcessingTasks = videoMerges.value.some(
+        item => item.status === 'pending' || item.status === 'processing'
+      )
+      if (!hasProcessingTasks) {
+        stopMergeUpdates()
+      }
+    },
+    fallback: startMergePolling
+  }).close
+}
+
+// 启动视频合成列表轮询（SSE 兜底）
 const startMergePolling = () => {
   if (mergePollingTimer) return
 
@@ -3042,25 +3168,31 @@ const startMergePolling = () => {
       })
       videoMerges.value = result.merges
 
-      // 检查是否还有进行中的任务
       const hasProcessingTasks = result.merges.some(
         (merge: any) => merge.status === 'pending' || merge.status === 'processing'
       )
 
       if (!hasProcessingTasks) {
-        stopMergePolling()
+        stopMergeUpdates()
       }
     } catch (error) {
     }
-  }, 3000) // 每3秒轮询一次
+  }, 3000)
 }
 
-// 停止视频合成列表轮询
 const stopMergePolling = () => {
   if (mergePollingTimer) {
     clearInterval(mergePollingTimer)
     mergePollingTimer = null
   }
+}
+
+const stopMergeUpdates = () => {
+  if (mergeStreamStop) {
+    mergeStreamStop()
+    mergeStreamStop = null
+  }
+  stopMergePolling()
 }
 
 // 处理视频合成完成事件
@@ -3175,7 +3307,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopPolling()
   stopVideoPolling()
-  stopMergePolling()
+  stopMergeUpdates()
+  stopFramePromptStream()
   window.removeEventListener('storage', handleVideoConfigStorage)
   if (loadingTimer) {
     window.clearTimeout(loadingTimer)

@@ -22,6 +22,19 @@ export interface FramePromptResponse {
   multi_frame?: MultiFramePrompt
 }
 
+export type FramePromptTaskStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export interface FramePromptTask {
+  id: number
+  storyboard_id: number
+  frame_type: FrameType
+  status: FramePromptTaskStatus
+  error_msg?: string
+  created_at: string
+  updated_at: string
+  completed_at?: string
+}
+
 // 生成帧提示词请求
 export interface GenerateFramePromptRequest {
   frame_type: FrameType
@@ -34,8 +47,8 @@ export interface GenerateFramePromptRequest {
 export function generateFramePrompt(
   storyboardId: number,
   data: GenerateFramePromptRequest
-): Promise<FramePromptResponse> {
-  return request.post<FramePromptResponse>(`/storyboards/${storyboardId}/frame-prompt`, data)
+): Promise<{ task: FramePromptTask }> {
+  return request.post<{ task: FramePromptTask }>(`/storyboards/${storyboardId}/frame-prompt`, data)
 }
 
 /**
@@ -96,4 +109,15 @@ export interface FramePromptRecord {
  */
 export function getStoryboardFramePrompts(storyboardId: number): Promise<{ frame_prompts: FramePromptRecord[] }> {
   return request.get<{ frame_prompts: FramePromptRecord[] }>(`/storyboards/${storyboardId}/frame-prompts`)
+}
+
+/**
+ * 查询镜头的帧提示词任务状态
+ */
+export function getStoryboardFramePromptTasks(
+  storyboardId: number,
+  status?: FramePromptTaskStatus[]
+): Promise<{ tasks: FramePromptTask[] }> {
+  const params = status && status.length > 0 ? { status: status.join(',') } : undefined
+  return request.get<{ tasks: FramePromptTask[] }>(`/storyboards/${storyboardId}/frame-prompt-tasks`, { params })
 }

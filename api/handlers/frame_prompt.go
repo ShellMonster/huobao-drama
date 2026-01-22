@@ -42,12 +42,14 @@ func (h *FramePromptHandler) GenerateFramePrompt(c *gin.Context) {
 		PanelCount:   req.PanelCount,
 	}
 
-	result, err := h.framePromptService.GenerateFramePrompt(serviceReq, req.Model)
+	result, err := h.framePromptService.CreateFramePromptTask(serviceReq, req.Model)
 	if err != nil {
 		h.log.Errorw("Failed to generate frame prompt", "error", err)
 		response.InternalError(c, err.Error())
 		return
 	}
 
-	response.Success(c, result)
+	response.Success(c, gin.H{
+		"task": result,
+	})
 }

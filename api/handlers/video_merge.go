@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	services2 "github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -15,9 +16,9 @@ type VideoMergeHandler struct {
 	log          *logger.Logger
 }
 
-func NewVideoMergeHandler(db *gorm.DB, transferService *services2.ResourceTransferService, storagePath, baseURL string, log *logger.Logger) *VideoMergeHandler {
+func NewVideoMergeHandler(db *gorm.DB, transferService *services2.ResourceTransferService, storagePath, baseURL string, log *logger.Logger, hub *events.VideoMergeHub) *VideoMergeHandler {
 	return &VideoMergeHandler{
-		mergeService: services2.NewVideoMergeService(db, transferService, storagePath, baseURL, log),
+		mergeService: services2.NewVideoMergeService(db, transferService, storagePath, baseURL, log, hub),
 		log:          log,
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -21,11 +22,11 @@ type DramaHandler struct {
 	log               *logger.Logger
 }
 
-func NewDramaHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService) *DramaHandler {
+func NewDramaHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService, mergeHub *events.VideoMergeHub) *DramaHandler {
 	return &DramaHandler{
 		db:                db,
 		dramaService:      services.NewDramaService(db, log),
-		videoMergeService: services.NewVideoMergeService(db, transferService, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log),
+		videoMergeService: services.NewVideoMergeService(db, transferService, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log, mergeHub),
 		log:               log,
 	}
 }

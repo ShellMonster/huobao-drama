@@ -11,6 +11,7 @@ import (
 
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/video"
 	"gorm.io/gorm"
@@ -24,9 +25,10 @@ type VideoMergeService struct {
 	storagePath     string
 	baseURL         string
 	log             *logger.Logger
+	events          *events.VideoMergeHub
 }
 
-func NewVideoMergeService(db *gorm.DB, transferService *ResourceTransferService, storagePath, baseURL string, log *logger.Logger) *VideoMergeService {
+func NewVideoMergeService(db *gorm.DB, transferService *ResourceTransferService, storagePath, baseURL string, log *logger.Logger, hub *events.VideoMergeHub) *VideoMergeService {
 	return &VideoMergeService{
 		db:              db,
 		aiService:       NewAIService(db, log),
@@ -35,6 +37,7 @@ func NewVideoMergeService(db *gorm.DB, transferService *ResourceTransferService,
 		storagePath:     storagePath,
 		baseURL:         baseURL,
 		log:             log,
+		events:          hub,
 	}
 }
 
@@ -93,6 +96,7 @@ func (s *VideoMergeService) MergeVideos(req *MergeVideoRequest) (*models.VideoMe
 		return nil, fmt.Errorf("failed to create merge record: %w", err)
 	}
 
+	s.publishMerge(videoMerge)
 	go s.processMergeVideo(videoMerge.ID)
 
 	return videoMerge, nil
@@ -105,7 +109,9 @@ func (s *VideoMergeService) processMergeVideo(mergeID uint) {
 		return
 	}
 
+	videoMerge.Status = models.VideoMergeStatusProcessing
 	s.db.Model(&videoMerge).Update("status", models.VideoMergeStatusProcessing)
+	s.publishMerge(&videoMerge)
 
 	client, err := s.getVideoClient(videoMerge.Provider)
 	if err != nil {
@@ -132,6 +138,9 @@ func (s *VideoMergeService) processMergeVideo(mergeID uint) {
 			"status":  models.VideoMergeStatusProcessing,
 			"task_id": result.TaskID,
 		})
+		videoMerge.TaskID = &result.TaskID
+		videoMerge.Status = models.VideoMergeStatusProcessing
+		s.publishMerge(&videoMerge)
 		go s.pollMergeStatus(mergeID, client, result.TaskID)
 		return
 	}
@@ -275,6 +284,7 @@ func (s *VideoMergeService) completeMerge(mergeID uint, result *video.VideoResul
 	}
 
 	s.log.Infow("Video merge completed", "id", mergeID, "url", finalVideoURL)
+	s.publishMergeByID(mergeID)
 }
 
 func (s *VideoMergeService) updateMergeError(mergeID uint, errorMsg string) {
@@ -283,6 +293,7 @@ func (s *VideoMergeService) updateMergeError(mergeID uint, errorMsg string) {
 		"error_msg": errorMsg,
 	})
 	s.log.Errorw("Video merge failed", "id", mergeID, "error", errorMsg)
+	s.publishMergeByID(mergeID)
 }
 
 func (s *VideoMergeService) getVideoClient(provider string) (video.VideoClient, error) {
@@ -367,6 +378,24 @@ func (s *VideoMergeService) DeleteMerge(mergeID uint) error {
 		return fmt.Errorf("merge not found")
 	}
 	return nil
+}
+
+func (s *VideoMergeService) publishMerge(merge *models.VideoMerge) {
+	if s.events == nil || merge == nil {
+		return
+	}
+	s.events.Publish(merge)
+}
+
+func (s *VideoMergeService) publishMergeByID(mergeID uint) {
+	if s.events == nil {
+		return
+	}
+	var merge models.VideoMerge
+	if err := s.db.First(&merge, mergeID).Error; err != nil {
+		return
+	}
+	s.events.Publish(&merge)
 }
 
 // TimelineClip 时间线片段数据

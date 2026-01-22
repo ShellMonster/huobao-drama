@@ -3,9 +3,11 @@ package services
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/config"
+	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -17,16 +19,18 @@ type FramePromptService struct {
 	log        *logger.Logger
 	config     *config.Config
 	promptI18n *PromptI18n
+	events     *events.FramePromptTaskHub
 }
 
 // NewFramePromptService 创建帧提示词服务
-func NewFramePromptService(db *gorm.DB, cfg *config.Config, log *logger.Logger) *FramePromptService {
+func NewFramePromptService(db *gorm.DB, cfg *config.Config, log *logger.Logger, hub *events.FramePromptTaskHub) *FramePromptService {
 	return &FramePromptService{
 		db:         db,
 		aiService:  NewAIService(db, log),
 		log:        log,
 		config:     cfg,
 		promptI18n: NewPromptI18n(cfg),
+		events:     hub,
 	}
 }
 
@@ -66,6 +70,43 @@ type SingleFramePrompt struct {
 type MultiFramePrompt struct {
 	Layout string              `json:"layout"` // horizontal_3, grid_2x2 等
 	Frames []SingleFramePrompt `json:"frames"`
+}
+
+// CreateFramePromptTask 创建帧提示词异步任务并启动生成
+func (s *FramePromptService) CreateFramePromptTask(req GenerateFramePromptRequest, model string) (*models.FramePromptTask, error) {
+	storyboardID := mustParseUint(req.StoryboardID)
+	if storyboardID == 0 {
+		return nil, fmt.Errorf("invalid storyboard id")
+	}
+
+	var storyboard models.Storyboard
+	if err := s.db.Select("id").First(&storyboard, storyboardID).Error; err != nil {
+		return nil, fmt.Errorf("storyboard not found: %w", err)
+	}
+
+	var existing models.FramePromptTask
+	if err := s.db.Where("storyboard_id = ? AND frame_type = ? AND status IN ?",
+		storyboardID,
+		string(req.FrameType),
+		[]models.FramePromptTaskStatus{models.FramePromptTaskPending, models.FramePromptTaskProcessing},
+	).Order("created_at DESC").First(&existing).Error; err == nil {
+		return &existing, nil
+	}
+
+	task := &models.FramePromptTask{
+		StoryboardID: uint(storyboardID),
+		FrameType:    string(req.FrameType),
+		Status:       models.FramePromptTaskPending,
+	}
+
+	if err := s.db.Create(task).Error; err != nil {
+		return nil, fmt.Errorf("failed to create frame prompt task: %w", err)
+	}
+
+	s.publishFramePromptTask(task)
+	go s.processFramePromptTask(task.ID, req, model)
+
+	return task, nil
 }
 
 // GenerateFramePrompt 生成指定类型的帧提示词并保存到frame_prompts表
@@ -128,6 +169,50 @@ func (s *FramePromptService) GenerateFramePrompt(req GenerateFramePromptRequest,
 	}
 
 	return response, nil
+}
+
+func (s *FramePromptService) processFramePromptTask(taskID uint, req GenerateFramePromptRequest, model string) {
+	if err := s.updateFramePromptTaskStatus(taskID, models.FramePromptTaskProcessing, ""); err != nil {
+		s.log.Warnw("Failed to mark frame prompt task processing", "error", err, "task_id", taskID)
+	}
+
+	_, err := s.GenerateFramePrompt(req, model)
+	if err != nil {
+		_ = s.updateFramePromptTaskStatus(taskID, models.FramePromptTaskFailed, err.Error())
+		return
+	}
+
+	_ = s.updateFramePromptTaskStatus(taskID, models.FramePromptTaskCompleted, "")
+}
+
+func (s *FramePromptService) updateFramePromptTaskStatus(taskID uint, status models.FramePromptTaskStatus, errMsg string) error {
+	updates := map[string]interface{}{
+		"status": status,
+	}
+	if errMsg != "" {
+		updates["error_msg"] = errMsg
+	}
+	if status == models.FramePromptTaskCompleted || status == models.FramePromptTaskFailed {
+		updates["completed_at"] = time.Now()
+	}
+
+	if err := s.db.Model(&models.FramePromptTask{}).Where("id = ?", taskID).Updates(updates).Error; err != nil {
+		return err
+	}
+
+	var task models.FramePromptTask
+	if err := s.db.First(&task, taskID).Error; err != nil {
+		return err
+	}
+	s.publishFramePromptTask(&task)
+	return nil
+}
+
+func (s *FramePromptService) publishFramePromptTask(task *models.FramePromptTask) {
+	if s.events == nil || task == nil {
+		return
+	}
+	s.events.Publish(task)
 }
 
 // saveFramePrompt 保存帧提示词到数据库

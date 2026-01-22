@@ -34,13 +34,13 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	localStoragePtr := localStorage.(*storage2.LocalStorage)
 	transferService := services2.NewResourceTransferService(db, log)
 	eventHub := events.NewEventHub()
-	dramaHandler := handlers2.NewDramaHandler(db, cfg, log, nil)
+	dramaHandler := handlers2.NewDramaHandler(db, cfg, log, nil, eventHub.VideoMerges)
 	aiConfigHandler := handlers2.NewAIConfigHandler(db, cfg, log)
 	scriptGenHandler := handlers2.NewScriptGenerationHandler(db, cfg, log, eventHub.Tasks)
 	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, localStoragePtr, log, eventHub.ImageGenerations)
 	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, localStoragePtr, eventHub.Tasks, eventHub.ImageGenerations)
 	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, localStoragePtr, aiService, log, eventHub.VideoGenerations)
-	videoMergeHandler := handlers2.NewVideoMergeHandler(db, nil, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log)
+	videoMergeHandler := handlers2.NewVideoMergeHandler(db, nil, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log, eventHub.VideoMerges)
 	assetHandler := handlers2.NewAssetHandler(db, cfg, log)
 	characterLibraryService := services2.NewCharacterLibraryService(db, log)
 	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, localStoragePtr, eventHub.ImageGenerations)
@@ -51,7 +51,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	storyboardHandler := handlers2.NewStoryboardHandler(db, cfg, log, eventHub.Tasks)
 	sceneHandler := handlers2.NewSceneHandler(db, log, imageGenService)
 	taskHandler := handlers2.NewTaskHandler(db, log, eventHub.Tasks)
-	framePromptService := services2.NewFramePromptService(db, cfg, log)
+	framePromptService := services2.NewFramePromptService(db, cfg, log, eventHub.FramePromptTasks)
 	framePromptHandler := handlers2.NewFramePromptHandler(framePromptService, log)
 	audioExtractionHandler := handlers2.NewAudioExtractionHandler(log, cfg.Storage.LocalPath)
 	settingsHandler := handlers2.NewSettingsHandler(cfg, log)
@@ -142,6 +142,8 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			events.GET("/tasks", eventHandler.StreamTasks)
 			events.GET("/image-generations", eventHandler.StreamImageGenerations)
 			events.GET("/video-generations", eventHandler.StreamVideoGenerations)
+			events.GET("/frame-prompt-tasks", eventHandler.StreamFramePromptTasks)
+			events.GET("/video-merges", eventHandler.StreamVideoMerges)
 		}
 
 		// 场景路由
@@ -200,6 +202,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			storyboards.PUT("/:id", storyboardHandler.UpdateStoryboard)
 			storyboards.POST("/:id/frame-prompt", framePromptHandler.GenerateFramePrompt)
 			storyboards.GET("/:id/frame-prompts", handlers2.GetStoryboardFramePrompts(db, log))
+			storyboards.GET("/:id/frame-prompt-tasks", handlers2.GetStoryboardFramePromptTasks(db, log))
 		}
 
 		audio := api.Group("/audio")
