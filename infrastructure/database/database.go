@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/drama-generator/backend/domain/models"
@@ -34,7 +35,7 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	if cfg.Type == "sqlite" {
 		// 使用 modernc.org/sqlite 纯 Go 驱动（无需 CGO）
 		// 添加并发优化参数：WAL 模式、busy_timeout、cache
-		dsnWithParams := dsn + "?_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL&cache=shared"
+		dsnWithParams := buildSQLiteDSN(dsn)
 		db, err = gorm.Open(sqlite.Dialector{
 			DriverName: "sqlite",
 			DSN:        dsnWithParams,
@@ -54,8 +55,22 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 
 	// SQLite 连接池配置（限制并发连接数）
 	if cfg.Type == "sqlite" {
-		sqlDB.SetMaxIdleConns(1)
-		sqlDB.SetMaxOpenConns(1) // SQLite 单写入，限制为 1
+		maxOpen := cfg.MaxOpen
+		if maxOpen < 2 {
+			maxOpen = 2
+		} else if maxOpen > 8 {
+			maxOpen = 8
+		}
+
+		maxIdle := cfg.MaxIdle
+		if maxIdle < 1 {
+			maxIdle = 1
+		} else if maxIdle > maxOpen {
+			maxIdle = maxOpen
+		}
+
+		sqlDB.SetMaxIdleConns(maxIdle)
+		sqlDB.SetMaxOpenConns(maxOpen)
 	} else {
 		sqlDB.SetMaxIdleConns(cfg.MaxIdle)
 		sqlDB.SetMaxOpenConns(cfg.MaxOpen)
@@ -67,6 +82,27 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func buildSQLiteDSN(dsn string) string {
+	base := dsn
+	if !strings.HasPrefix(base, "file:") {
+		base = "file:" + base
+	}
+
+	params := []string{
+		"_pragma=journal_mode(WAL)",
+		"_pragma=busy_timeout(5000)",
+		"_pragma=synchronous(NORMAL)",
+		"cache=shared",
+	}
+
+	sep := "?"
+	if strings.Contains(base, "?") {
+		sep = "&"
+	}
+
+	return base + sep + strings.Join(params, "&")
 }
 
 func AutoMigrate(db *gorm.DB) error {
