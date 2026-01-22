@@ -318,7 +318,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	var items interface{} = images
 	totalWithReuse := total
 	itemsCount := len(images)
-	if includeReusePrevLast && storyboardID != nil {
+	if includeReusePrevLast && storyboardID != nil && (frameType == "" || frameType == models.FrameTypeFirst) {
 		reuseImages, sourceID, reuseErr := h.imageService.ListReusePrevLastImages(*storyboardID)
 		if reuseErr != nil {
 			h.log.Warnw("Failed to load reuse previous last images", withFields("error", reuseErr)...)

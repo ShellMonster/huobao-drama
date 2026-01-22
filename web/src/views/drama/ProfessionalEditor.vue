@@ -1205,9 +1205,11 @@ const selectedReferenceMode = ref<string>('')  // 参考图模式：single, firs
 const previewImageUrl = ref<string>('')  // 预览大图的URL
 const videoModelCapabilities = ref<VideoModelCapability[]>([])
 const videoConfigStorageKey = `video_gen_config_${dramaId}`
+const videoReferenceSelectionKey = `video_ref_selection_${dramaId}`
 const pendingVideoConfig = ref<{ model: string; referenceMode: string; updatedAt: number } | null>(null)
 const lastVideoConfigUpdateAt = ref(0)
 const isApplyingVideoConfig = ref(false)
+const isApplyingVideoSelection = ref(false)
 let videoPollingTimer: any = null
 let videoStreamStop: (() => void) | null = null
 let videoRefreshTimer: number | null = null
@@ -1582,6 +1584,142 @@ const applyVideoConfig = async (config: { model: string; referenceMode: string; 
   isApplyingVideoConfig.value = false
 }
 
+type VideoReferenceSelection = {
+  referenceMode: string
+  selectedImageIds: number[]
+  selectedLastImageId: number | null
+  reusePrevLast: boolean
+  updatedAt: number
+}
+
+type VideoReferenceSelectionMap = Record<string, VideoReferenceSelection>
+
+const getVideoReferenceSelectionMap = (): VideoReferenceSelectionMap => {
+  try {
+    const raw = localStorage.getItem(videoReferenceSelectionKey)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    return parsed as VideoReferenceSelectionMap
+  } catch (error) {
+    return {}
+  }
+}
+
+const saveVideoReferenceSelection = () => {
+  if (isApplyingVideoSelection.value) return
+  if (!currentStoryboard.value) return
+  if (!selectedReferenceMode.value || selectedReferenceMode.value === 'none') return
+
+  const map = getVideoReferenceSelectionMap()
+  map[String(currentStoryboard.value.id)] = {
+    referenceMode: selectedReferenceMode.value,
+    selectedImageIds: [...selectedImagesForVideo.value],
+    selectedLastImageId: selectedLastImageForVideo.value,
+    reusePrevLast: !!currentStoryboard.value.reuse_prev_last_frame,
+    updatedAt: Date.now()
+  }
+  localStorage.setItem(videoReferenceSelectionKey, JSON.stringify(map))
+}
+
+const getValidVideoReferenceImages = () => {
+  return (videoReferenceImagesView.value || []).filter(
+    img => img.status === 'completed' && !!img.image_url
+  )
+}
+
+const applyVideoReferenceSelection = (storyboardId: number, options: { allowAuto?: boolean } = {}) => {
+  if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
+  if (!selectedReferenceMode.value || selectedReferenceMode.value === 'none') return
+
+  const images = getValidVideoReferenceImages()
+  if (images.length === 0) return
+
+  const selectionMap = getVideoReferenceSelectionMap()
+  const cached = selectionMap[String(storyboardId)]
+  const reusePrevLast = !!currentStoryboard.value.reuse_prev_last_frame
+  const useCache =
+    cached &&
+    cached.referenceMode === selectedReferenceMode.value &&
+    cached.reusePrevLast === reusePrevLast
+
+  const imageMap = new Map<number, VideoReferenceImage>()
+  images.forEach(img => imageMap.set(img.id, img))
+
+  const isValidFirst = (id?: number | null) => {
+    if (!id) return false
+    const img = imageMap.get(id)
+    if (!img) return false
+    const type = img.frame_type || ''
+    return type === 'first' || type === 'key' || type === 'panel'
+  }
+
+  const isValidLast = (id?: number | null) => {
+    if (!id) return false
+    const img = imageMap.get(id)
+    return !!img && img.frame_type === 'last'
+  }
+
+  let nextSelectedImages: number[] = selectedImagesForVideo.value.slice()
+  let nextSelectedLast: number | null = selectedLastImageForVideo.value
+
+  if (selectedReferenceMode.value === 'first_last') {
+    let firstId: number | null = null
+    let lastId: number | null = null
+
+    if (useCache) {
+      const cachedFirst = cached.selectedImageIds?.[0]
+      if (isValidFirst(cachedFirst)) {
+        firstId = cachedFirst
+      }
+      if (isValidLast(cached.selectedLastImageId)) {
+        lastId = cached.selectedLastImageId
+      }
+    } else {
+      if (isValidFirst(selectedImagesForVideo.value[0])) {
+        firstId = selectedImagesForVideo.value[0]
+      }
+      if (isValidLast(selectedLastImageForVideo.value)) {
+        lastId = selectedLastImageForVideo.value
+      }
+    }
+
+    if (!firstId && options.allowAuto !== false) {
+      const firstCandidate =
+        images.find(img => img.frame_type === 'first') ||
+        images.find(img => img.frame_type === 'key') ||
+        images.find(img => img.frame_type === 'panel')
+      firstId = firstCandidate?.id ?? null
+    }
+    if (!lastId && options.allowAuto !== false) {
+      const lastCandidate = images.find(img => img.frame_type === 'last')
+      lastId = lastCandidate?.id ?? null
+    }
+
+    nextSelectedImages = firstId ? [firstId] : []
+    nextSelectedLast = lastId ?? null
+  } else if (useCache) {
+    const maxImages = currentModelCapability.value?.maxImages || cached.selectedImageIds.length
+    nextSelectedImages = (cached.selectedImageIds || []).filter(id => imageMap.has(id)).slice(0, maxImages)
+    nextSelectedLast = null
+  } else {
+    return
+  }
+
+  const sameImages =
+    nextSelectedImages.length === selectedImagesForVideo.value.length &&
+    nextSelectedImages.every((id, idx) => id === selectedImagesForVideo.value[idx])
+  const sameLast = (nextSelectedLast ?? null) === (selectedLastImageForVideo.value ?? null)
+
+  if (sameImages && sameLast) return
+
+  isApplyingVideoSelection.value = true
+  selectedImagesForVideo.value = nextSelectedImages
+  selectedLastImageForVideo.value = nextSelectedLast
+  isApplyingVideoSelection.value = false
+  saveVideoReferenceSelection()
+}
+
 const handleVideoConfigStorage = (event: StorageEvent) => {
   if (event.key !== videoConfigStorageKey || !event.newValue) return
   try {
@@ -1658,6 +1796,7 @@ const toggleReusePrevLast = async () => {
         if (selectedFrameType.value === 'first' && !currentFramePrompt.value) {
           currentFramePrompt.value = framePrompts.value.first || ''
         }
+        applyVideoReferenceSelection(storyboardId, { allowAuto: true })
       }
       return
     }
@@ -1681,6 +1820,7 @@ const toggleReusePrevLast = async () => {
     if (isCurrentStoryboardId(storyboardId)) {
       selectedImagesForVideo.value = []
       selectedLastImageForVideo.value = null
+      applyVideoReferenceSelection(storyboardId, { allowAuto: true })
     }
   } catch (error: any) {
     ElMessage.error(error.message || '复用失败')
@@ -1834,6 +1974,7 @@ const applyCachedVideoReferences = (storyboardId: number) => {
   const cached = getCacheData(videoReferenceCache, cacheKey, CACHE_TTL_MS)
   if (!cached) return
   videoReferenceImages.value = cached
+  applyVideoReferenceSelection(storyboardId)
 }
 
 const mergeVideoReferenceImages = (storyboardId: number, items: ImageGeneration[]) => {
@@ -2119,6 +2260,8 @@ watch(currentStoryboard, async (newStoryboard, oldStoryboard) => {
   stopPolling()
   if (newStoryboard?.id !== oldStoryboard?.id) {
     stopVideoPolling()
+    selectedImagesForVideo.value = []
+    selectedLastImageForVideo.value = null
   }
 
   if (!newStoryboard) {
@@ -2175,6 +2318,7 @@ watch(currentStoryboard, async (newStoryboard, oldStoryboard) => {
   ])
 
   applyReusePrevLastPreview(newStoryboard)
+  applyVideoReferenceSelection(newStoryboard.id)
 
   startFramePromptStream(newStoryboard.id)
 })
@@ -2225,6 +2369,7 @@ watch(selectedReferenceMode, (newMode) => {
   const storyboardId = currentStoryboard.value?.id
   if (!storyboardId) return
   refreshVideoReferenceImagesIfNeeded(storyboardId, selectedVideoFrameType.value)
+  applyVideoReferenceSelection(storyboardId)
 })
 
 watch(selectedVideoFrameType, (newFrameType) => {
@@ -2859,6 +3004,7 @@ const handleImageSelect = (imageId: number) => {
   // 已选中，则取消选择
   if (currentIndex > -1) {
     selectedImagesForVideo.value.splice(currentIndex, 1)
+    saveVideoReferenceSelection()
     return
   }
 
@@ -2871,6 +3017,7 @@ const handleImageSelect = (imageId: number) => {
     case 'single':
       // 单图模式：只能选1张，直接替换
       selectedImagesForVideo.value = [imageId]
+      saveVideoReferenceSelection()
       break
 
     case 'first_last':
@@ -2880,9 +3027,11 @@ const handleImageSelect = (imageId: number) => {
       if (frameType === 'first' || frameType === 'panel' || frameType === 'key') {
         // 首帧：直接替换
         selectedImagesForVideo.value = [imageId]
+        saveVideoReferenceSelection()
       } else if (frameType === 'last') {
         // 尾帧：设置到单独的变量
         selectedLastImageForVideo.value = imageId
+        saveVideoReferenceSelection()
       } else {
         ElMessage.warning('首尾帧模式下，请选择首帧或尾帧类型的图片')
       }
@@ -2895,6 +3044,7 @@ const handleImageSelect = (imageId: number) => {
         return
       }
       selectedImagesForVideo.value.push(imageId)
+      saveVideoReferenceSelection()
       break
 
     default:
@@ -2939,6 +3089,7 @@ const removeSelectedImage = (imageId: number) => {
   // 检查是否是尾帧
   if (selectedLastImageForVideo.value === imageId) {
     selectedLastImageForVideo.value = null
+    saveVideoReferenceSelection()
     return
   }
 
@@ -2946,6 +3097,7 @@ const removeSelectedImage = (imageId: number) => {
   const index = selectedImagesForVideo.value.indexOf(imageId)
   if (index > -1) {
     selectedImagesForVideo.value.splice(index, 1)
+    saveVideoReferenceSelection()
   }
 }
 
@@ -3072,6 +3224,7 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
     )
     if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
     videoReferenceImages.value = items
+    applyVideoReferenceSelection(storyboardId)
   } catch (error: any) {
     console.error('加载视频参考图片失败:', error)
   }
