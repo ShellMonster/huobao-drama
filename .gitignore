@@ -70,3 +70,5 @@ build.sh
 # Prompt梳理文档
 项目Prompt梳理.csv
 *.csv
+# Prompt梳理文档
+*.md

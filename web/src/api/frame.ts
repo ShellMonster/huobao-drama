@@ -1,4 +1,5 @@
 import request from '../utils/request'
+import type { ImageGeneration } from '../types/image'
 
 // 帧类型
 export type FrameType = 'first' | 'key' | 'last' | 'panel' | 'action'
@@ -35,10 +36,23 @@ export interface FramePromptTask {
   completed_at?: string
 }
 
+export interface ReusePrevLastPreview {
+  source_storyboard_id: number
+  source_storyboard_number?: number
+  prompt?: string
+  images?: ImageGeneration[]
+}
+
+export interface GenerateFramePromptResponse {
+  task?: FramePromptTask
+  reuse_preview?: ReusePrevLastPreview
+}
+
 // 生成帧提示词请求
 export interface GenerateFramePromptRequest {
   frame_type: FrameType
   panel_count?: number // 分镜板格数，默认3
+  reuse_prev_last?: boolean
 }
 
 /**
@@ -47,28 +61,31 @@ export interface GenerateFramePromptRequest {
 export function generateFramePrompt(
   storyboardId: number,
   data: GenerateFramePromptRequest
-): Promise<{ task: FramePromptTask }> {
-  return request.post<{ task: FramePromptTask }>(`/storyboards/${storyboardId}/frame-prompt`, data)
+): Promise<GenerateFramePromptResponse> {
+  return request.post<GenerateFramePromptResponse>(
+    `/storyboards/${storyboardId}/frame-prompt`,
+    data
+  )
 }
 
 /**
  * 生成首帧提示词
  */
-export function generateFirstFrame(storyboardId: number): Promise<FramePromptResponse> {
+export function generateFirstFrame(storyboardId: number): Promise<GenerateFramePromptResponse> {
   return generateFramePrompt(storyboardId, { frame_type: 'first' })
 }
 
 /**
  * 生成关键帧提示词
  */
-export function generateKeyFrame(storyboardId: number): Promise<FramePromptResponse> {
+export function generateKeyFrame(storyboardId: number): Promise<GenerateFramePromptResponse> {
   return generateFramePrompt(storyboardId, { frame_type: 'key' })
 }
 
 /**
  * 生成尾帧提示词
  */
-export function generateLastFrame(storyboardId: number): Promise<FramePromptResponse> {
+export function generateLastFrame(storyboardId: number): Promise<GenerateFramePromptResponse> {
   return generateFramePrompt(storyboardId, { frame_type: 'last' })
 }
 
@@ -78,7 +95,7 @@ export function generateLastFrame(storyboardId: number): Promise<FramePromptResp
 export function generatePanelFrames(
   storyboardId: number,
   panelCount: number = 3
-): Promise<FramePromptResponse> {
+): Promise<GenerateFramePromptResponse> {
   return generateFramePrompt(storyboardId, {
     frame_type: 'panel',
     panel_count: panelCount
@@ -88,7 +105,7 @@ export function generatePanelFrames(
 /**
  * 生成动作序列（5格）
  */
-export function generateActionSequence(storyboardId: number): Promise<FramePromptResponse> {
+export function generateActionSequence(storyboardId: number): Promise<GenerateFramePromptResponse> {
   return generateFramePrompt(storyboardId, { frame_type: 'action' })
 }
 

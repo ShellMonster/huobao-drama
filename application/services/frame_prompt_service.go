@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -60,6 +61,21 @@ type FramePromptResponse struct {
 	MultiFrame  *MultiFramePrompt  `json:"multi_frame,omitempty"`  // 多帧提示词
 }
 
+type PrevLastFramePreview struct {
+	SourceStoryboardID     uint                `json:"source_storyboard_id"`
+	SourceStoryboardNumber int                 `json:"source_storyboard_number"`
+	Prompt                 *string             `json:"prompt,omitempty"`
+	Images                 []PrevLastFrameImage `json:"images,omitempty"`
+}
+
+type PrevLastFrameImage struct {
+	ID           uint    `json:"id"`
+	StoryboardID uint    `json:"storyboard_id"`
+	FrameType    string  `json:"frame_type"`
+	ImageURL     *string `json:"image_url,omitempty"`
+	Status       string  `json:"status"`
+}
+
 // SingleFramePrompt 单帧提示词
 type SingleFramePrompt struct {
 	Prompt      string `json:"prompt"`
@@ -107,6 +123,97 @@ func (s *FramePromptService) CreateFramePromptTask(req GenerateFramePromptReques
 	go s.processFramePromptTask(task.ID, req, model)
 
 	return task, nil
+}
+
+func (s *FramePromptService) SetReusePrevLastFrame(storyboardID uint, enabled bool) error {
+	if storyboardID == 0 {
+		return fmt.Errorf("invalid storyboard id")
+	}
+	if err := s.db.Model(&models.Storyboard{}).Where("id = ?", storyboardID).
+		Update("reuse_prev_last_frame", enabled).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *FramePromptService) ReusePrevLastFrame(storyboardID uint) (*PrevLastFramePreview, error) {
+	if storyboardID == 0 {
+		return nil, fmt.Errorf("invalid storyboard id")
+	}
+
+	var storyboard models.Storyboard
+	if err := s.db.Select("id", "episode_id", "storyboard_number").
+		First(&storyboard, storyboardID).Error; err != nil {
+		return nil, fmt.Errorf("storyboard not found: %w", err)
+	}
+
+	var prev models.Storyboard
+	if err := s.db.Select("id", "storyboard_number").
+		Where("episode_id = ? AND storyboard_number < ?", storyboard.EpisodeID, storyboard.StoryboardNumber).
+		Order("storyboard_number DESC").
+		First(&prev).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("previous storyboard not found")
+		}
+		return nil, err
+	}
+
+	var promptText *string
+	var framePrompt models.FramePrompt
+	if err := s.db.Where("storyboard_id = ? AND frame_type = ?", prev.ID, models.FrameTypeLast).
+		Order("updated_at DESC").
+		First(&framePrompt).Error; err == nil {
+		text := framePrompt.Prompt
+		promptText = &text
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	var images []models.ImageGeneration
+	if err := s.db.Where(
+		"storyboard_id = ? AND frame_type = ? AND status = ?",
+		prev.ID,
+		models.FrameTypeLast,
+		models.ImageStatusCompleted,
+	).Order("created_at DESC").Find(&images).Error; err != nil {
+		return nil, err
+	}
+
+	if promptText == nil && len(images) == 0 {
+		return nil, fmt.Errorf("previous storyboard last frame not ready")
+	}
+
+	preview := &PrevLastFramePreview{
+		SourceStoryboardID:     prev.ID,
+		SourceStoryboardNumber: prev.StoryboardNumber,
+		Prompt:                 promptText,
+	}
+
+	if len(images) > 0 {
+		preview.Images = make([]PrevLastFrameImage, 0, len(images))
+		for _, img := range images {
+			if img.StoryboardID == nil {
+				continue
+			}
+			frameType := ""
+			if img.FrameType != nil {
+				frameType = *img.FrameType
+			}
+			preview.Images = append(preview.Images, PrevLastFrameImage{
+				ID:           img.ID,
+				StoryboardID: *img.StoryboardID,
+				FrameType:    frameType,
+				ImageURL:     img.ImageURL,
+				Status:       string(img.Status),
+			})
+		}
+	}
+
+	if err := s.SetReusePrevLastFrame(storyboardID, true); err != nil {
+		return nil, err
+	}
+
+	return preview, nil
 }
 
 // GenerateFramePrompt 生成指定类型的帧提示词并保存到frame_prompts表

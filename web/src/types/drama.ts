@@ -88,6 +88,11 @@ export interface Storyboard {
   composed_image?: string
   scene_id?: string
   scene?: Scene
+  reuse_prev_last_frame?: boolean
+  prev_last_prompt?: string
+  prev_last_images?: any[]
+  prev_last_storyboard_id?: number
+  prev_last_storyboard_number?: number
   created_at: string
   updated_at: string
   [key: string]: any

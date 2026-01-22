@@ -109,6 +109,7 @@ type Storyboard struct {
 	Dialogue         *string        `gorm:"type:text" json:"dialogue"`
 	Description      *string        `gorm:"type:text" json:"description"`
 	Duration         int            `gorm:"default:5" json:"duration"`
+	ReusePrevLastFrame bool         `gorm:"default:false" json:"reuse_prev_last_frame"`
 	ComposedImage    *string        `gorm:"type:text" json:"composed_image"`
 	VideoURL         *string        `gorm:"type:text" json:"video_url"`
 	Status           string         `gorm:"type:varchar(20);default:'pending'" json:"status"`

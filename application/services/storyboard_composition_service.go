@@ -67,6 +67,19 @@ type SceneCompositionInfo struct {
 	ImageGenerationStatus *string              `json:"image_generation_status,omitempty"`
 	VideoGenerationID     *uint                `json:"video_generation_id,omitempty"`
 	VideoGenerationStatus *string              `json:"video_generation_status,omitempty"`
+	ReusePrevLastFrame    bool                 `json:"reuse_prev_last_frame"`
+	PrevLastPrompt        *string              `json:"prev_last_prompt,omitempty"`
+	PrevLastImages        []PrevLastImageInfo  `json:"prev_last_images,omitempty"`
+	PrevLastStoryboardID  *uint                `json:"prev_last_storyboard_id,omitempty"`
+	PrevLastStoryboardNum *int                 `json:"prev_last_storyboard_number,omitempty"`
+}
+
+type PrevLastImageInfo struct {
+	ID          uint    `json:"id"`
+	StoryboardID uint   `json:"storyboard_id"`
+	FrameType   string  `json:"frame_type"`
+	ImageURL    *string `json:"image_url,omitempty"`
+	Status      string  `json:"status"`
 }
 
 type CreateSceneRequest struct {
@@ -197,6 +210,61 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 	}
 
 	// 构建返回结果
+	prevByStoryboardID := make(map[uint]*models.Storyboard)
+	prevStoryboardIDs := make([]uint, 0)
+	for i := range storyboards {
+		if i == 0 {
+			continue
+		}
+		prevByStoryboardID[storyboards[i].ID] = &storyboards[i-1]
+		if storyboards[i].ReusePrevLastFrame {
+			prevStoryboardIDs = append(prevStoryboardIDs, storyboards[i-1].ID)
+		}
+	}
+
+	prevPromptMap := make(map[uint]*models.FramePrompt)
+	if len(prevStoryboardIDs) > 0 {
+		var prevPrompts []models.FramePrompt
+		if err := s.db.Where("storyboard_id IN ? AND frame_type = ?", prevStoryboardIDs, models.FrameTypeLast).
+			Order("updated_at DESC").
+			Find(&prevPrompts).Error; err == nil {
+			for i := range prevPrompts {
+				prompt := &prevPrompts[i]
+				if _, exists := prevPromptMap[prompt.StoryboardID]; !exists {
+					prevPromptMap[prompt.StoryboardID] = prompt
+				}
+			}
+		}
+	}
+
+	prevImageMap := make(map[uint][]PrevLastImageInfo)
+	if len(prevStoryboardIDs) > 0 {
+		var prevImages []models.ImageGeneration
+		if err := s.db.Where(
+			"storyboard_id IN ? AND frame_type = ? AND status = ?",
+			prevStoryboardIDs,
+			models.FrameTypeLast,
+			models.ImageStatusCompleted,
+		).Order("created_at DESC").Find(&prevImages).Error; err == nil {
+			for _, img := range prevImages {
+				if img.StoryboardID == nil {
+					continue
+				}
+				frameType := ""
+				if img.FrameType != nil {
+					frameType = *img.FrameType
+				}
+				prevImageMap[*img.StoryboardID] = append(prevImageMap[*img.StoryboardID], PrevLastImageInfo{
+					ID:          img.ID,
+					StoryboardID: *img.StoryboardID,
+					FrameType:   frameType,
+					ImageURL:    img.ImageURL,
+					Status:      string(img.Status),
+				})
+			}
+		}
+	}
+
 	var result []SceneCompositionInfo
 	for _, storyboard := range storyboards {
 		storyboardInfo := SceneCompositionInfo{
@@ -219,6 +287,7 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 			ImagePrompt:      storyboard.ImagePrompt,
 			VideoPrompt:      storyboard.VideoPrompt,
 			SceneID:          storyboard.SceneID,
+			ReusePrevLastFrame: storyboard.ReusePrevLastFrame,
 		}
 
 		// 直接使用关联的角色信息
@@ -268,6 +337,23 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 			storyboardInfo.VideoGenerationID = &videoTask.ID
 			statusStr := string(videoTask.Status)
 			storyboardInfo.VideoGenerationStatus = &statusStr
+		}
+
+		if storyboard.ReusePrevLastFrame {
+			if prevStoryboard, ok := prevByStoryboardID[storyboard.ID]; ok {
+				prevID := prevStoryboard.ID
+				prevNum := prevStoryboard.StoryboardNumber
+				storyboardInfo.PrevLastStoryboardID = &prevID
+				storyboardInfo.PrevLastStoryboardNum = &prevNum
+
+				if prompt := prevPromptMap[prevID]; prompt != nil {
+					promptText := prompt.Prompt
+					storyboardInfo.PrevLastPrompt = &promptText
+				}
+				if images := prevImageMap[prevID]; len(images) > 0 {
+					storyboardInfo.PrevLastImages = images
+				}
+			}
 		}
 
 		result = append(result, storyboardInfo)

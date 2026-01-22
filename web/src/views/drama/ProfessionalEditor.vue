@@ -251,33 +251,61 @@
                 >
                   <div class="section-label">
                     {{ $t('editor.prompt') }}
+                    <el-button
+                      v-if="reusePrevLastAvailable"
+                      size="small"
+                      :type="reusePrevLastActive ? 'success' : 'default'"
+                      :loading="reusePrevLastLoading"
+                      @click="toggleReusePrevLast"
+                      style="margin-left: 10px;"
+                    >
+                      {{ reusePrevLastActive ? '取消复用尾帧' : '复用上个镜头尾帧' }}
+                    </el-button>
                     <el-button size="small" type="primary" :loading="currentPromptGenerating"
-                      @click="extractFramePrompt" style="margin-left: 10px;">
+                      :disabled="reusePrevLastActive" @click="extractFramePrompt" style="margin-left: 10px;">
                       {{ $t('editor.extractPrompt') }}
                     </el-button>
                   </div>
-                  <el-input v-model="currentFramePrompt" type="textarea" :rows="8"
+                  <el-input v-model="currentFramePrompt" type="textarea" :rows="8" :readonly="reusePrevLastActive"
                     :placeholder="$t('editor.promptPlaceholder')" />
                 </LoadingSection>
 
                 <!-- 生成控制 -->
                 <div class="generation-controls">
                   <el-button type="success" :icon="MagicStick" :loading="currentImageGenerating"
-                    :disabled="!currentFramePrompt" @click="generateFrameImage">
+                    :disabled="!currentFramePrompt || reusePrevLastActive" @click="generateFrameImage">
                     {{ currentImageGenerating ? $t('editor.generating') : $t('editor.generateImage') }}
                   </el-button>
-                  <el-button :icon="Upload" @click="uploadImage">{{ $t('editor.uploadImage') }}</el-button>
+                  <el-button :icon="Upload" :disabled="reusePrevLastActive" @click="uploadImage">{{ $t('editor.uploadImage') }}</el-button>
                 </div>
 
                 <!-- 生成结果 -->
                 <LoadingSection
-                  v-if="generatedImages.length > 0 || loadingImages"
+                  v-if="generatedImages.length > 0 || loadingImages || reusePrevLastActive"
                   class="generation-result"
-                  :loading="loadingImages"
+                  :loading="loadingImages && !reusePrevLastActive"
                   text="加载图片中..."
                 >
-                  <div class="section-label">{{ $t('editor.generationResult') }} ({{ generatedImages.length }})</div>
-                  <div v-if="generatedImages.length > 0" class="image-grid">
+                  <div class="section-label">
+                    {{ $t('editor.generationResult') }}
+                    ({{ reusePrevLastActive ? reusePrevLastImages.length : generatedImages.length }})
+                  </div>
+                  <div v-if="reusePrevLastActive" class="image-grid">
+                    <div v-for="img in reusePrevLastImages" :key="img.id" class="image-item">
+                      <el-image v-if="img.image_url" :src="img.image_url"
+                        :preview-src-list="reusePrevLastImages.filter(i => i.image_url).map(i => i.image_url!)"
+                        :initial-index="reusePrevLastImages.filter(i => i.image_url).findIndex(i => i.id === img.id)"
+                        fit="cover" preview-teleported />
+                      <div v-else class="image-placeholder">
+                        <el-icon :size="32">
+                          <Picture />
+                        </el-icon>
+                        <p>暂无图片</p>
+                      </div>
+                    </div>
+                    <el-empty v-if="reusePrevLastImages.length === 0" description="上一镜头尾帧未就绪" size="small" />
+                  </div>
+                  <div v-else-if="generatedImages.length > 0" class="image-grid">
                     <div v-for="img in generatedImages" :key="img.id" class="image-item">
                       <el-image v-if="img.image_url" :src="img.image_url"
                         :preview-src-list="generatedImages.filter(i => i.image_url).map(i => i.image_url!)"
@@ -387,13 +415,13 @@
                       <div class="reference-grid"
                         style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 600px;">
                         <div
-                          v-for="img in videoReferenceImages.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'first')"
+                          v-for="img in videoReferenceImagesView.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'first')"
                           :key="img.id" class="reference-item"
                           :class="{ selected: selectedImagesForVideo.includes(img.id) }" style="position: relative;"
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
-                          <div class="reference-action"
+                          <div v-if="!isReusePrevVideoReference(img)" class="reference-action"
                             :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
                             @click.stop="deleteGeneratedImage(img)">
                             <el-icon :size="14" color="#fff">
@@ -410,7 +438,7 @@
                         </div>
                       </div>
                       <el-empty
-                        v-if="!videoReferenceImages.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'first')"
+                        v-if="!videoReferenceImagesView.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'first')"
                         description="暂无首帧图片" size="small" />
                     </div>
 
@@ -420,13 +448,13 @@
                       <div class="reference-grid"
                         style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 600px;">
                         <div
-                          v-for="img in videoReferenceImages.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'key')"
+                          v-for="img in videoReferenceImagesView.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'key')"
                           :key="img.id" class="reference-item"
                           :class="{ selected: selectedImagesForVideo.includes(img.id) }" style="position: relative;"
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
-                          <div class="reference-action"
+                          <div v-if="!isReusePrevVideoReference(img)" class="reference-action"
                             :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
                             @click.stop="deleteGeneratedImage(img)">
                             <el-icon :size="14" color="#fff">
@@ -443,7 +471,7 @@
                         </div>
                       </div>
                       <el-empty
-                        v-if="!videoReferenceImages.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'key')"
+                        v-if="!videoReferenceImagesView.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'key')"
                         description="暂无关键帧图片" size="small" />
                     </div>
 
@@ -453,13 +481,13 @@
                       <div class="reference-grid"
                         style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 600px;">
                         <div
-                          v-for="img in videoReferenceImages.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'last')"
+                          v-for="img in videoReferenceImagesView.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'last')"
                           :key="img.id" class="reference-item"
                           :class="{ selected: selectedImagesForVideo.includes(img.id) }" style="position: relative;"
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
-                          <div class="reference-action"
+                          <div v-if="!isReusePrevVideoReference(img)" class="reference-action"
                             :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
                             @click.stop="deleteGeneratedImage(img)">
                             <el-icon :size="14" color="#fff">
@@ -476,7 +504,7 @@
                         </div>
                       </div>
                       <el-empty
-                        v-if="!videoReferenceImages.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'last')"
+                        v-if="!videoReferenceImagesView.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'last')"
                         description="暂无尾帧图片" size="small" />
                     </div>
 
@@ -486,13 +514,13 @@
                       <div class="reference-grid"
                         style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 600px;">
                         <div
-                          v-for="img in videoReferenceImages.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'panel')"
+                          v-for="img in videoReferenceImagesView.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'panel')"
                           :key="img.id" class="reference-item"
                           :class="{ selected: selectedImagesForVideo.includes(img.id) }" style="position: relative;"
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
-                          <div class="reference-action"
+                          <div v-if="!isReusePrevVideoReference(img)" class="reference-action"
                             :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
                             @click.stop="deleteGeneratedImage(img)">
                             <el-icon :size="14" color="#fff">
@@ -509,7 +537,7 @@
                         </div>
                       </div>
                       <el-empty
-                        v-if="!videoReferenceImages.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'panel')"
+                        v-if="!videoReferenceImagesView.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'panel')"
                         description="暂无分镜板图片" size="small" />
                     </div>
 
@@ -519,13 +547,13 @@
                       <div class="reference-grid"
                         style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 600px;">
                         <div
-                          v-for="img in videoReferenceImages.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'action')"
+                          v-for="img in videoReferenceImagesView.filter(i => i.status === 'completed' && i.image_url && i.frame_type === 'action')"
                           :key="img.id" class="reference-item"
                           :class="{ selected: selectedImagesForVideo.includes(img.id) }" style="position: relative;"
                           @click="handleImageSelect(img.id)">
                           <el-image :src="img.image_url" fit="cover"
                             style="max-width: 120px; width: 100%; display: block; pointer-events: none;" />
-                          <div class="reference-action"
+                          <div v-if="!isReusePrevVideoReference(img)" class="reference-action"
                             :class="{ 'is-disabled': deletingImageIds.has(img.id) }"
                             @click.stop="deleteGeneratedImage(img)">
                             <el-icon :size="14" color="#fff">
@@ -542,7 +570,7 @@
                         </div>
                       </div>
                       <el-empty
-                        v-if="!videoReferenceImages.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'action')"
+                        v-if="!videoReferenceImagesView.some(i => i.status === 'completed' && i.image_url && i.frame_type === 'action')"
                         description="暂无动作序列图片" size="small" />
                     </div>
                   </div>
@@ -1104,6 +1132,7 @@ const localFramePromptTaskIds = ref<Set<number>>(new Set())
 const currentFramePrompt = ref('')
 const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
+const reusePrevLastLoading = ref(false)
 const generatedImages = ref<ImageGeneration[]>([])
 const deletingImageIds = ref<Set<number>>(new Set())
 const imageCache = new Map<string, CacheEntry<ImageGeneration[]>>()
@@ -1571,6 +1600,90 @@ const getPromptStorageKey = (storyboardId: number | undefined, frameType: FrameT
   return `frame_prompt_${storyboardId}_${frameType}`
 }
 
+const isCurrentStoryboardId = (storyboardId: number | string | undefined) => {
+  if (!storyboardId) return false
+  return String(currentStoryboardId.value || '') === String(storyboardId)
+}
+
+const applyReusePrevLastPreview = (storyboard: Storyboard | null) => {
+  if (!storyboard?.reuse_prev_last_frame) return
+  const prompt = storyboard.prev_last_prompt || ''
+  if (!isCurrentStoryboardId(storyboard.id)) return
+  if (selectedFrameType.value === 'first') {
+    currentFramePrompt.value = prompt
+  }
+}
+
+const clearReusePrevLastPreview = (storyboard: Storyboard | null) => {
+  if (!storyboard) return
+  storyboard.prev_last_prompt = ''
+  storyboard.prev_last_images = []
+  storyboard.prev_last_storyboard_id = undefined
+  storyboard.prev_last_storyboard_number = undefined
+  if (!isCurrentStoryboardId(storyboard.id)) return
+  if (selectedFrameType.value === 'first') {
+    currentFramePrompt.value = ''
+  }
+}
+
+const toggleReusePrevLast = async () => {
+  if (!currentStoryboard.value || !reusePrevLastAvailable.value) return
+  if (reusePrevLastLoading.value) return
+  reusePrevLastLoading.value = true
+  const storyboardId = Number(currentStoryboard.value.id)
+  try {
+    const targetStoryboard =
+      storyboards.value.find(item => String(item.id) === String(storyboardId)) ||
+      currentStoryboard.value
+    if (currentStoryboard.value.reuse_prev_last_frame) {
+      await dramaAPI.updateStoryboard(String(storyboardId), { reuse_prev_last_frame: false })
+      if (targetStoryboard) {
+        targetStoryboard.reuse_prev_last_frame = false
+        clearReusePrevLastPreview(targetStoryboard)
+      }
+      if (isCurrentStoryboardId(storyboardId)) {
+        framePrompts.value.first = ''
+        currentFramePrompt.value = ''
+        selectedImagesForVideo.value = []
+        selectedLastImageForVideo.value = null
+        await Promise.allSettled([
+          loadFramePrompts(storyboardId, { showLoading: false, frameType: 'first' }),
+          loadStoryboardImages(storyboardId, 'first', { showLoading: false })
+        ])
+        if (selectedFrameType.value === 'first' && !currentFramePrompt.value) {
+          currentFramePrompt.value = framePrompts.value.first || ''
+        }
+      }
+      return
+    }
+
+    const result = await generateFramePrompt(storyboardId, {
+      frame_type: 'first',
+      reuse_prev_last: true
+    })
+    if (!result.reuse_preview) {
+      throw new Error('未获取到复用数据')
+    }
+
+    if (targetStoryboard) {
+      targetStoryboard.reuse_prev_last_frame = true
+      targetStoryboard.prev_last_prompt = result.reuse_preview.prompt || ''
+      targetStoryboard.prev_last_images = result.reuse_preview.images || []
+      targetStoryboard.prev_last_storyboard_id = result.reuse_preview.source_storyboard_id
+      targetStoryboard.prev_last_storyboard_number = result.reuse_preview.source_storyboard_number
+      applyReusePrevLastPreview(targetStoryboard)
+    }
+    if (isCurrentStoryboardId(storyboardId)) {
+      selectedImagesForVideo.value = []
+      selectedLastImageForVideo.value = null
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '复用失败')
+  } finally {
+    reusePrevLastLoading.value = false
+  }
+}
+
 const isCharacterSelected = (charId: number) => {
   return selectedCharacters.value.includes(charId)
 }
@@ -1588,6 +1701,45 @@ const currentStoryboard = computed(() => {
   if (!currentStoryboardId.value) return null
   return storyboards.value.find(s => String(s.id) === String(currentStoryboardId.value)) || null
 })
+
+const reusePrevLastActive = computed(() => {
+  if (selectedFrameType.value !== 'first') return false
+  return !!currentStoryboard.value?.reuse_prev_last_frame
+})
+
+const reusePrevLastAvailable = computed(() => {
+  if (selectedFrameType.value !== 'first') return false
+  const number = Number(currentStoryboard.value?.storyboard_number || 0)
+  return number > 1
+})
+
+const reusePrevLastImages = computed<ImageGeneration[]>(() => {
+  return currentStoryboard.value?.prev_last_images || []
+})
+
+type VideoReferenceImage = ImageGeneration & { reuse_prev?: boolean }
+
+const buildReusePrevLastReferences = (storyboard: Storyboard | null): VideoReferenceImage[] => {
+  if (!storyboard?.reuse_prev_last_frame) return []
+  const items = storyboard.prev_last_images || []
+  return items.map((img) => ({
+    ...(img as ImageGeneration),
+    frame_type: 'first',
+    reuse_prev: true
+  }))
+}
+
+const videoReferenceImagesView = computed<VideoReferenceImage[]>(() => {
+  const base = videoReferenceImages.value || []
+  const reuse = buildReusePrevLastReferences(currentStoryboard.value)
+  if (reuse.length === 0) return base
+  const merged = new Map<number, VideoReferenceImage>()
+  base.forEach((img) => merged.set(img.id, img))
+  reuse.forEach((img) => merged.set(img.id, img))
+  return Array.from(merged.values())
+})
+
+const isReusePrevVideoReference = (image: VideoReferenceImage) => !!image.reuse_prev
 
 const framePromptDefaults: Record<FrameType, string> = {
   key: '',
@@ -1702,6 +1854,12 @@ const applyServerFramePrompts = (storyboardId: number, records: FramePromptRecor
     if (!supportedTypes.includes(record.frame_type)) return
 
     const frameType = record.frame_type
+    if (frameType === 'first') {
+      const storyboard = storyboards.value.find(item => item.id === storyboardId)
+      if (storyboard?.reuse_prev_last_frame) {
+        return
+      }
+    }
     const storageKey = getPromptStorageKey(storyboardId, frameType)
     const stored = storageKey ? sessionStorage.getItem(storageKey) : null
     const existing = framePrompts.value[frameType]
@@ -1924,6 +2082,8 @@ watch(selectedFrameType, (newType) => {
   // 重新加载该帧类型的图片
   loadStoryboardImages(currentStoryboard.value.id, newType, { showLoading: false })
 
+  applyReusePrevLastPreview(currentStoryboard.value)
+
   // 重置切换标志
   setTimeout(() => {
     isSwitchingFrameType.value = false
@@ -1989,6 +2149,8 @@ watch(currentStoryboard, async (newStoryboard, oldStoryboard) => {
     loadVideoReferenceImages(newStoryboard.id),
     loadStoryboardVideos(newStoryboard.id, { showLoading: false })
   ])
+
+  applyReusePrevLastPreview(newStoryboard)
 
   startFramePromptStream(newStoryboard.id)
 })
@@ -2138,6 +2300,9 @@ const extractFramePrompt = async () => {
     }
 
     const result = await generateFramePrompt(targetStoryboardId, params)
+    if (!result.task) {
+      throw new Error('未返回任务')
+    }
     localFramePromptTaskIds.value.add(result.task.id)
     applyFramePromptTask(result.task, { notify: false })
     if (!framePromptStreamOpen) {
@@ -2674,7 +2839,7 @@ const handleImageSelect = (imageId: number) => {
   }
 
   // 获取当前点击的图片对象
-  const clickedImage = videoReferenceImages.value.find(img => img.id === imageId)
+  const clickedImage = videoReferenceImagesView.value.find(img => img.id === imageId)
   if (!clickedImage) return
 
   // 根据选择的参考图模式处理
@@ -2728,7 +2893,7 @@ const previewImage = (url: string) => {
 // 获取已选图片对象列表
 const selectedImageObjects = computed(() => {
   return selectedImagesForVideo.value
-    .map(id => videoReferenceImages.value.find(img => img.id === id))
+    .map(id => videoReferenceImagesView.value.find(img => img.id === id))
     .filter(img => img && img.image_url)
 })
 
@@ -2736,13 +2901,13 @@ const selectedImageObjects = computed(() => {
 const firstFrameSlotImage = computed(() => {
   if (selectedImagesForVideo.value.length === 0) return null
   const firstImageId = selectedImagesForVideo.value[0]
-  return videoReferenceImages.value.find(img => img.id === firstImageId)
+  return videoReferenceImagesView.value.find(img => img.id === firstImageId)
 })
 
 // 首尾帧模式：获取尾帧图片
 const lastFrameSlotImage = computed(() => {
   if (!selectedLastImageForVideo.value) return null
-  return videoReferenceImages.value.find(img => img.id === selectedLastImageForVideo.value)
+  return videoReferenceImagesView.value.find(img => img.id === selectedLastImageForVideo.value)
 })
 
 // 移除已选择的图片
@@ -2783,7 +2948,7 @@ const generateVideo = async () => {
   // 获取第一张选中的图片（仅在需要图片的模式下）
   let selectedImage = null
   if (selectedReferenceMode.value !== 'none' && selectedImagesForVideo.value.length > 0) {
-    selectedImage = videoReferenceImages.value.find(img => img.id === selectedImagesForVideo.value[0])
+    selectedImage = videoReferenceImagesView.value.find(img => img.id === selectedImagesForVideo.value[0])
     if (!selectedImage || !selectedImage.image_url) {
       ElMessage.error('请选择有效的参考图片')
       return
@@ -2816,8 +2981,8 @@ const generateVideo = async () => {
 
       case 'first_last':
         // 首尾帧模式
-        const firstImage = videoReferenceImages.value.find(img => img.id === selectedImagesForVideo.value[0])
-        const lastImage = videoReferenceImages.value.find(img => img.id === selectedLastImageForVideo.value)
+        const firstImage = videoReferenceImagesView.value.find(img => img.id === selectedImagesForVideo.value[0])
+        const lastImage = videoReferenceImagesView.value.find(img => img.id === selectedLastImageForVideo.value)
 
         if (firstImage?.image_url) {
           requestParams.first_frame_url = firstImage.image_url
@@ -2830,7 +2995,7 @@ const generateVideo = async () => {
       case 'multiple':
         // 多图模式
         const selectedImages = selectedImagesForVideo.value
-          .map(id => videoReferenceImages.value.find(img => img.id === id))
+          .map(id => videoReferenceImagesView.value.find(img => img.id === id))
           .filter(img => img?.image_url)
           .map(img => img!.image_url)
         requestParams.reference_image_urls = selectedImages
