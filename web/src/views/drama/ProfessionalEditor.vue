@@ -1120,6 +1120,7 @@ let framePromptRequestId = 0
 let framePromptLoadingRequestId = 0
 let framePromptStreamStop: (() => void) | null = null
 let framePromptPollTimer: number | null = null
+let framePromptStreamOpen = false
 const getFramePromptLoadedKey = (storyboardId: number) => String(storyboardId)
 const markFramePromptLoaded = (storyboardId: number) => {
   framePromptLoadedMap.value[getFramePromptLoadedKey(storyboardId)] = true
@@ -1785,8 +1786,21 @@ const loadFramePromptTasks = async (storyboardId: number) => {
     const result = await getStoryboardFramePromptTasks(storyboardId, statuses)
     clearFramePromptGenerating(storyboardId)
     result.tasks.forEach((task) => applyFramePromptTask(task, { notify: false }))
+    const hasActive = result.tasks.some(
+      (task) => task.status === 'pending' || task.status === 'processing'
+    )
+    if (!hasActive) {
+      stopFramePromptPolling()
+    }
   } catch (error: any) {
     console.error('加载帧提示词任务失败:', error)
+  }
+}
+
+const stopFramePromptPolling = () => {
+  if (framePromptPollTimer) {
+    window.clearInterval(framePromptPollTimer)
+    framePromptPollTimer = null
   }
 }
 
@@ -1795,14 +1809,21 @@ const stopFramePromptStream = () => {
     framePromptStreamStop()
     framePromptStreamStop = null
   }
-  if (framePromptPollTimer) {
-    window.clearInterval(framePromptPollTimer)
-    framePromptPollTimer = null
-  }
+  framePromptStreamOpen = false
+  stopFramePromptPolling()
 }
 
 const startFramePromptPolling = (storyboardId: number) => {
   if (framePromptPollTimer) return
+  const prefix = `${storyboardId}_`
+  const hasLocalActive =
+    Object.keys(generatingPromptMap.value).some((key) => key.startsWith(prefix)) ||
+    Object.values(framePromptTasks.value).some(
+      (task) =>
+        task.storyboard_id === storyboardId &&
+        (task.status === 'pending' || task.status === 'processing')
+    )
+  if (!hasLocalActive) return
   framePromptPollTimer = window.setInterval(() => {
     void loadFramePromptTasks(storyboardId)
   }, 3000)
@@ -1817,6 +1838,12 @@ const startFramePromptStream = (storyboardId: number) => {
   framePromptStreamStop = subscribeSSE({
     url,
     event: 'frame_prompt_task',
+    onOpen: () => {
+      framePromptStreamOpen = true
+    },
+    onError: () => {
+      framePromptStreamOpen = false
+    },
     onMessage: (task: FramePromptTask) => {
       applyFramePromptTask(task)
     },
@@ -2062,6 +2089,9 @@ const extractFramePrompt = async () => {
     const result = await generateFramePrompt(targetStoryboardId, params)
     localFramePromptTaskIds.value.add(result.task.id)
     applyFramePromptTask(result.task, { notify: false })
+    if (!framePromptStreamOpen) {
+      startFramePromptPolling(targetStoryboardId)
+    }
 
     ElMessage.success(`${storyboardLabel}${getFrameTypeLabel(targetFrameType)}提示词生成已提交`)
   } catch (error: any) {
@@ -2157,6 +2187,15 @@ const loadStoryboardImages = async (
 // 启动状态轮询（SSE优先，轮询兜底）
 const startPolling = () => {
   if (pollingTimer || imageStreamStop) return
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return
+  const currentKey = `${storyboardId}_${selectedFrameType.value}`
+  const hasActive =
+    !!generatingImageMap.value[currentKey] ||
+    generatedImages.value.some(
+      img => img.status === 'pending' || img.status === 'processing'
+    )
+  if (!hasActive) return
 
   // 记录开始轮询时的帧类型
   pollingFrameType = selectedFrameType.value
@@ -2216,6 +2255,10 @@ const startPolling = () => {
   }
 
   const startFallback = () => {
+    const hasPending = generatedImages.value.some(
+      img => img.status === 'pending' || img.status === 'processing'
+    )
+    if (!hasPending) return
     if (pollingTimer) return
     pollingTimer = setInterval(refreshImages, 3000)
     return () => {
@@ -2226,7 +2269,6 @@ const startPolling = () => {
     }
   }
 
-  const storyboardId = currentStoryboard.value?.id
   const url = storyboardId
     ? buildSSEUrl('/api/v1/events/image-generations', {
         storyboard_id: storyboardId,
@@ -2842,6 +2884,10 @@ const loadStoryboardVideos = async (
 // 启动视频状态轮询（SSE优先，轮询兜底）
 const startVideoPolling = () => {
   if (videoPollingTimer || videoStreamStop) return
+  const hasActive =
+    generatingVideo.value ||
+    generatedVideos.value.some(v => v.status === 'pending' || v.status === 'processing')
+  if (!hasActive) return
 
   const refreshVideos = async () => {
     if (!currentStoryboard.value) {
@@ -2885,6 +2931,10 @@ const startVideoPolling = () => {
   }
 
   const startFallback = () => {
+    const hasPending = generatedVideos.value.some(
+      v => v.status === 'pending' || v.status === 'processing'
+    )
+    if (!hasPending) return
     if (videoPollingTimer) return
     videoPollingTimer = setInterval(refreshVideos, 5000)
     return () => {
@@ -3242,6 +3292,10 @@ const startMergeStream = () => {
 // 启动视频合成列表轮询（SSE 兜底）
 const startMergePolling = () => {
   if (mergePollingTimer) return
+  const hasPending = videoMerges.value.some(
+    merge => merge.status === 'pending' || merge.status === 'processing'
+  )
+  if (!hasPending) return
 
   mergePollingTimer = setInterval(async () => {
     if (!episodeId.value) {
