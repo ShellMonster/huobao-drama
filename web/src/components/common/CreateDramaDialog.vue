@@ -3,7 +3,7 @@
   <el-dialog
     v-model="visible"
     :title="$t('drama.createNew')"
-    width="960px"
+    width="1200px"
     :close-on-click-modal="false"
     class="create-dialog"
     @closed="handleClosed"
@@ -47,7 +47,7 @@
           <el-form-item label="项目风格" prop="style" class="style-form-item">
             <el-skeleton v-if="stylesLoading" :rows="3" animated />
             <template v-else>
-              <StylePicker v-if="styles.length > 0" v-model="form.style" :styles="styles" :columns="3" />
+              <StylePicker v-if="styles.length > 0" v-model="form.style" :styles="styles" :columns="6" />
               <div v-else class="style-empty">暂无可用风格</div>
             </template>
           </el-form-item>
@@ -273,7 +273,7 @@ const handleSubmit = async () => {
 
 .create-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(0, 1fr) minmax(560px, 680px);
   gap: 24px;
   align-items: start;
 }

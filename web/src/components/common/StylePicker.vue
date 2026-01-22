@@ -40,9 +40,14 @@ const emit = defineEmits<{
 const failedImages = reactive<Record<string, boolean>>({})
 
 const currentValue = computed(() => props.modelValue || '')
-const gridStyle = computed(() => ({
-  '--style-columns': String(props.columns || 3)
-}))
+const gridStyle = computed(() => {
+  const columns = props.columns || 3
+  const maxWidth = columns * 120 + (columns - 1) * 12
+  return {
+    '--style-columns': String(columns),
+    '--style-grid-max': `${maxWidth}px`
+  }
+})
 
 const selectStyle = (key: string) => {
   emit('update:modelValue', key)
@@ -56,8 +61,11 @@ const markFailed = (key: string) => {
 <style scoped>
 .style-grid {
   display: grid;
-  grid-template-columns: repeat(var(--style-columns, 3), minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
+  width: 100%;
+  max-width: var(--style-grid-max, 100%);
+  justify-content: start;
 }
 
 .style-card {

@@ -71,6 +71,7 @@ build.sh
 项目Prompt梳理.csv
 *.csv
 # Prompt梳理文档
-*.md
+JSON模式方案.md
 data/drama_generator.db-shm
 data/drama_generator.db-wal
+项目Prompt完整梳理.csv
