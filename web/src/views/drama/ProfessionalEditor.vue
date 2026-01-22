@@ -1045,6 +1045,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000
 const IMAGE_CACHE_MAX = 80
 const VIDEO_CACHE_MAX = 40
 const VIDEO_REFERENCE_CACHE_MAX = 40
+const VIDEO_REFERENCE_REFRESH_COOLDOWN_MS = 3000
 
 const getCacheData = <T>(cache: Map<string, CacheEntry<T>>, key: string, ttlMs: number): T | null => {
   const entry = cache.get(key)
@@ -1164,6 +1165,7 @@ const videoLoadingKey = ref<string | null>(null)
 const timelineEditorRef = ref<InstanceType<typeof VideoTimelineEditor> | null>(null)
 const videoReferenceImages = ref<ImageGeneration[]>([])
 const videoReferenceCache = new Map<string, CacheEntry<ImageGeneration[]>>()
+const lastVideoReferenceRefreshAt = new Map<string, number>()
 const selectedVideoModel = ref<string>('')
 const selectedReferenceMode = ref<string>('')  // 参考图模式：single, first_last, multiple, none
 const previewImageUrl = ref<string>('')  // 预览大图的URL
@@ -1658,6 +1660,37 @@ const applyCachedVideoReferences = (storyboardId: number) => {
   videoReferenceImages.value = cached
 }
 
+const mergeVideoReferenceImages = (storyboardId: number, items: ImageGeneration[]) => {
+  if (!items || items.length === 0) return
+  const cacheKey = String(storyboardId)
+  const existing =
+    getCacheData(videoReferenceCache, cacheKey, CACHE_TTL_MS) || videoReferenceImages.value || []
+  const mergedMap = new Map<number, ImageGeneration>()
+  existing.forEach((img) => mergedMap.set(img.id, img))
+  items.forEach((img) => mergedMap.set(img.id, img))
+  const merged = Array.from(mergedMap.values())
+  setCacheData(videoReferenceCache, cacheKey, merged, VIDEO_REFERENCE_CACHE_MAX, CACHE_TTL_MS)
+  if (currentStoryboard.value?.id === storyboardId) {
+    videoReferenceImages.value = merged
+  }
+}
+
+const refreshVideoReferenceImagesIfNeeded = (storyboardId: number, frameType?: FrameType) => {
+  const cacheKey = String(storyboardId)
+  const now = Date.now()
+  const lastAt = lastVideoReferenceRefreshAt.get(cacheKey) || 0
+  if (now - lastAt < VIDEO_REFERENCE_REFRESH_COOLDOWN_MS) return
+  const data = getCacheData(videoReferenceCache, cacheKey, CACHE_TTL_MS) || videoReferenceImages.value
+  if (frameType) {
+    const hasCompleted = (data || []).some(
+      img => img.status === 'completed' && img.image_url && img.frame_type === frameType
+    )
+    if (hasCompleted) return
+  }
+  lastVideoReferenceRefreshAt.set(cacheKey, now)
+  void loadVideoReferenceImages(storyboardId)
+}
+
 const resetFramePrompts = () => {
   framePrompts.value = { ...framePromptDefaults }
 }
@@ -1995,10 +2028,21 @@ watch(currentStoryboard, (newStoryboard) => {
 })
 
 // 监听参考图模式切换，清空已选图片
-watch(selectedReferenceMode, () => {
+watch(selectedReferenceMode, (newMode) => {
   selectedImagesForVideo.value = []
   selectedLastImageForVideo.value = null
   saveVideoConfig()
+  if (!newMode || newMode === 'none') return
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return
+  refreshVideoReferenceImagesIfNeeded(storyboardId, selectedVideoFrameType.value)
+})
+
+watch(selectedVideoFrameType, (newFrameType) => {
+  const storyboardId = currentStoryboard.value?.id
+  if (!storyboardId) return
+  if (!selectedReferenceMode.value || selectedReferenceMode.value === 'none') return
+  refreshVideoReferenceImagesIfNeeded(storyboardId, newFrameType)
 })
 
 // 当前分镜的角色列表
@@ -2161,6 +2205,7 @@ const loadStoryboardImages = async (
     const result = await imageAPI.listImages(params)
     const items = result.items || []
     setCacheData(imageCache, cacheKey, items, IMAGE_CACHE_MAX, CACHE_TTL_MS)
+    mergeVideoReferenceImages(storyboardId, items)
     if (!shouldApply()) return
     generatedImages.value = items
 
@@ -2234,6 +2279,7 @@ const startPolling = () => {
           const cacheKey = getImageCacheKey(currentStoryboard.value.id, pollingFrameType)
           setCacheData(imageCache, cacheKey, items, IMAGE_CACHE_MAX, CACHE_TTL_MS)
         }
+        mergeVideoReferenceImages(currentStoryboard.value.id, items)
       }
 
       const hasPendingOrProcessing = (result.items || []).some(
