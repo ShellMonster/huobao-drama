@@ -1036,6 +1036,56 @@ const totalDuration = computed(() => {
 const selectedCharacters = ref<number[]>([])
 const narrativeTab = ref('shot-prompt')
 
+type CacheEntry<T> = {
+  data: T
+  updatedAt: number
+}
+
+const CACHE_TTL_MS = 10 * 60 * 1000
+const IMAGE_CACHE_MAX = 80
+const VIDEO_CACHE_MAX = 40
+const VIDEO_REFERENCE_CACHE_MAX = 40
+
+const getCacheData = <T>(cache: Map<string, CacheEntry<T>>, key: string, ttlMs: number): T | null => {
+  const entry = cache.get(key)
+  if (!entry) return null
+  const now = Date.now()
+  if (now - entry.updatedAt > ttlMs) {
+    cache.delete(key)
+    return null
+  }
+  entry.updatedAt = now
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.data
+}
+
+const pruneCache = <T>(cache: Map<string, CacheEntry<T>>, maxSize: number, ttlMs: number) => {
+  const now = Date.now()
+  for (const [key, entry] of cache) {
+    if (now - entry.updatedAt > ttlMs) {
+      cache.delete(key)
+    }
+  }
+  while (cache.size > maxSize) {
+    const oldestKey = cache.keys().next().value as string | undefined
+    if (!oldestKey) break
+    cache.delete(oldestKey)
+  }
+}
+
+const setCacheData = <T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  data: T,
+  maxSize: number,
+  ttlMs: number
+) => {
+  cache.delete(key)
+  cache.set(key, { data, updatedAt: Date.now() })
+  pruneCache(cache, maxSize, ttlMs)
+}
+
 // 图片生成相关状态
 const selectedFrameType = ref<FrameType>('first')
 const panelCount = ref(3)
@@ -1055,8 +1105,8 @@ const framePromptLoadingKey = ref<string | null>(null)
 const generatingImageMap = ref<Record<string, boolean>>({})
 const generatedImages = ref<ImageGeneration[]>([])
 const deletingImageIds = ref<Set<number>>(new Set())
-const imageCache = ref<Record<string, ImageGeneration[]>>({})
-const imageLoadedMap = ref<Record<string, boolean>>({})
+const imageCache = new Map<string, CacheEntry<ImageGeneration[]>>()
+const imageLoadedKeys = new Set<string>()
 const imageLoadingKey = ref<string | null>(null)
 const isSwitchingFrameType = ref(false) // 标志位：是否正在切换帧类型
 const loadingImages = ref(false)
@@ -1105,14 +1155,14 @@ const selectedLastImageForVideo = ref<number | null>(null)
 const generatingVideo = ref(false)
 const generatedVideos = ref<VideoGeneration[]>([])
 const deletingVideoIds = ref<Set<number>>(new Set())
-const videoCache = ref<Record<string, VideoGeneration[]>>({})
+const videoCache = new Map<string, CacheEntry<VideoGeneration[]>>()
 const videoAssets = ref<Asset[]>([])
 const loadingVideos = ref(false)
-const videoLoadedMap = ref<Record<string, boolean>>({})
+const videoLoadedKeys = new Set<string>()
 const videoLoadingKey = ref<string | null>(null)
 const timelineEditorRef = ref<InstanceType<typeof VideoTimelineEditor> | null>(null)
 const videoReferenceImages = ref<ImageGeneration[]>([])
-const videoReferenceCache = ref<Record<string, ImageGeneration[]>>({})
+const videoReferenceCache = new Map<string, CacheEntry<ImageGeneration[]>>()
 const selectedVideoModel = ref<string>('')
 const selectedReferenceMode = ref<string>('')  // 参考图模式：single, first_last, multiple, none
 const previewImageUrl = ref<string>('')  // 预览大图的URL
@@ -1549,16 +1599,24 @@ const getImageCacheKey = (storyboardId: number, frameType?: string) => {
 }
 
 const markImagesLoaded = (storyboardId: number, frameType?: string) => {
-  imageLoadedMap.value[getImageCacheKey(storyboardId, frameType)] = true
+  imageLoadedKeys.add(getImageCacheKey(storyboardId, frameType))
 }
 
 const isImagesLoaded = (storyboardId: number, frameType?: string) => {
-  return !!imageLoadedMap.value[getImageCacheKey(storyboardId, frameType)]
+  return imageLoadedKeys.has(getImageCacheKey(storyboardId, frameType))
+}
+
+const markVideosLoaded = (storyboardId: number) => {
+  videoLoadedKeys.add(String(storyboardId))
+}
+
+const isVideosLoaded = (storyboardId: number) => {
+  return videoLoadedKeys.has(String(storyboardId))
 }
 
 const applyCachedImages = (storyboardId: number, frameType?: string) => {
   const cacheKey = getImageCacheKey(storyboardId, frameType)
-  const cached = imageCache.value[cacheKey]
+  const cached = getCacheData(imageCache, cacheKey, CACHE_TTL_MS)
   if (!cached) {
     if (
       currentStoryboard.value?.id === storyboardId &&
@@ -1580,10 +1638,10 @@ const applyCachedImages = (storyboardId: number, frameType?: string) => {
 
 const applyCachedVideos = (storyboardId: number) => {
   const cacheKey = String(storyboardId)
-  const cached = videoCache.value[cacheKey]
+  const cached = getCacheData(videoCache, cacheKey, CACHE_TTL_MS)
   if (!cached) return
   generatedVideos.value = cached
-  videoLoadedMap.value[cacheKey] = true
+  markVideosLoaded(storyboardId)
   const hasPendingOrProcessing = cached.some(
     video => video.status === 'pending' || video.status === 'processing'
   )
@@ -1594,7 +1652,7 @@ const applyCachedVideos = (storyboardId: number) => {
 
 const applyCachedVideoReferences = (storyboardId: number) => {
   const cacheKey = String(storyboardId)
-  const cached = videoReferenceCache.value[cacheKey]
+  const cached = getCacheData(videoReferenceCache, cacheKey, CACHE_TTL_MS)
   if (!cached) return
   videoReferenceImages.value = cached
 }
@@ -2067,9 +2125,10 @@ const loadStoryboardImages = async (
       params.frame_type = frameType
     }
     const result = await imageAPI.listImages(params)
-    imageCache.value[cacheKey] = result.items || []
+    const items = result.items || []
+    setCacheData(imageCache, cacheKey, items, IMAGE_CACHE_MAX, CACHE_TTL_MS)
     if (!shouldApply()) return
-    generatedImages.value = imageCache.value[cacheKey]
+    generatedImages.value = items
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedImages.value.some(
@@ -2126,10 +2185,11 @@ const startPolling = () => {
       const result = await imageAPI.listImages(params)
 
       if (selectedFrameType.value === pollingFrameType) {
-        generatedImages.value = result.items || []
+        const items = result.items || []
+        generatedImages.value = items
         if (pollingFrameType) {
           const cacheKey = getImageCacheKey(currentStoryboard.value.id, pollingFrameType)
-          imageCache.value[cacheKey] = generatedImages.value
+          setCacheData(imageCache, cacheKey, items, IMAGE_CACHE_MAX, CACHE_TTL_MS)
         }
       }
 
@@ -2253,9 +2313,10 @@ const generateFrameImage = async () => {
     const isSameView =
       currentStoryboard.value?.id === targetStoryboardId &&
       selectedFrameType.value === targetFrameType
-    const baseList = isSameView ? generatedImages.value : (imageCache.value[cacheKey] || [])
+    const cached = getCacheData(imageCache, cacheKey, CACHE_TTL_MS) || []
+    const baseList = isSameView ? generatedImages.value : cached
     const updatedList = [result, ...baseList]
-    imageCache.value[cacheKey] = updatedList
+    setCacheData(imageCache, cacheKey, updatedList, IMAGE_CACHE_MAX, CACHE_TTL_MS)
     if (isSameView) {
       generatedImages.value = updatedList
     }
@@ -2364,24 +2425,22 @@ const getStatusText = (status: string) => {
 }
 
 const pruneImageCaches = (imageId: number) => {
-  Object.keys(imageCache.value).forEach((key) => {
-    const cached = imageCache.value[key]
-    if (!cached) return
-    const next = cached.filter(img => img.id !== imageId)
-    if (next.length !== cached.length) {
-      imageCache.value[key] = next
+  for (const [key, entry] of imageCache) {
+    const next = entry.data.filter(img => img.id !== imageId)
+    if (next.length !== entry.data.length) {
+      imageCache.set(key, { data: next, updatedAt: Date.now() })
     }
-  })
+  }
+  pruneCache(imageCache, IMAGE_CACHE_MAX, CACHE_TTL_MS)
   generatedImages.value = generatedImages.value.filter(img => img.id !== imageId)
 
-  Object.keys(videoReferenceCache.value).forEach((key) => {
-    const cached = videoReferenceCache.value[key]
-    if (!cached) return
-    const next = cached.filter(img => img.id !== imageId)
-    if (next.length !== cached.length) {
-      videoReferenceCache.value[key] = next
+  for (const [key, entry] of videoReferenceCache) {
+    const next = entry.data.filter(img => img.id !== imageId)
+    if (next.length !== entry.data.length) {
+      videoReferenceCache.set(key, { data: next, updatedAt: Date.now() })
     }
-  })
+  }
+  pruneCache(videoReferenceCache, VIDEO_REFERENCE_CACHE_MAX, CACHE_TTL_MS)
   videoReferenceImages.value = videoReferenceImages.value.filter(img => img.id !== imageId)
 
   selectedImagesForVideo.value = selectedImagesForVideo.value.filter(id => id !== imageId)
@@ -2391,14 +2450,13 @@ const pruneImageCaches = (imageId: number) => {
 }
 
 const pruneVideoCaches = (videoId: number) => {
-  Object.keys(videoCache.value).forEach((key) => {
-    const cached = videoCache.value[key]
-    if (!cached) return
-    const next = cached.filter(video => video.id !== videoId)
-    if (next.length !== cached.length) {
-      videoCache.value[key] = next
+  for (const [key, entry] of videoCache) {
+    const next = entry.data.filter(video => video.id !== videoId)
+    if (next.length !== entry.data.length) {
+      videoCache.set(key, { data: next, updatedAt: Date.now() })
     }
-  })
+  }
+  pruneCache(videoCache, VIDEO_CACHE_MAX, CACHE_TTL_MS)
   generatedVideos.value = generatedVideos.value.filter(video => video.id !== videoId)
 }
 
@@ -2690,7 +2748,13 @@ const generateVideo = async () => {
 
     generatedVideos.value.unshift(result)
     if (currentStoryboard.value) {
-      videoCache.value[String(currentStoryboard.value.id)] = generatedVideos.value
+      setCacheData(
+        videoCache,
+        String(currentStoryboard.value.id),
+        generatedVideos.value,
+        VIDEO_CACHE_MAX,
+        CACHE_TTL_MS
+      )
     }
     ElMessage.success('视频生成任务已提交')
 
@@ -2711,9 +2775,16 @@ const loadVideoReferenceImages = async (storyboardId: number) => {
       page: 1,
       page_size: 100
     })
-    videoReferenceCache.value[String(storyboardId)] = result.items || []
+    const items = result.items || []
+    setCacheData(
+      videoReferenceCache,
+      String(storyboardId),
+      items,
+      VIDEO_REFERENCE_CACHE_MAX,
+      CACHE_TTL_MS
+    )
     if (!currentStoryboard.value || currentStoryboard.value.id !== storyboardId) return
-    videoReferenceImages.value = videoReferenceCache.value[String(storyboardId)]
+    videoReferenceImages.value = items
   } catch (error: any) {
     console.error('加载视频参考图片失败:', error)
   }
@@ -2727,7 +2798,7 @@ const loadStoryboardVideos = async (
   const requestId = ++videoRequestId
   const cacheKey = String(storyboardId)
   const shouldApply = () => currentStoryboard.value?.id === storyboardId
-  const shouldShowLoading = options.showLoading !== false && !videoLoadedMap.value[cacheKey]
+  const shouldShowLoading = options.showLoading !== false && !isVideosLoaded(storyboardId)
   if (shouldApply() && shouldShowLoading) {
     videoLoadingKey.value = cacheKey
     videoLoadingRequestId = requestId
@@ -2739,9 +2810,10 @@ const loadStoryboardVideos = async (
       page: 1,
       page_size: 50
     })
-    videoCache.value[cacheKey] = result.items || []
+    const items = result.items || []
+    setCacheData(videoCache, cacheKey, items, VIDEO_CACHE_MAX, CACHE_TTL_MS)
     if (!shouldApply()) return
-    generatedVideos.value = videoCache.value[cacheKey]
+    generatedVideos.value = items
 
     // 如果有进行中的任务，启动轮询
     const hasPendingOrProcessing = generatedVideos.value.some(
@@ -2753,7 +2825,7 @@ const loadStoryboardVideos = async (
   } catch (error: any) {
     console.error('加载视频列表失败:', error)
   } finally {
-    videoLoadedMap.value[cacheKey] = true
+    markVideosLoaded(storyboardId)
     if (
       shouldApply() &&
       shouldShowLoading &&
@@ -2783,8 +2855,15 @@ const startVideoPolling = () => {
         page: 1,
         page_size: 50
       })
-      generatedVideos.value = result.items || []
-      videoCache.value[String(currentStoryboard.value.id)] = generatedVideos.value
+      const items = result.items || []
+      generatedVideos.value = items
+      setCacheData(
+        videoCache,
+        String(currentStoryboard.value.id),
+        items,
+        VIDEO_CACHE_MAX,
+        CACHE_TTL_MS
+      )
 
       const hasPendingOrProcessing = generatedVideos.value.some(
         v => v.status === 'pending' || v.status === 'processing'
@@ -3320,6 +3399,11 @@ onBeforeUnmount(() => {
   stopMergeUpdates()
   stopFramePromptStream()
   window.removeEventListener('storage', handleVideoConfigStorage)
+  imageCache.clear()
+  videoCache.clear()
+  videoReferenceCache.clear()
+  imageLoadedKeys.clear()
+  videoLoadedKeys.clear()
   if (loadingTimer) {
     window.clearTimeout(loadingTimer)
     loadingTimer = null

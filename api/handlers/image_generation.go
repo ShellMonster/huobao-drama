@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/infrastructure/storage"
@@ -186,6 +187,7 @@ func (h *ImageGenerationHandler) GetImageGeneration(c *gin.Context) {
 }
 
 func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
+	start := time.Now()
 	var sceneID *uint
 	if sceneIDStr := c.Query("scene_id"); sceneIDStr != "" {
 		id, err := strconv.ParseUint(sceneIDStr, 10, 32)
@@ -245,7 +247,36 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	}
 
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceImageList, normalizedQuery)
+	sceneIDVal := interface{}(nil)
+	if sceneID != nil {
+		sceneIDVal = *sceneID
+	}
+	storyboardIDVal := interface{}(nil)
+	if storyboardID != nil {
+		storyboardIDVal = *storyboardID
+	}
+	dramaIDVal := interface{}(nil)
+	if dramaIDUint != nil {
+		dramaIDVal = *dramaIDUint
+	}
+	logFields := []interface{}{
+		"scene_id", sceneIDVal,
+		"storyboard_id", storyboardIDVal,
+		"drama_id", dramaIDVal,
+		"frame_type", frameType,
+		"status", status,
+		"page", page,
+		"page_size", pageSize,
+	}
+	withFields := func(extra ...interface{}) []interface{} {
+		fields := make([]interface{}, 0, len(logFields)+len(extra))
+		fields = append(fields, logFields...)
+		fields = append(fields, extra...)
+		return fields
+	}
+	h.log.Infow("List images start", withFields("cache_key", cacheKey)...)
 	if entry, ok := cache.Get(cacheKey); ok {
+		h.log.Infow("List images cache hit", withFields("cache_key", cacheKey, "duration_ms", time.Since(start).Milliseconds())...)
 		c.Header("ETag", entry.ETag)
 		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
 		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
@@ -256,13 +287,27 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		return
 	}
 
+	h.log.Infow("List images db query start", withFields("cache_key", cacheKey)...)
+	dbStart := time.Now()
 	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, status, page, pageSize)
 
 	if err != nil {
-		h.log.Errorw("Failed to list images", "error", err)
+		h.log.Errorw("Failed to list images", withFields(
+			"cache_key", cacheKey,
+			"db_duration_ms", time.Since(dbStart).Milliseconds(),
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err,
+		)...)
 		response.InternalError(c, err.Error())
 		return
 	}
+	h.log.Infow("List images db query done", withFields(
+		"cache_key", cacheKey,
+		"db_duration_ms", time.Since(dbStart).Milliseconds(),
+		"duration_ms", time.Since(start).Milliseconds(),
+		"total", total,
+		"items", len(images),
+	)...)
 
 	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
 	payload := response.PaginationData{

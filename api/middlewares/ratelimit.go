@@ -26,7 +26,6 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		ip := c.ClientIP()
 
 		limiter.mu.Lock()
-		defer limiter.mu.Unlock()
 
 		now := time.Now()
 		requests := limiter.requests[ip]
@@ -39,6 +38,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 		}
 
 		if len(validRequests) >= limiter.limit {
+			limiter.mu.Unlock()
 			response.Error(c, 429, "RATE_LIMIT_EXCEEDED", "请求过于频繁，请稍后再试")
 			c.Abort()
 			return
@@ -46,6 +46,7 @@ func RateLimitMiddleware() gin.HandlerFunc {
 
 		validRequests = append(validRequests, now)
 		limiter.requests[ip] = validRequests
+		limiter.mu.Unlock()
 
 		c.Next()
 	}
