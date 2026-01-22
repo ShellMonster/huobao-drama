@@ -34,7 +34,7 @@ export const subscribeSSE = <T>(options: {
   fallback?: FallbackStarter
   timeoutMs?: number
 }) => {
-  const { url, event, onMessage, onOpen, onError, fallback, timeoutMs = 3000 } = options
+  const { url, event, onMessage, onOpen, onError, fallback, timeoutMs = 12000 } = options
   let source: EventSource | null = null
   let opened = false
   let fallbackCleanup: (() => void) | null = null
@@ -51,6 +51,14 @@ export const subscribeSSE = <T>(options: {
     }
   }
 
+  const stopFallback = () => {
+    if (fallbackCleanup) {
+      fallbackCleanup()
+      fallbackCleanup = null
+    }
+    fallbackStarted = false
+  }
+
   const closeSource = () => {
     if (source) {
       source.close()
@@ -60,10 +68,7 @@ export const subscribeSSE = <T>(options: {
 
   const cleanup = () => {
     closeSource()
-    if (fallbackCleanup) {
-      fallbackCleanup()
-      fallbackCleanup = null
-    }
+    stopFallback()
   }
 
   if (typeof EventSource === 'undefined') {
@@ -76,22 +81,21 @@ export const subscribeSSE = <T>(options: {
   const openTimeout = window.setTimeout(() => {
     if (!opened) {
       startFallback()
-      closeSource()
     }
   }, timeoutMs)
 
   source.onopen = () => {
     opened = true
     window.clearTimeout(openTimeout)
+    stopFallback()
     if (onOpen) onOpen()
   }
 
   source.onerror = (err) => {
     if (onError) onError(err)
-    if (!opened || !fallbackStarted) {
+    if (!fallbackStarted) {
       startFallback()
     }
-    closeSource()
   }
 
   source.addEventListener(event, (evt) => {
