@@ -43,7 +43,7 @@ func main() {
 	logr.Info("Database tables migrated successfully")
 
 	styleService := services.NewStyleService(db, logr)
-	if err := styleService.EnsureDefaults(); err != nil {
+	if err := styleService.EnsureDefaults(cfg.Storage.LocalPath, cfg.Storage.BaseURL); err != nil {
 		logr.Warn("Failed to seed styles", "error", err)
 	}
 	if err := styleService.RefreshStyleCatalog(); err != nil {
