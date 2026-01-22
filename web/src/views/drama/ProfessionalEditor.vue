@@ -1559,7 +1559,15 @@ const isImagesLoaded = (storyboardId: number, frameType?: string) => {
 const applyCachedImages = (storyboardId: number, frameType?: string) => {
   const cacheKey = getImageCacheKey(storyboardId, frameType)
   const cached = imageCache.value[cacheKey]
-  if (!cached) return
+  if (!cached) {
+    if (
+      currentStoryboard.value?.id === storyboardId &&
+      (!frameType || selectedFrameType.value === frameType)
+    ) {
+      generatedImages.value = []
+    }
+    return
+  }
   generatedImages.value = cached
   markImagesLoaded(storyboardId, frameType)
   const hasPendingOrProcessing = cached.some(
@@ -1802,6 +1810,8 @@ watch(selectedFrameType, (newType) => {
 
 // 监听当前分镜切换，重置提示词
 watch(currentStoryboard, async (newStoryboard) => {
+  stopPolling()
+
   if (!newStoryboard) {
     currentFramePrompt.value = ''
     generatedImages.value = []
