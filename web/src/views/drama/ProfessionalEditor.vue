@@ -250,21 +250,26 @@
                   text="加载提示词中..."
                 >
                   <div class="section-label">
-                    {{ $t('editor.prompt') }}
-                    <el-button
-                      v-if="reusePrevLastAvailable"
-                      size="small"
-                      :type="reusePrevLastActive ? 'success' : 'default'"
-                      :loading="reusePrevLastLoading"
-                      @click="toggleReusePrevLast"
-                      style="margin-left: 10px;"
-                    >
-                      {{ reusePrevLastActive ? '取消复用尾帧' : '复用上个镜头尾帧' }}
-                    </el-button>
-                    <el-button size="small" type="primary" :loading="currentPromptGenerating"
-                      :disabled="reusePrevLastActive" @click="extractFramePrompt" style="margin-left: 10px;">
-                      {{ $t('editor.extractPrompt') }}
-                    </el-button>
+                    <span>{{ $t('editor.prompt') }}</span>
+                    <span class="section-actions">
+                      <el-tooltip v-if="reusePrevLastAvailable" :content="reusePrevLastTooltip" placement="top">
+                        <el-badge :value="reusePrevLastActive ? '已启用' : ''" :hidden="!reusePrevLastActive" type="success">
+                          <el-button
+                            size="small"
+                            :plain="!reusePrevLastActive"
+                            :type="reusePrevLastActive ? 'success' : 'default'"
+                            :loading="reusePrevLastLoading"
+                            @click="toggleReusePrevLast"
+                          >
+                            复用尾帧
+                          </el-button>
+                        </el-badge>
+                      </el-tooltip>
+                      <el-button size="small" type="primary" :loading="currentPromptGenerating"
+                        :disabled="reusePrevLastActive" @click="extractFramePrompt">
+                        {{ $t('editor.extractPrompt') }}
+                      </el-button>
+                    </span>
                   </div>
                   <el-input v-model="currentFramePrompt" type="textarea" :rows="8" :readonly="reusePrevLastActive"
                     :placeholder="$t('editor.promptPlaceholder')" />
@@ -1705,6 +1710,12 @@ const currentStoryboard = computed(() => {
 const reusePrevLastActive = computed(() => {
   if (selectedFrameType.value !== 'first') return false
   return !!currentStoryboard.value?.reuse_prev_last_frame
+})
+
+const reusePrevLastTooltip = computed(() => {
+  return reusePrevLastActive.value
+    ? '已复用上个镜头尾帧，点击关闭'
+    : '复用上个镜头尾帧作为当前首帧（提示词+图片）'
 })
 
 const reusePrevLastAvailable = computed(() => {
@@ -4284,6 +4295,12 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.section-label .section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 // 角色选择对话框样式
