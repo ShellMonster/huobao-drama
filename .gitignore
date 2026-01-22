@@ -66,3 +66,7 @@ build.sh
 /data/storage/
 /web/package-lock.json
 .DS_Storevideo-model-params.md
+
+# Prompt梳理文档
+项目Prompt梳理.csv
+*.csv
