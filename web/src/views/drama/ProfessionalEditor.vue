@@ -1931,8 +1931,11 @@ watch(selectedFrameType, (newType) => {
 })
 
 // 监听当前分镜切换，重置提示词
-watch(currentStoryboard, async (newStoryboard) => {
+watch(currentStoryboard, async (newStoryboard, oldStoryboard) => {
   stopPolling()
+  if (newStoryboard?.id !== oldStoryboard?.id) {
+    stopVideoPolling()
+  }
 
   if (!newStoryboard) {
     currentFramePrompt.value = ''
