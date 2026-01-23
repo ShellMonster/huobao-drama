@@ -91,13 +91,40 @@ RUN if [ -n "$ALPINE_MIRROR" ]; then \
         sed -i "s@dl-cdn.alpinelinux.org@$ALPINE_MIRROR@g" /etc/apk/repositories 2>/dev/null || true; \
     fi
 
-# 安装运行时依赖
-RUN apk add --no-cache \
-    ca-certificates \
-    tzdata \
-    ffmpeg \
-    wget \
-    && rm -rf /var/cache/apk/*
+# 安装运行时依赖（优先使用镜像源，失败则回退官方源）
+RUN set -e; \
+    alpine_version="$(cut -d. -f1,2 /etc/alpine-release)"; \
+    install_pkgs() { \
+        repo_main="$1"; repo_comm="$2"; \
+        echo "Using repositories:"; \
+        echo "  $repo_main"; \
+        echo "  $repo_comm"; \
+        apk add --no-cache \
+            --repository "$repo_main" \
+            --repository "$repo_comm" \
+            ca-certificates \
+            tzdata \
+            ffmpeg \
+            wget; \
+    }; \
+    normalize_repo_base() { \
+        base="$1"; \
+        case "$base" in http://*|https://*) ;; *) base="https://${base}" ;; esac; \
+        base="${base%/}"; \
+        base="$(echo "$base" | sed -E 's#/alpine/v[0-9.]+.*#/alpine#')"; \
+        case "$base" in */alpine) ;; *) base="${base}/alpine" ;; esac; \
+        echo "$base"; \
+    }; \
+    if [ -n "${ALPINE_MIRROR:-}" ]; then \
+        repo_base="$(normalize_repo_base "$ALPINE_MIRROR")"; \
+        if install_pkgs "${repo_base}/v${alpine_version}/main" "${repo_base}/v${alpine_version}/community"; then \
+            exit 0; \
+        else \
+            echo "Mirror failed, falling back to official repository."; \
+        fi; \
+    fi; \
+    repo_base="https://dl-cdn.alpinelinux.org/alpine"; \
+    install_pkgs "${repo_base}/v${alpine_version}/main" "${repo_base}/v${alpine_version}/community"
 
 # 设置时区
 ENV TZ=Asia/Shanghai

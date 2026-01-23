@@ -26,7 +26,7 @@
             <el-button size="small" @click="applyGlobalTransitionDuration">应用</el-button>
           </div>
           <div class="setting-item">
-            <el-tooltip content="合成时对除首段外的片段裁剪开头，不影响时间线预览" placement="top">
+            <el-tooltip content="即时调整时间线预览与合成效果，仅改变播放起止时间" placement="top">
               <span class="setting-label">重叠裁剪</span>
             </el-tooltip>
             <el-input-number
@@ -414,7 +414,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   VideoPlay, VideoPause, Plus, FolderAdd, ArrowLeft, ArrowRight,
@@ -463,6 +463,7 @@ interface AudioClip {
   position: number
   order: number
   volume: number  // 音量 0-1
+  linked?: boolean
 }
 
 const props = defineProps<{
@@ -548,6 +549,8 @@ const editingTransition = ref({
 const globalTransitionDuration = ref(1.0)
 const globalOverlapTrim = ref(0)
 const minClipDuration = 0.1
+const clipBaseMap = new Map<string, { start: number; end: number }>()
+const audioBaseMap = new Map<string, { start: number; end: number }>()
 
 // 计算总时长
 const totalDuration = computed(() => {
@@ -939,6 +942,10 @@ const addClipToTimeline = async (scene: Scene, insertAtPosition?: number) => {
   
   // 选中新添加的片段
   selectedClipId.value = newClip.id
+
+  if (globalOverlapTrim.value > 0) {
+    applyOverlapTrim()
+  }
   
   const insertInfo = insertAfterIndex !== null ? '（已插入到选中片段后）' : ''
   ElMessage.success(`已添加到时间线${insertInfo}`)
@@ -1081,6 +1088,84 @@ const applyGlobalTransitionDuration = () => {
   }
 }
 
+const ensureClipBase = (clip: TimelineClip) => {
+  if (clipBaseMap.has(clip.id)) return
+  clipBaseMap.set(clip.id, {
+    start: clip.start_time,
+    end: clip.end_time
+  })
+}
+
+const updateClipBaseFromEffective = (clip: TimelineClip, index: number) => {
+  const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
+  let baseStart = clip.start_time
+  if (overlap > 0 && index > 0) {
+    baseStart = Math.max(0, clip.start_time - overlap)
+  }
+  const baseEnd = Math.max(baseStart + minClipDuration, clip.end_time)
+  clipBaseMap.set(clip.id, { start: baseStart, end: baseEnd })
+}
+
+const ensureAudioBase = (audio: AudioClip) => {
+  if (audioBaseMap.has(audio.id)) return
+  audioBaseMap.set(audio.id, {
+    start: audio.start_time,
+    end: audio.end_time
+  })
+}
+
+const syncLinkedAudioClips = () => {
+  if (audioClips.value.length === 0) return
+  const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
+  audioClips.value.forEach((audio) => {
+    if (audio.linked === false) return
+    const clipIndex = timelineClips.value.findIndex(c => c.id === audio.source_clip_id)
+    if (clipIndex < 0) return
+    ensureAudioBase(audio)
+    const base = audioBaseMap.get(audio.id)
+    if (!base) return
+    let start = base.start
+    if (overlap > 0 && clipIndex > 0) {
+      start = Math.min(base.start + overlap, base.end - minClipDuration)
+    }
+    audio.start_time = start
+    audio.end_time = base.end
+    audio.duration = Math.max(base.end - start, minClipDuration)
+    const clip = timelineClips.value[clipIndex]
+    if (clip) {
+      audio.position = clip.position
+    }
+  })
+  updateAudioClipOrders()
+}
+
+const applyOverlapTrim = () => {
+  if (timelineClips.value.length === 0) return
+  const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
+
+  timelineClips.value.forEach((clip) => ensureClipBase(clip))
+
+  timelineClips.value.forEach((clip, index) => {
+    const base = clipBaseMap.get(clip.id)
+    if (!base) return
+    let start = base.start
+    if (overlap > 0 && index > 0) {
+      start = Math.min(base.start + overlap, base.end - minClipDuration)
+    }
+    clip.start_time = start
+    clip.end_time = base.end
+    clip.duration = Math.max(base.end - start, minClipDuration)
+  })
+
+  compactClips()
+  updateClipOrders()
+  syncLinkedAudioClips()
+}
+
+watch(globalOverlapTrim, () => {
+  applyOverlapTrim()
+})
+
 // 选择和删除片段
 const selectClip = (clip: TimelineClip) => {
   selectedClipId.value = clip.id
@@ -1091,12 +1176,17 @@ const removeClip = (clip: TimelineClip) => {
   if (index !== -1) {
     timelineClips.value.splice(index, 1)
     updateClipOrders()
+    clipBaseMap.delete(clip.id)
     
     // 同时移除关联的音频片段
     const audioIndex = audioClips.value.findIndex(a => a.source_clip_id === clip.id)
     if (audioIndex !== -1) {
+      audioBaseMap.delete(audioClips.value[audioIndex].id)
       audioClips.value.splice(audioIndex, 1)
       updateAudioClipOrders()
+    }
+    if (globalOverlapTrim.value > 0) {
+      applyOverlapTrim()
     }
   }
 }
@@ -1106,6 +1196,8 @@ const clearAllClips = () => {
   
   timelineClips.value = []
   audioClips.value = []
+  clipBaseMap.clear()
+  audioBaseMap.clear()
   selectedClipId.value = null
   selectedAudioClipId.value = null
   currentTime.value = 0
@@ -1133,6 +1225,7 @@ const extractAllAudio = async () => {
   try {
     // 清空现有音频
     audioClips.value = []
+    audioBaseMap.clear()
     
     // 收集所有视频URL
     const videoUrls = timelineClips.value.map(clip => clip.video_url)
@@ -1177,20 +1270,26 @@ const extractAllAudio = async () => {
         duration: audioDuration, // 使用提取的音频时长
         position: clip.position, // 和视频片段在时间轴上相同位置
         order: index,
-        volume: 1.0
+        volume: 1.0,
+        linked: true
       }
+      ensureAudioBase(audioClip)
       audioClips.value.push(audioClip)
     })
     
     updateAudioClipOrders()
     loadingMessage.close()
     ElMessage.success(`已成功提取 ${audioClips.value.length} 个音频片段`)
+    if (globalOverlapTrim.value > 0) {
+      applyOverlapTrim()
+    }
   } catch (error: any) {
     console.error('提取音频失败:', error)
     loadingMessage.close()
     ElMessage.error(error.message || '音频提取失败，请重试')
     // 清空部分提取的音频
     audioClips.value = []
+    audioBaseMap.clear()
   }
 }
 
@@ -1203,6 +1302,7 @@ const selectAudioClip = (audio: AudioClip) => {
 const removeAudioClip = (audio: AudioClip) => {
   const index = audioClips.value.findIndex(a => a.id === audio.id)
   if (index !== -1) {
+    audioBaseMap.delete(audio.id)
     audioClips.value.splice(index, 1)
     updateAudioClipOrders()
   }
@@ -1219,6 +1319,7 @@ const startDragAudioClip = (event: MouseEvent, audio: AudioClip) => {
   if (dragState.value.isResizing) return
   
   event.stopPropagation()
+  audio.linked = false
   dragState.value = {
     isDragging: true,
     isResizing: false,
@@ -1262,6 +1363,7 @@ const handleDragAudioEnd = () => {
 // 调整音频片段大小
 const startResizeAudioClip = (event: MouseEvent, audio: AudioClip, side: 'left' | 'right') => {
   event.stopPropagation()
+  audio.linked = false
   
   dragState.value = {
     isDragging: false,
@@ -1377,6 +1479,9 @@ const handleDragMove = (event: MouseEvent) => {
 }
 
 const handleDragEnd = () => {
+  const wasResizing = dragState.value.isResizing
+  const targetClipId = dragState.value.clipId
+
   dragState.value = {
     isDragging: false,
     isResizing: false,
@@ -1394,6 +1499,18 @@ const handleDragEnd = () => {
   timelineClips.value.sort((a, b) => a.position - b.position)
   compactClips()
   updateClipOrders()
+
+  if (wasResizing && targetClipId) {
+    const clipIndex = timelineClips.value.findIndex(c => c.id === targetClipId)
+    const clip = timelineClips.value[clipIndex]
+    if (clip) {
+      updateClipBaseFromEffective(clip, clipIndex)
+    }
+  }
+
+  if (globalOverlapTrim.value > 0) {
+    applyOverlapTrim()
+  }
 }
 
 // 紧密排列所有片段（消除空隙）
@@ -1957,24 +2074,13 @@ type MergeClip = {
 }
 
 const buildMergeClips = (): MergeClip[] => {
-  const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
-  return timelineClips.value.map((clip, index) => {
-    let startTime = clip.start_time
-    const endTime = clip.end_time
-
-    if (overlap > 0 && index > 0) {
-      const maxStart = Math.max(0, endTime - minClipDuration)
-      startTime = Math.min(startTime + overlap, maxStart)
-    }
-
-    const duration = Math.max(endTime - startTime, minClipDuration)
-
+  return timelineClips.value.map((clip) => {
     return {
       storyboard_id: String(clip.storyboard_id),
       video_url: clip.video_url,
-      startTime,
-      endTime,
-      duration,
+      startTime: clip.start_time,
+      endTime: clip.end_time,
+      duration: clip.duration,
       transition: clip.transition
     }
   })
