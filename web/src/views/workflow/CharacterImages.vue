@@ -78,7 +78,8 @@ import { Edit, Picture } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
-import { subscribeUnifiedSSE } from '@/utils/sse'
+import type { ImageGeneration } from '@/types/image'
+import { createListStream } from '@/utils/generationManager'
 import { LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
 
@@ -280,86 +281,77 @@ const batchGenerate = async () => {
   }
 }
 
-let pollingTimer: number | null = null
-let sseStop: (() => void) | null = null
+const isAllSelectedGenerated = () => {
+  return selectedCharacters.value.every(id => {
+    const char = characters.value.find(c => c.id === id)
+    return char?.image_url || char?.image_generation_status === 'failed'
+  })
+}
 
-const stopSSE = () => {
-  if (sseStop) {
-    sseStop()
-    sseStop = null
+const refreshCharacters = async () => {
+  try {
+    const drama = await dramaAPI.get(dramaId)
+    if (drama.characters) {
+      characters.value = drama.characters
+    }
+  } catch (error) {
+    console.error('轮询错误:', error)
   }
 }
 
-const startPolling = () => {
-  if (pollingTimer || sseStop) return
+const handleImageEvent = (imageGen: ImageGeneration) => {
+  if (!imageGen?.character_id) return
+  if (!selectedCharacters.value.includes(imageGen.character_id)) return
 
-  const handleImageEvent = (imageGen: any) => {
-    if (!imageGen?.character_id) return
-    if (!selectedCharacters.value.includes(imageGen.character_id)) return
-
-    const idx = characters.value.findIndex(c => c.id === imageGen.character_id)
-    if (idx !== -1) {
-      characters.value[idx] = {
-        ...characters.value[idx],
-        image_url: imageGen.image_url || characters.value[idx].image_url,
-        image_generation_status: imageGen.status
-      }
+  const idx = characters.value.findIndex(c => c.id === imageGen.character_id)
+  if (idx !== -1) {
+    characters.value[idx] = {
+      ...characters.value[idx],
+      image_url: imageGen.image_url || characters.value[idx].image_url,
+      image_generation_status: imageGen.status
     }
+  }
 
-    const allGenerated = selectedCharacters.value.every(id => {
-      const char = characters.value.find(c => c.id === id)
-      return char?.image_url || char?.image_generation_status === 'failed'
-    })
+  if (isAllSelectedGenerated()) {
+    stopPolling()
+    ElMessage.success('批量生成完成')
+  }
+}
 
-    if (allGenerated) {
+const hasPendingSelected = () => {
+  if (selectedCharacters.value.length === 0) return false
+  return !isAllSelectedGenerated()
+}
+
+const characterStream = createListStream<ImageGeneration>({
+  types: ['image_generation'],
+  getParams: () => ({ drama_id: dramaId }),
+  onMessage: handleImageEvent,
+  poll: async () => {
+    await refreshCharacters()
+    if (isAllSelectedGenerated()) {
       stopPolling()
       ElMessage.success('批量生成完成')
     }
-  }
+  },
+  shouldPoll: hasPendingSelected,
+  pollIntervalMs: 5000,
+  scheduleDelayMs: 500
+})
 
-  const startFallback = () => {
-    if (pollingTimer) return
-    pollingTimer = window.setInterval(async () => {
-      try {
-        const drama = await dramaAPI.get(dramaId)
-        if (drama.characters) {
-          characters.value = drama.characters
+let streamActive = false
 
-          const allGenerated = selectedCharacters.value.every(id => {
-            const char = characters.value.find(c => c.id === id)
-            return char?.image_url || char?.image_generation_status === 'failed'
-          })
-
-          if (allGenerated) {
-            stopPolling()
-            ElMessage.success('批量生成完成')
-          }
-        }
-      } catch (error) {
-        console.error('轮询错误:', error)
-      }
-    }, 5000)
-    return () => {
-      if (pollingTimer) {
-        clearInterval(pollingTimer)
-        pollingTimer = null
-      }
-    }
-  }
-
-  sseStop = subscribeUnifiedSSE({
-    types: ['image_generation'],
-    params: { drama_id: dramaId },
-    onMessage: handleImageEvent,
-    fallback: startFallback
-  }).close
+const startPolling = () => {
+  if (streamActive) return
+  if (!hasPendingSelected()) return
+  streamActive = true
+  characterStream.start()
 }
 
 const stopPolling = () => {
-  stopSSE()
-  if (pollingTimer) {
-    clearInterval(pollingTimer)
-    pollingTimer = null
+  if (streamActive) {
+    characterStream.stop()
+    streamActive = false
   }
   batchGenerating.value = false
   generatingIds.value = []

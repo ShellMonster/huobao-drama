@@ -178,7 +178,7 @@ import type { VideoGeneration, VideoStatus } from '@/types/video'
 import type { Drama } from '@/types/drama'
 import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
-import { subscribeUnifiedSSE } from '@/utils/sse'
+import { createListStream } from '@/utils/generationManager'
 import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
@@ -193,9 +193,33 @@ const showDetailDialog = ref(false)
 const selectedVideo = ref<VideoGeneration>()
 const videoLoadedMap = ref<Record<string, boolean>>({})
 const videoLoadingKey = ref<string | null>(null)
-let pollInterval: number | null = null
-let videoStreamStop: (() => void) | null = null
-let reloadTimer: number | null = null
+const videoStream = createListStream<VideoGeneration>({
+  types: ['video_generation'],
+  getParams: () => ({
+    drama_id: filters.drama_id || undefined
+  }),
+  onMessage: (videoGen) => {
+    if (filters.drama_id && String(videoGen.drama_id) !== filters.drama_id) return
+
+    if (filters.status && videoGen.status !== filters.status) {
+      videos.value = videos.value.filter(video => video.id !== videoGen.id)
+      return
+    }
+
+    const index = videos.value.findIndex(video => video.id === videoGen.id)
+    if (index >= 0) {
+      videos.value[index] = { ...videos.value[index], ...videoGen }
+    } else {
+      videoStream.scheduleReload()
+    }
+  },
+  poll: () => {
+    loadVideos({ showLoading: false })
+  },
+  shouldPoll: () => videos.value.some(v => v.status === 'processing'),
+  pollIntervalMs: 10000,
+  scheduleDelayMs: 500
+})
 let videoRequestId = 0
 let videoLoadingRequestId = 0
 
@@ -217,60 +241,11 @@ const getVideoQueryKey = () => [
 ].join(':')
 
 const stopVideoStream = () => {
-  if (videoStreamStop) {
-    videoStreamStop()
-    videoStreamStop = null
-  }
-  if (reloadTimer) {
-    clearTimeout(reloadTimer)
-    reloadTimer = null
-  }
-}
-
-const scheduleReload = () => {
-  if (reloadTimer) return
-  reloadTimer = window.setTimeout(() => {
-    reloadTimer = null
-    loadVideos({ showLoading: false })
-  }, 500)
+  videoStream.stop()
 }
 
 const startVideoStream = () => {
-  stopVideoStream()
-  videoStreamStop = subscribeUnifiedSSE({
-    types: ['video_generation'],
-    params: { drama_id: filters.drama_id || undefined },
-    onMessage: (videoGen) => {
-      if (filters.drama_id && String(videoGen.drama_id) !== filters.drama_id) return
-
-      if (filters.status && videoGen.status !== filters.status) {
-        videos.value = videos.value.filter(video => video.id !== videoGen.id)
-        return
-      }
-
-      const index = videos.value.findIndex(video => video.id === videoGen.id)
-      if (index >= 0) {
-        videos.value[index] = { ...videos.value[index], ...videoGen }
-      } else {
-        scheduleReload()
-      }
-    },
-    fallback: () => {
-      if (pollInterval) return
-      pollInterval = window.setInterval(() => {
-        const hasProcessing = videos.value.some(v => v.status === 'processing')
-        if (hasProcessing) {
-          loadVideos({ showLoading: false })
-        }
-      }, 10000)
-      return () => {
-        if (pollInterval) {
-          clearInterval(pollInterval)
-          pollInterval = null
-        }
-      }
-    }
-  }).close
+  videoStream.start()
 }
 
 const loadVideos = async (options: { showLoading?: boolean } = {}) => {
@@ -390,10 +365,6 @@ const startPolling = () => {
 
 const stopPolling = () => {
   stopVideoStream()
-  if (pollInterval) {
-    clearInterval(pollInterval)
-    pollInterval = null
-  }
 }
 
 onMounted(() => {

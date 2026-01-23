@@ -570,8 +570,9 @@ import { generationAPI } from '@/api/generation'
 import { characterLibraryAPI } from '@/api/character-library'
 import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
+import type { ImageGeneration } from '@/types/image'
 import { AppHeader, LoadingSection } from '@/components/common'
-import { subscribeUnifiedSSE } from '@/utils/sse'
+import { createListStream } from '@/utils/generationManager'
 import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
@@ -1231,32 +1232,42 @@ const batchGenerateCharacterImages = async () => {
   }
 }
 
-let characterPollingTimer: number | null = null
-let characterStreamStop: (() => void) | null = null
+const handleCharacterImageEvent = (imageGen: ImageGeneration) => {
+  if (!imageGen?.character_id) return
+  if (!selectedCharacterIds.value.includes(imageGen.character_id)) return
 
-const stopCharacterStream = () => {
-  if (characterStreamStop) {
-    characterStreamStop()
-    characterStreamStop = null
+  const idx = drama.value?.characters?.findIndex(c => c.id === imageGen.character_id) ?? -1
+  if (idx >= 0 && drama.value?.characters) {
+    drama.value.characters[idx] = {
+      ...drama.value.characters[idx],
+      image_url: imageGen.image_url || drama.value.characters[idx].image_url,
+      image_generation_status: imageGen.status
+    }
+  }
+
+  const { completedCount, failedCount, failedCharacters } = getBatchCharacterProgress()
+  if (completedCount + failedCount === selectedCharacterIds.value.length) {
+    stopCharacterPolling()
+    if (failedCount > 0) {
+      ElMessage.warning(`批量生成完成：${completedCount}个成功，${failedCount}个失败（${failedCharacters.join('、')}）`)
+    } else {
+      ElMessage.success('批量生成完成')
+    }
   }
 }
 
-const startCharacterPolling = () => {
-  if (characterPollingTimer || characterStreamStop) return
+const hasPendingCharacters = () => {
+  if (selectedCharacterIds.value.length === 0) return false
+  const { completedCount, failedCount } = getBatchCharacterProgress()
+  return completedCount + failedCount < selectedCharacterIds.value.length
+}
 
-  const handleImageEvent = (imageGen: any) => {
-    if (!imageGen?.character_id) return
-    if (!selectedCharacterIds.value.includes(imageGen.character_id)) return
-
-    const idx = drama.value?.characters?.findIndex(c => c.id === imageGen.character_id) ?? -1
-    if (idx >= 0 && drama.value?.characters) {
-      drama.value.characters[idx] = {
-        ...drama.value.characters[idx],
-        image_url: imageGen.image_url || drama.value.characters[idx].image_url,
-        image_generation_status: imageGen.status
-      }
-    }
-
+const characterStream = createListStream<ImageGeneration>({
+  types: ['image_generation'],
+  getParams: () => ({ drama_id: dramaId }),
+  onMessage: handleCharacterImageEvent,
+  poll: async () => {
+    await loadDramaData()
     const { completedCount, failedCount, failedCharacters } = getBatchCharacterProgress()
     if (completedCount + failedCount === selectedCharacterIds.value.length) {
       stopCharacterPolling()
@@ -1266,40 +1277,19 @@ const startCharacterPolling = () => {
         ElMessage.success('批量生成完成')
       }
     }
-  }
+  },
+  shouldPoll: hasPendingCharacters,
+  pollIntervalMs: 5000,
+  scheduleDelayMs: 500
+})
 
-  const startFallback = () => {
-    if (characterPollingTimer) return
-    characterPollingTimer = window.setInterval(async () => {
-      try {
-        await loadDramaData()
-        const { completedCount, failedCount, failedCharacters } = getBatchCharacterProgress()
-        if (completedCount + failedCount === selectedCharacterIds.value.length) {
-          stopCharacterPolling()
-          if (failedCount > 0) {
-            ElMessage.warning(`批量生成完成：${completedCount}个成功，${failedCount}个失败（${failedCharacters.join('、')}）`)
-          } else {
-            ElMessage.success('批量生成完成')
-          }
-        }
-      } catch (error) {
-        console.error('轮询错误:', error)
-      }
-    }, 5000)
-    return () => {
-      if (characterPollingTimer) {
-        clearInterval(characterPollingTimer)
-        characterPollingTimer = null
-      }
-    }
-  }
+let characterStreamActive = false
 
-  characterStreamStop = subscribeUnifiedSSE({
-    types: ['image_generation'],
-    params: { drama_id: dramaId },
-    onMessage: handleImageEvent,
-    fallback: startFallback
-  }).close
+const startCharacterPolling = () => {
+  if (characterStreamActive) return
+  if (!hasPendingCharacters()) return
+  characterStreamActive = true
+  characterStream.start()
 }
 
 const getBatchCharacterProgress = () => {
@@ -1324,10 +1314,9 @@ const getBatchCharacterProgress = () => {
 }
 
 const stopCharacterPolling = () => {
-  stopCharacterStream()
-  if (characterPollingTimer) {
-    clearInterval(characterPollingTimer)
-    characterPollingTimer = null
+  if (characterStreamActive) {
+    characterStream.stop()
+    characterStreamActive = false
   }
   batchGenerating.value = false
   generatingCharacterIds.value = []

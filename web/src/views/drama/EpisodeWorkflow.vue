@@ -827,8 +827,10 @@ import { aiAPI } from '@/api/ai'
 import type { AIServiceConfig } from '@/types/ai'
 import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
+import type { ImageGeneration } from '@/types/image'
 import { AppHeader, LoadingSection } from '@/components/common'
 import { subscribeUnifiedSSE } from '@/utils/sse'
+import { createStatusWatcher } from '@/utils/generationManager'
 import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
@@ -860,21 +862,7 @@ const stopPageLoading = () => {
 }
 
 const stopAllImagePollers = () => {
-  if (imageStreamStop) {
-    imageStreamStop()
-    imageStreamStop = null
-  }
-  if (imageFallbackTimer) {
-    window.clearInterval(imageFallbackTimer)
-    imageFallbackTimer = null
-  }
-  imageFallbackInFlight = false
-  activeImageWatchers.forEach((watcher) => {
-    if (watcher.timeoutTimer) {
-      window.clearTimeout(watcher.timeoutTimer)
-    }
-  })
-  activeImageWatchers.clear()
+  imageStatusWatcher.stopAll()
 }
 
 // 生成 localStorage key
@@ -891,17 +879,23 @@ const batchGeneratingCharacters = ref(false)
 const batchGeneratingScenes = ref(false)
 const generatingCharacterImages = ref<Record<number, boolean>>({})
 const generatingSceneImages = ref<Record<string, boolean>>({})
-const activeImageWatchers = new Map<number, {
-  done: boolean
-  onComplete: () => Promise<void>
-  onFailed?: (imageGen: any) => Promise<void> | void
-  resolve: () => void
-  timeoutTimer: number | null
-}>()
-let imageStreamStop: (() => void) | null = null
-let imageFallbackTimer: number | null = null
-let imageFallbackInFlight = false
 const imageFallbackInterval = 6000
+const imageStatusWatcher = createStatusWatcher<ImageGeneration>({
+  types: ['image_generation'],
+  params: { drama_id: dramaId },
+  fetchById: (id) => imageAPI.getImage(id),
+  getId: (payload) => payload?.id,
+  isCompleted: (payload) => payload?.status === 'completed',
+  isFailed: (payload) => payload?.status === 'failed',
+  onFailedGlobal: (payload) => {
+    ElMessage.error(`图片生成失败: ${payload?.error_msg || '未知错误'}`)
+  },
+  onTimeout: () => {
+    ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
+  },
+  pollIntervalMs: imageFallbackInterval,
+  timeoutMs: imageFallbackInterval * 100
+})
 
 // 选择状态
 const selectedCharacterIds = ref<number[]>([])
@@ -1376,129 +1370,15 @@ const handleExtractCharactersAndBackgrounds = async () => {
   await extractCharactersAndBackgrounds()
 }
 
-const handleImageStatusUpdate = async (imageGen: any) => {
-  const watcher = activeImageWatchers.get(imageGen?.id)
-  if (!watcher || watcher.done) return
-
-  if (imageGen.status === 'completed') {
-    watcher.done = true
-    if (watcher.timeoutTimer) {
-      window.clearTimeout(watcher.timeoutTimer)
-      watcher.timeoutTimer = null
-    }
-    activeImageWatchers.delete(imageGen.id)
-    try {
-      await watcher.onComplete()
-    } catch (error) {
-      console.error('[SSE] 图片完成回调失败:', error)
-    }
-    watcher.resolve()
-  } else if (imageGen.status === 'failed') {
-    watcher.done = true
-    if (watcher.timeoutTimer) {
-      window.clearTimeout(watcher.timeoutTimer)
-      watcher.timeoutTimer = null
-    }
-    activeImageWatchers.delete(imageGen.id)
-    ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
-    if (watcher.onFailed) {
-      try {
-        await watcher.onFailed(imageGen)
-      } catch (error) {
-        console.error('[SSE] 图片失败回调失败:', error)
-      }
-    }
-    watcher.resolve()
-  }
-
-  if (activeImageWatchers.size === 0) {
-    stopAllImagePollers()
-  }
-}
-
-const pollActiveImages = async () => {
-  if (imageFallbackInFlight) return
-  const ids = Array.from(activeImageWatchers.keys())
-  if (ids.length === 0) {
-    stopAllImagePollers()
-    return
-  }
-  imageFallbackInFlight = true
-  const results = await Promise.allSettled(ids.map(id => imageAPI.getImage(id)))
-  results.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      void handleImageStatusUpdate(result.value)
-    }
-  })
-  imageFallbackInFlight = false
-  if (activeImageWatchers.size === 0) {
-    stopAllImagePollers()
-  }
-}
-
-const startImageFallback = () => {
-  if (imageFallbackTimer) return
-  imageFallbackTimer = window.setInterval(() => {
-    void pollActiveImages()
-  }, imageFallbackInterval)
-  return () => {
-    if (imageFallbackTimer) {
-      window.clearInterval(imageFallbackTimer)
-      imageFallbackTimer = null
-    }
-  }
-}
-
-const ensureImageStream = () => {
-  if (imageStreamStop || activeImageWatchers.size === 0) return
-  imageStreamStop = subscribeUnifiedSSE({
-    types: ['image_generation'],
-    params: { drama_id: dramaId },
-    onMessage: (payload) => {
-      void handleImageStatusUpdate(payload)
-    },
-    fallback: startImageFallback
-  }).close
-}
-
 // 轮询检查图片生成状态（SSE优先，轮询兜底）
 const pollImageStatus = (
   imageGenId: number,
   onComplete: () => Promise<void>,
   onFailed?: (imageGen: any) => Promise<void> | void
 ) => {
-  return new Promise<void>((resolve) => {
-    const timeoutTimer = window.setTimeout(() => {
-      const watcher = activeImageWatchers.get(imageGenId)
-      if (!watcher || watcher.done) return
-      watcher.done = true
-      watcher.timeoutTimer = null
-      activeImageWatchers.delete(imageGenId)
-      ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
-      watcher.resolve()
-      if (activeImageWatchers.size === 0) {
-        stopAllImagePollers()
-      }
-    }, imageFallbackInterval * 100)
-
-    activeImageWatchers.set(imageGenId, {
-      done: false,
-      onComplete,
-      onFailed,
-      resolve,
-      timeoutTimer
-    })
-
-    ensureImageStream()
-
-    void (async () => {
-      try {
-        const imageGen = await imageAPI.getImage(imageGenId)
-        await handleImageStatusUpdate(imageGen)
-      } catch (error: any) {
-        console.error('[轮询] 初始化图片状态失败:', error)
-      }
-    })()
+  return imageStatusWatcher.watch(imageGenId, {
+    onComplete: () => onComplete(),
+    onFailed: (imageGen) => onFailed?.(imageGen)
   })
 }
 
