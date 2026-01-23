@@ -2283,7 +2283,8 @@ const buildMergeClips = (): MergeClip[] => {
     overflow: hidden;
 
     .preview-panel {
-      flex: 0 0 500px;
+      flex: 0 0 var(--preview-panel-width, 500px);
+      max-width: var(--preview-panel-width, 500px);
       display: flex;
       flex-direction: column;
       background: var(--bg-card);
@@ -3045,7 +3046,8 @@ const buildMergeClips = (): MergeClip[] => {
 
     .editor-workspace {
       .preview-panel {
-        flex: 0 0 380px;
+        flex: 0 0 var(--preview-panel-width, 380px);
+        max-width: var(--preview-panel-width, 380px);
       }
 
       .media-library {

@@ -1,5 +1,5 @@
 <template>
-  <div class="professional-editor">
+  <div class="professional-editor" :class="{ 'edit-panel-collapsed': isEditPanelCollapsed }">
     <!-- 顶部工具栏 -->
     <AppHeader :fixed="false" :show-logo="false" @config-updated="loadVideoModels">
       <template #left>
@@ -4806,6 +4806,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   background: var(--bg-primary);
   color: var(--text-primary);
+  --preview-panel-width: 420px;
 
   .editor-toolbar {
     display: flex;
@@ -5036,6 +5037,10 @@ onBeforeUnmount(() => {
   }
 }
 
+.professional-editor.edit-panel-collapsed {
+  --preview-panel-width: 520px;
+}
+
 // 通用参数行样式
 .param-row {
   margin-bottom: 8px;
@@ -5071,6 +5076,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1366px) {
   .professional-editor {
+    --preview-panel-width: 360px;
     .editor-toolbar {
       padding: 10px 14px;
     }
@@ -5084,6 +5090,10 @@ onBeforeUnmount(() => {
         width: clamp(300px, 28vw, 420px);
       }
     }
+  }
+
+  .professional-editor.edit-panel-collapsed {
+    --preview-panel-width: 420px;
   }
 
   :deep(.edit-panel-toggle .btn-text) {
