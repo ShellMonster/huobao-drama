@@ -9,6 +9,20 @@
         </el-button>
         <span class="episode-title">{{ drama?.title }} - {{ $t('editor.episode', { number: episodeNumber }) }}</span>
       </template>
+      <template #right>
+        <el-button
+          text
+          class="edit-panel-toggle"
+          :title="isEditPanelCollapsed ? '展开镜头面板' : '收起镜头面板'"
+          @click="toggleEditPanel"
+        >
+          <el-icon>
+            <Expand v-if="isEditPanelCollapsed" />
+            <Fold v-else />
+          </el-icon>
+          <span class="btn-text">{{ isEditPanelCollapsed ? '展开面板' : '收起面板' }}</span>
+        </el-button>
+      </template>
     </AppHeader>
 
     <!-- 主编辑区域 -->
@@ -53,7 +67,7 @@
       </div>
 
       <!-- 右侧编辑面板 -->
-      <div class="edit-panel">
+      <div class="edit-panel" :class="{ collapsed: isEditPanelCollapsed }">
         <el-tabs v-model="activeTab" class="edit-tabs">
           <!-- 镜头属性标签 -->
           <el-tab-pane :label="$t('storyboard.shotProperties')" name="shot" v-if="currentStoryboard">
@@ -996,7 +1010,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft, Plus, Picture, VideoPlay, VideoPause, View, Setting,
-  Upload, MagicStick, VideoCamera, ZoomIn, ZoomOut, Top, Bottom, Check, Close, Right,
+  Upload, MagicStick, VideoCamera, ZoomIn, ZoomOut, Top, Bottom, Check, Close, Right, Fold, Expand,
   Timer, Calendar, Clock, Loading, WarningFilled, Delete
 } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
@@ -1032,6 +1046,35 @@ const { t: $t } = useI18n()
 const dramaId = Number(route.params.dramaId)
 const episodeNumber = Number(route.params.episodeNumber)
 const episodeId = ref<number>(0)
+
+const isEditPanelCollapsed = ref(false)
+const userToggledEditPanel = ref(false)
+const lastIsNarrow = ref<boolean | null>(null)
+
+const updateEditPanelLayout = () => {
+  const isNarrow = window.innerWidth <= 1366
+  if (lastIsNarrow.value === null) {
+    lastIsNarrow.value = isNarrow
+    if (!userToggledEditPanel.value) {
+      isEditPanelCollapsed.value = isNarrow
+    }
+    return
+  }
+  if (isNarrow !== lastIsNarrow.value) {
+    userToggledEditPanel.value = false
+    isEditPanelCollapsed.value = isNarrow
+    lastIsNarrow.value = isNarrow
+    return
+  }
+  if (!userToggledEditPanel.value) {
+    isEditPanelCollapsed.value = isNarrow
+  }
+}
+
+const toggleEditPanel = () => {
+  userToggledEditPanel.value = true
+  isEditPanelCollapsed.value = !isEditPanelCollapsed.value
+}
 
 const drama = ref<Drama | null>(null)
 const episode = ref<Episode | null>(null)
@@ -3958,7 +4001,9 @@ onMounted(async () => {
   await loadVideoModels()
   await loadVideoMerges()
 
+  updateEditPanelLayout()
   window.addEventListener('storage', handleVideoConfigStorage)
+  window.addEventListener('resize', updateEditPanelLayout)
 })
 
 // 组件卸载时停止轮询
@@ -3968,6 +4013,7 @@ onBeforeUnmount(() => {
   stopMergeUpdates()
   stopFramePromptStream()
   window.removeEventListener('storage', handleVideoConfigStorage)
+  window.removeEventListener('resize', updateEditPanelLayout)
   imageCache.clear()
   videoCache.clear()
   videoReferenceCache.clear()
@@ -4801,7 +4847,7 @@ onBeforeUnmount(() => {
     height: calc(100vh - 60px);
 
     .storyboard-panel {
-      width: 280px;
+      width: clamp(220px, 20vw, 280px);
       background: var(--bg-card);
       border-right: 1px solid var(--border-primary);
       display: flex;
@@ -4928,6 +4974,7 @@ onBeforeUnmount(() => {
       flex-direction: column;
       background: var(--bg-secondary);
       overflow: hidden;
+      min-width: 0;
 
       .empty-timeline {
         flex: 1;
@@ -4938,11 +4985,12 @@ onBeforeUnmount(() => {
     }
 
     .edit-panel {
-      width: 520px;
+      width: clamp(320px, 32vw, 520px);
       background: var(--bg-card);
       border-left: 1px solid var(--border-primary);
       overflow: hidden;
       flex-shrink: 0;
+      transition: width 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
 
       .edit-tabs {
         height: 100%;
@@ -4971,6 +5019,15 @@ onBeforeUnmount(() => {
         }
       }
     }
+
+    .edit-panel.collapsed {
+      width: 0;
+      min-width: 0;
+      border-left: none;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(8px);
+    }
   }
 
   .dark .editor-main {
@@ -4991,11 +5048,64 @@ onBeforeUnmount(() => {
   }
 }
 
+:deep(.edit-panel-toggle) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+}
+
+:deep(.edit-panel-toggle:hover) {
+  color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
 .param-label {
   min-width: 50px;
   font-size: 12px;
   color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+@media (max-width: 1366px) {
+  .professional-editor {
+    .editor-toolbar {
+      padding: 10px 14px;
+    }
+
+    .editor-main {
+      .storyboard-panel {
+        width: clamp(200px, 18vw, 240px);
+      }
+
+      .edit-panel {
+        width: clamp(300px, 28vw, 420px);
+      }
+    }
+  }
+
+  :deep(.edit-panel-toggle .btn-text) {
+    display: none;
+  }
+
+  .image-generation-section,
+  .generation-result {
+    .image-grid {
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+  }
+
+  .image-slot {
+    width: 120px;
+    height: 76px;
+  }
+
+  .image-slots-container {
+    padding: 10px;
+  }
 }
 
 // 图片生成界面样式

@@ -3036,4 +3036,30 @@ const buildMergeClips = (): MergeClip[] => {
     }
   }
 }
+
+@media (max-width: 1366px) {
+  .video-timeline-editor {
+    .editor-toolbar {
+      padding: 8px 12px;
+    }
+
+    .editor-workspace {
+      .preview-panel {
+        flex: 0 0 380px;
+      }
+
+      .media-library {
+        .media-grid {
+          max-height: 360px;
+          grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+          gap: 10px;
+        }
+      }
+    }
+
+    .timeline-panel {
+      flex: 0 0 220px;
+    }
+  }
+}
 </style>
