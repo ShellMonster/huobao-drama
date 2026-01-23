@@ -15,7 +15,7 @@
             <span class="setting-label">全局转场</span>
             <el-input-number
               v-model="globalTransitionDuration"
-              :min="0.3"
+              :min="0"
               :max="3"
               :step="0.1"
               :precision="1"
@@ -994,6 +994,10 @@ const addClipToTimeline = async (scene: Scene, insertAtPosition?: number) => {
 
   if (globalOverlapTrim.value > 0) {
     applyOverlapTrim()
+  } else {
+    setCurrentFromTime(currentTime.value)
+    syncPreviewToCurrent(isPlaying.value)
+    syncAudioToCurrent(isPlaying.value)
   }
   
   const insertInfo = insertAfterIndex !== null ? '（已插入到选中片段后）' : ''
@@ -1189,7 +1193,13 @@ const syncLinkedAudioClips = () => {
 }
 
 const applyOverlapTrim = () => {
-  if (timelineClips.value.length === 0) return
+  if (timelineClips.value.length === 0) {
+    currentTime.value = 0
+    currentClipIndex.value = 0
+    currentClipOffset.value = 0
+    pauseTimeline()
+    return
+  }
   const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
 
   timelineClips.value.forEach((clip) => ensureClipBase(clip))
