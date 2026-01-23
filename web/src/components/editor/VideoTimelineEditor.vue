@@ -562,8 +562,8 @@ const editingTransition = ref({
   type: 'fade' as 'fade' | 'fadeblack' | 'fadewhite' | 'fadegrays' | 'slideleft' | 'slideright' | 'slideup' | 'slidedown' | 'wipeleft' | 'wiperight' | 'wipeup' | 'wipedown' | 'circleopen' | 'circleclose' | 'dissolve' | 'distance' | 'horzopen' | 'horzclose' | 'vertopen' | 'vertclose' | 'none',
   duration: 1.0
 })
-const globalTransitionDuration = ref(1.0)
-const globalOverlapTrim = ref(0)
+const globalTransitionDuration = ref(0.3)
+const globalOverlapTrim = ref(1.3)
 const minClipDuration = 0.1
 const clipBaseMap = new Map<string, { start: number; end: number }>()
 const audioBaseMap = new Map<string, { start: number; end: number }>()
@@ -622,6 +622,7 @@ const waitForPlayerReady = (player: HTMLVideoElement) => {
 
 const preloadClipOnPlayer = (player: HTMLVideoElement | null, clip: TimelineClip | null) => {
   if (!player || !clip) return
+  player.preload = 'auto'
   if (player.src !== clip.video_url) {
     player.src = clip.video_url
   }
@@ -636,6 +637,33 @@ const preloadNextClip = () => {
   const nextClip = timelineClips.value[currentClipIndex.value + 1]
   const inactivePlayer = getInactivePlayer()
   preloadClipOnPlayer(inactivePlayer, nextClip || null)
+}
+
+const preloadLeadSeconds = 1.2
+const lastWarmupClipId = ref<string | null>(null)
+
+const warmupInactivePlayer = async (clip: TimelineClip) => {
+  const inactivePlayer = getInactivePlayer()
+  if (!inactivePlayer) return
+  preloadClipOnPlayer(inactivePlayer, clip)
+  try {
+    await waitForPlayerReady(inactivePlayer)
+    const primeTime = Math.min(clip.start_time + 0.05, clip.end_time - 0.01)
+    inactivePlayer.currentTime = Math.max(clip.start_time, primeTime)
+  } catch {
+    // ignore warmup failures
+  }
+}
+
+const maybeWarmNextClip = () => {
+  const currentClip = getCurrentClip()
+  const nextClip = timelineClips.value[currentClipIndex.value + 1]
+  if (!currentClip || !nextClip) return
+  const remaining = currentClip.duration - currentClipOffset.value
+  if (remaining > preloadLeadSeconds) return
+  if (lastWarmupClipId.value === nextClip.id) return
+  lastWarmupClipId.value = nextClip.id
+  void warmupInactivePlayer(nextClip)
 }
 
 const getCurrentClip = () => timelineClips.value[currentClipIndex.value] || null
@@ -658,6 +686,7 @@ const resolveTimeToClip = (time: number) => {
 }
 
 const setCurrentFromTime = (time: number) => {
+  const previousIndex = currentClipIndex.value
   const resolved = resolveTimeToClip(time)
   if (!resolved.clip) {
     currentClipIndex.value = 0
@@ -668,6 +697,9 @@ const setCurrentFromTime = (time: number) => {
   currentClipIndex.value = resolved.index
   currentClipOffset.value = resolved.offset
   currentTime.value = resolved.time
+  if (previousIndex !== resolved.index) {
+    lastWarmupClipId.value = null
+  }
   return resolved
 }
 
@@ -696,6 +728,7 @@ const syncPreviewToCurrent = (shouldPlay: boolean) => {
     activePlayer.play().catch(() => {})
   }
   preloadNextClip()
+  maybeWarmNextClip()
 }
 
 const syncAudioToCurrent = (shouldPlay: boolean) => {
@@ -794,6 +827,8 @@ const handlePreviewTimeUpdate = (event?: Event) => {
   currentClipOffset.value = Math.min(clipOffset, currentClip.duration)
   currentTime.value = currentClip.position + currentClipOffset.value
   
+  maybeWarmNextClip()
+
   // 检查是否播放到片段结尾（提前0.1秒检测，避免播放完才切换）
   if (videoTime >= currentClip.end_time - 0.1 || currentClipOffset.value >= currentClip.duration - 0.1) {
     const nextIndex = currentClipIndex.value + 1
@@ -854,6 +889,7 @@ const switchToClipByIndex = async (
   if (inactivePlayer.src !== clip.video_url) {
     inactivePlayer.src = clip.video_url
   }
+  lastWarmupClipId.value = null
   
   // 同步切换音频源
   if (audioClips.value.length > 0 && audioPlayer.value) {
@@ -2255,6 +2291,7 @@ const buildMergeClips = (): MergeClip[] => {
           object-fit: contain;
           opacity: 0;
           transition: opacity 0.15s ease;
+          pointer-events: none;
         }
 
         .preview-video.active {

@@ -216,7 +216,7 @@ const resetForm = () => {
   form.preview_url = ''
   form.prompt_zh = ''
   form.prompt_en = ''
-  form.sort_order = 0
+  form.sort_order = styles.value.length + 1
   form.is_active = true
   form.is_default = false
 }
