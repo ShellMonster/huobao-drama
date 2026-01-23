@@ -515,6 +515,8 @@ const showAudioTrack = ref(true)  // 是否显示音频轨道
 
 // 时间线状态
 const currentTime = ref(0)
+const currentClipIndex = ref(0)
+const currentClipOffset = ref(0)
 const zoom = ref(1) // 缩放级别
 const pixelsPerSecond = computed(() => 50 * zoom.value) // 每秒对应的像素数
 const isPlaying = ref(false)
@@ -575,13 +577,92 @@ const getSceneDesc = (scene: Scene) => {
 }
 
 // 预览相关
-const currentPreviewUrl = computed(() => {
-  if (timelineClips.value.length === 0) return ''
-  // 根据当前时间找到应该播放的片段
-  const clip = timelineClips.value.find(c => 
-    currentTime.value >= c.position && currentTime.value < c.position + c.duration
+const getCurrentClip = () => timelineClips.value[currentClipIndex.value] || null
+
+const resolveTimeToClip = (time: number) => {
+  if (timelineClips.value.length === 0) {
+    return { index: 0, clip: null as TimelineClip | null, offset: 0, time: 0 }
+  }
+  const total = totalDuration.value
+  const clampedTime = Math.max(0, Math.min(time, total))
+  let index = timelineClips.value.findIndex(c => 
+    clampedTime >= c.position && clampedTime < c.position + c.duration
   )
-  return clip?.video_url || timelineClips.value[0]?.video_url || ''
+  if (index < 0) {
+    index = timelineClips.value.length - 1
+  }
+  const clip = timelineClips.value[index]
+  const offset = Math.max(0, Math.min(clampedTime - clip.position, clip.duration))
+  return { index, clip, offset, time: clip.position + offset }
+}
+
+const setCurrentFromTime = (time: number) => {
+  const resolved = resolveTimeToClip(time)
+  if (!resolved.clip) {
+    currentClipIndex.value = 0
+    currentClipOffset.value = 0
+    currentTime.value = 0
+    return resolved
+  }
+  currentClipIndex.value = resolved.index
+  currentClipOffset.value = resolved.offset
+  currentTime.value = resolved.time
+  return resolved
+}
+
+const syncCurrentTimeFromState = () => {
+  const clip = getCurrentClip()
+  if (!clip) {
+    currentTime.value = 0
+    currentClipOffset.value = 0
+    currentClipIndex.value = 0
+    return null
+  }
+  currentClipOffset.value = Math.max(0, Math.min(currentClipOffset.value, clip.duration))
+  currentTime.value = clip.position + currentClipOffset.value
+  return clip
+}
+
+const syncPreviewToCurrent = (shouldPlay: boolean) => {
+  const clip = getCurrentClip()
+  if (!clip || !previewPlayer.value) return
+  if (previewPlayer.value.src !== clip.video_url) {
+    previewPlayer.value.src = clip.video_url
+  }
+  previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
+  if (shouldPlay) {
+    previewPlayer.value.play().catch(() => {})
+  }
+}
+
+const syncAudioToCurrent = (shouldPlay: boolean) => {
+  if (!audioPlayer.value) return
+  if (audioClips.value.length === 0) {
+    audioPlayer.value.pause()
+    return
+  }
+  const audioClip = audioClips.value.find(a => 
+    currentTime.value >= a.position && currentTime.value < a.position + a.duration
+  )
+  if (!audioClip) {
+    audioPlayer.value.pause()
+    return
+  }
+  if (audioPlayer.value.src !== audioClip.audio_url) {
+    audioPlayer.value.src = audioClip.audio_url
+  }
+  const offsetInAudioClip = currentTime.value - audioClip.position
+  audioPlayer.value.currentTime = audioClip.start_time + offsetInAudioClip
+  if (shouldPlay) {
+    audioPlayer.value.play().catch(err => {
+      console.warn('音频播放失败:', err)
+    })
+  }
+}
+
+const currentPreviewUrl = computed(() => {
+  const clip = getCurrentClip()
+  return clip?.video_url || ''
 })
 
 // 当前音频URL
@@ -603,28 +684,16 @@ const previewScene = (scene: Scene) => {
 
 const handlePreviewLoaded = () => {
   // 视频加载完成后跳转到正确的时间点
-  if (previewPlayer.value) {
-    const clip = timelineClips.value.find(c => 
-      currentTime.value >= c.position && currentTime.value < c.position + c.duration
-    )
-    if (clip) {
-      const offsetInClip = currentTime.value - clip.position
-      previewPlayer.value.currentTime = clip.start_time + offsetInClip
-    }
+  if (!previewPlayer.value) return
+  const clip = syncCurrentTimeFromState()
+  if (clip) {
+    previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
   }
 }
 
 const handleAudioLoaded = () => {
   // 音频加载完成后跳转到正确的时间点
-  if (audioPlayer.value && audioClips.value.length > 0) {
-    const audioClip = audioClips.value.find(a => 
-      currentTime.value >= a.position && currentTime.value < a.position + a.duration
-    )
-    if (audioClip) {
-      const offsetInClip = currentTime.value - audioClip.position
-      audioPlayer.value.currentTime = audioClip.start_time + offsetInClip
-    }
-  }
+  syncAudioToCurrent(isPlaying.value)
 }
 
 const handleAudioEnded = () => {
@@ -647,43 +716,42 @@ const handleAudioEnded = () => {
 const handlePreviewTimeUpdate = () => {
   if (!isPlaying.value || !previewPlayer.value) return
   
-  // 找到当前播放的片段
-  const currentClip = timelineClips.value.find(c => 
-    currentTime.value >= c.position && currentTime.value < c.position + c.duration
-  )
-  
+  const currentClip = getCurrentClip()
   if (!currentClip) {
     pauseTimeline()
     return
   }
-  
-  // 计算时间线上的当前位置
+
   const videoTime = previewPlayer.value.currentTime
-  const clipOffset = videoTime - currentClip.start_time
-  currentTime.value = currentClip.position + clipOffset
+  const clipOffset = Math.max(0, videoTime - currentClip.start_time)
+  currentClipOffset.value = Math.min(clipOffset, currentClip.duration)
+  currentTime.value = currentClip.position + currentClipOffset.value
   
   // 检查是否播放到片段结尾（提前0.1秒检测，避免播放完才切换）
-  if (videoTime >= currentClip.end_time - 0.1) {
-    // 查找下一个片段
-    const currentIndex = timelineClips.value.findIndex(c => c.id === currentClip.id)
-    const nextClip = timelineClips.value[currentIndex + 1]
-    
-    if (nextClip) {
-      // 切换到下一个片段
-      switchToClip(nextClip)
+  if (videoTime >= currentClip.end_time - 0.1 || currentClipOffset.value >= currentClip.duration - 0.1) {
+    const nextIndex = currentClipIndex.value + 1
+    if (nextIndex < timelineClips.value.length) {
+      void switchToClipByIndex(nextIndex, { offset: 0, useTransition: true })
     } else {
-      // 没有下一个片段，停止播放
       pauseTimeline()
+      currentClipOffset.value = currentClip.duration
       currentTime.value = totalDuration.value
     }
   }
 }
 
-const switchToClip = async (clip: TimelineClip) => {
+const switchToClipByIndex = async (
+  index: number,
+  options: { offset?: number; useTransition?: boolean } = {}
+) => {
   if (!previewPlayer.value) return
+  const clip = timelineClips.value[index]
+  if (!clip) return
+  const offset = Math.max(0, Math.min(options.offset ?? 0, clip.duration))
   
   // 获取转场配置
-  const transition = clip.transition
+  const useTransition = options.useTransition !== false
+  const transition = useTransition ? clip.transition : undefined
   const hasTransition = transition && transition.type !== 'none'
   const transitionDuration = hasTransition ? (transition.duration * 1000) : 0
   
@@ -707,13 +775,15 @@ const switchToClip = async (clip: TimelineClip) => {
   }
   
   // 切换视频源
-  currentTime.value = clip.position
+  currentClipIndex.value = index
+  currentClipOffset.value = offset
+  syncCurrentTimeFromState()
   previewPlayer.value.src = clip.video_url
   
   // 同步切换音频源
   if (audioClips.value.length > 0 && audioPlayer.value) {
     const audioClip = audioClips.value.find(a => 
-      clip.position >= a.position && clip.position < a.position + a.duration
+      currentTime.value >= a.position && currentTime.value < a.position + a.duration
     )
     if (audioClip) {
       audioPlayer.value.src = audioClip.audio_url
@@ -742,7 +812,7 @@ const switchToClip = async (clip: TimelineClip) => {
     })
     
     // 设置起始时间并播放
-    previewPlayer.value.currentTime = clip.start_time
+    previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
     
     if (hasTransition) {
       // 切换到转场入场阶段
@@ -756,20 +826,8 @@ const switchToClip = async (clip: TimelineClip) => {
     
     if (isPlaying.value) {
       await previewPlayer.value.play()
-      
-      // 同步播放音频
-      if (audioClips.value.length > 0 && audioPlayer.value) {
-        const audioClip = audioClips.value.find(a => 
-          clip.position >= a.position && clip.position < a.position + a.duration
-        )
-        if (audioClip && audioPlayer.value.src) {
-          audioPlayer.value.currentTime = audioClip.start_time
-          audioPlayer.value.play().catch(err => {
-            console.warn('音频播放失败:', err)
-          })
-        }
-      }
     }
+    syncAudioToCurrent(isPlaying.value)
   } catch (error) {
     console.error('切换视频片段失败:', error)
     transitionState.value.active = false
@@ -779,20 +837,11 @@ const switchToClip = async (clip: TimelineClip) => {
 
 const handlePreviewEnded = () => {
   // 视频自然结束，尝试播放下一个片段
-  const currentClip = timelineClips.value.find(c => 
-    currentTime.value >= c.position && currentTime.value < c.position + c.duration
-  )
-  
-  if (currentClip) {
-    const currentIndex = timelineClips.value.findIndex(c => c.id === currentClip.id)
-    const nextClip = timelineClips.value[currentIndex + 1]
-    
-    if (nextClip) {
-      currentTime.value = nextClip.position
-      seekToTime(nextClip.position)
-    } else {
-      pauseTimeline()
-    }
+  const nextIndex = currentClipIndex.value + 1
+  if (nextIndex < timelineClips.value.length) {
+    void switchToClipByIndex(nextIndex, { offset: 0, useTransition: true })
+  } else {
+    pauseTimeline()
   }
 }
 
@@ -1160,6 +1209,9 @@ const applyOverlapTrim = () => {
   compactClips()
   updateClipOrders()
   syncLinkedAudioClips()
+  setCurrentFromTime(currentTime.value)
+  syncPreviewToCurrent(isPlaying.value)
+  syncAudioToCurrent(isPlaying.value)
 }
 
 watch(globalOverlapTrim, () => {
@@ -1187,6 +1239,10 @@ const removeClip = (clip: TimelineClip) => {
     }
     if (globalOverlapTrim.value > 0) {
       applyOverlapTrim()
+    } else {
+      setCurrentFromTime(currentTime.value)
+      syncPreviewToCurrent(isPlaying.value)
+      syncAudioToCurrent(isPlaying.value)
     }
   }
 }
@@ -1201,6 +1257,8 @@ const clearAllClips = () => {
   selectedClipId.value = null
   selectedAudioClipId.value = null
   currentTime.value = 0
+  currentClipIndex.value = 0
+  currentClipOffset.value = 0
   ElMessage.success('已清空轨道')
 }
 
@@ -1510,6 +1568,10 @@ const handleDragEnd = () => {
 
   if (globalOverlapTrim.value > 0) {
     applyOverlapTrim()
+  } else {
+    setCurrentFromTime(currentTime.value)
+    syncPreviewToCurrent(isPlaying.value)
+    syncAudioToCurrent(isPlaying.value)
   }
 }
 
@@ -1644,54 +1706,14 @@ const clickTimeline = (event: MouseEvent) => {
 }
 
 const seekToTime = (time: number) => {
-  currentTime.value = time
-  
-  // 找到对应时间的视频片段并播放
-  const clip = timelineClips.value.find(c => 
-    time >= c.position && time < c.position + c.duration
-  )
-  
-  if (clip && previewPlayer.value) {
-    // 切换视频源（如果需要）
-    if (previewPlayer.value.src !== clip.video_url) {
-      previewPlayer.value.src = clip.video_url
-    }
-    
-    // 跳转到片段内的对应时间
-    const offsetInClip = time - clip.position
-    previewPlayer.value.currentTime = clip.start_time + offsetInClip
-    
-    if (isPlaying.value) {
-      previewPlayer.value.play()
-    }
+  const resolved = setCurrentFromTime(time)
+  if (!resolved.clip) {
+    previewPlayer.value?.pause()
+    audioPlayer.value?.pause()
+    return
   }
-  
-  // 同步音频播放器
-  if (audioClips.value.length > 0 && audioPlayer.value) {
-    const audioClip = audioClips.value.find(a => 
-      time >= a.position && time < a.position + a.duration
-    )
-    
-    if (audioClip) {
-      // 切换音频源（如果需要）
-      if (audioPlayer.value.src !== audioClip.audio_url) {
-        audioPlayer.value.src = audioClip.audio_url
-      }
-      
-      // 跳转到音频片段内的对应时间
-      const offsetInAudioClip = time - audioClip.position
-      audioPlayer.value.currentTime = audioClip.start_time + offsetInAudioClip
-      
-      if (isPlaying.value) {
-        audioPlayer.value.play().catch(err => {
-          console.warn('音频播放失败:', err)
-        })
-      }
-    } else {
-      // 当前位置没有音频，暂停音频播放器
-      audioPlayer.value.pause()
-    }
-  }
+  syncPreviewToCurrent(isPlaying.value)
+  syncAudioToCurrent(isPlaying.value)
 }
 
 // 播放控制
@@ -1702,43 +1724,10 @@ const playTimeline = () => {
   }
   
   isPlaying.value = true
-  
-  // 找到当前时间对应的视频片段
-  const clip = timelineClips.value.find(c => 
-    currentTime.value >= c.position && currentTime.value < c.position + c.duration
-  )
-  
-  if (clip && previewPlayer.value) {
-    if (previewPlayer.value.src !== clip.video_url) {
-      previewPlayer.value.src = clip.video_url
-    }
-    const offsetInClip = currentTime.value - clip.position
-    previewPlayer.value.currentTime = clip.start_time + offsetInClip
-    previewPlayer.value.play()
-  } else if (timelineClips.value[0]) {
-    // 如果当前时间超出范围，从头开始播放
-    currentTime.value = 0
-    seekToTime(0)
-    previewPlayer.value?.play()
-  }
-  
-  // 同时播放音频（如果有）
-  if (audioClips.value.length > 0 && audioPlayer.value) {
-    const audioClip = audioClips.value.find(a => 
-      currentTime.value >= a.position && currentTime.value < a.position + a.duration
-    )
-    
-    if (audioClip) {
-      if (audioPlayer.value.src !== audioClip.audio_url) {
-        audioPlayer.value.src = audioClip.audio_url
-      }
-      const offsetInAudioClip = currentTime.value - audioClip.position
-      audioPlayer.value.currentTime = audioClip.start_time + offsetInAudioClip
-      audioPlayer.value.play().catch(err => {
-        console.warn('音频播放失败:', err)
-      })
-    }
-  }
+  const shouldRestart = currentTime.value >= totalDuration.value
+  setCurrentFromTime(shouldRestart ? 0 : currentTime.value)
+  syncPreviewToCurrent(true)
+  syncAudioToCurrent(true)
 }
 
 const pauseTimeline = () => {
