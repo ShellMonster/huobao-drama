@@ -828,7 +828,7 @@ import type { AIServiceConfig } from '@/types/ai'
 import { imageAPI } from '@/api/image'
 import type { Drama } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
@@ -859,6 +859,24 @@ const stopPageLoading = () => {
   pageLoading.value = false
 }
 
+const stopAllImagePollers = () => {
+  if (imageStreamStop) {
+    imageStreamStop()
+    imageStreamStop = null
+  }
+  if (imageFallbackTimer) {
+    window.clearInterval(imageFallbackTimer)
+    imageFallbackTimer = null
+  }
+  imageFallbackInFlight = false
+  activeImageWatchers.forEach((watcher) => {
+    if (watcher.timeoutTimer) {
+      window.clearTimeout(watcher.timeoutTimer)
+    }
+  })
+  activeImageWatchers.clear()
+}
+
 // 生成 localStorage key
 const getStepStorageKey = () => `episode_workflow_step_${dramaId}_${episodeNumber}`
 
@@ -873,6 +891,17 @@ const batchGeneratingCharacters = ref(false)
 const batchGeneratingScenes = ref(false)
 const generatingCharacterImages = ref<Record<number, boolean>>({})
 const generatingSceneImages = ref<Record<string, boolean>>({})
+const activeImageWatchers = new Map<number, {
+  done: boolean
+  onComplete: () => Promise<void>
+  onFailed?: (imageGen: any) => Promise<void> | void
+  resolve: () => void
+  timeoutTimer: number | null
+}>()
+let imageStreamStop: (() => void) | null = null
+let imageFallbackTimer: number | null = null
+let imageFallbackInFlight = false
+const imageFallbackInterval = 6000
 
 // 选择状态
 const selectedCharacterIds = ref<number[]>([])
@@ -1347,89 +1376,125 @@ const handleExtractCharactersAndBackgrounds = async () => {
   await extractCharactersAndBackgrounds()
 }
 
+const handleImageStatusUpdate = async (imageGen: any) => {
+  const watcher = activeImageWatchers.get(imageGen?.id)
+  if (!watcher || watcher.done) return
+
+  if (imageGen.status === 'completed') {
+    watcher.done = true
+    if (watcher.timeoutTimer) {
+      window.clearTimeout(watcher.timeoutTimer)
+      watcher.timeoutTimer = null
+    }
+    activeImageWatchers.delete(imageGen.id)
+    try {
+      await watcher.onComplete()
+    } catch (error) {
+      console.error('[SSE] 图片完成回调失败:', error)
+    }
+    watcher.resolve()
+  } else if (imageGen.status === 'failed') {
+    watcher.done = true
+    if (watcher.timeoutTimer) {
+      window.clearTimeout(watcher.timeoutTimer)
+      watcher.timeoutTimer = null
+    }
+    activeImageWatchers.delete(imageGen.id)
+    ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
+    if (watcher.onFailed) {
+      try {
+        await watcher.onFailed(imageGen)
+      } catch (error) {
+        console.error('[SSE] 图片失败回调失败:', error)
+      }
+    }
+    watcher.resolve()
+  }
+
+  if (activeImageWatchers.size === 0) {
+    stopAllImagePollers()
+  }
+}
+
+const pollActiveImages = async () => {
+  if (imageFallbackInFlight) return
+  const ids = Array.from(activeImageWatchers.keys())
+  if (ids.length === 0) {
+    stopAllImagePollers()
+    return
+  }
+  imageFallbackInFlight = true
+  const results = await Promise.allSettled(ids.map(id => imageAPI.getImage(id)))
+  results.forEach((result) => {
+    if (result.status === 'fulfilled') {
+      void handleImageStatusUpdate(result.value)
+    }
+  })
+  imageFallbackInFlight = false
+  if (activeImageWatchers.size === 0) {
+    stopAllImagePollers()
+  }
+}
+
+const startImageFallback = () => {
+  if (imageFallbackTimer) return
+  imageFallbackTimer = window.setInterval(() => {
+    void pollActiveImages()
+  }, imageFallbackInterval)
+  return () => {
+    if (imageFallbackTimer) {
+      window.clearInterval(imageFallbackTimer)
+      imageFallbackTimer = null
+    }
+  }
+}
+
+const ensureImageStream = () => {
+  if (imageStreamStop || activeImageWatchers.size === 0) return
+  imageStreamStop = subscribeUnifiedSSE({
+    types: ['image_generation'],
+    params: { drama_id: dramaId },
+    onMessage: (payload) => {
+      void handleImageStatusUpdate(payload)
+    },
+    fallback: startImageFallback
+  }).close
+}
+
 // 轮询检查图片生成状态（SSE优先，轮询兜底）
 const pollImageStatus = (
   imageGenId: number,
   onComplete: () => Promise<void>,
   onFailed?: (imageGen: any) => Promise<void> | void
 ) => {
-  const maxAttempts = 100
-  const pollInterval = 6000
-
   return new Promise<void>((resolve) => {
-    let attempts = 0
-    let done = false
-    let fallbackTimer: number | null = null
-    const url = buildSSEUrl('/api/v1/events/image-generations', { image_ids: imageGenId })
-
-    const stopAll = () => {
-      if (done) return
-      done = true
-      if (fallbackTimer) {
-        clearInterval(fallbackTimer)
-        fallbackTimer = null
+    const timeoutTimer = window.setTimeout(() => {
+      const watcher = activeImageWatchers.get(imageGenId)
+      if (!watcher || watcher.done) return
+      watcher.done = true
+      watcher.timeoutTimer = null
+      activeImageWatchers.delete(imageGenId)
+      ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
+      watcher.resolve()
+      if (activeImageWatchers.size === 0) {
+        stopAllImagePollers()
       }
-      subscription?.close()
-    }
+    }, imageFallbackInterval * 100)
 
-    const handleStatus = async (imageGen: any) => {
-      if (done || imageGen?.id !== imageGenId) return
-      if (imageGen.status === 'completed') {
-        try {
-          await onComplete()
-        } catch (error) {
-          console.error('[SSE] 图片完成回调失败:', error)
-        }
-        stopAll()
-        resolve()
-        return
-      }
-      if (imageGen.status === 'failed') {
-        ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
-        if (onFailed) {
-          try {
-            await onFailed(imageGen)
-          } catch (error) {
-            console.error('[SSE] 图片失败回调失败:', error)
-          }
-        }
-        stopAll()
-        resolve()
-      }
-    }
-
-    const startFallback = () => {
-      if (fallbackTimer) return
-      fallbackTimer = window.setInterval(async () => {
-        attempts += 1
-        if (attempts > maxAttempts) {
-          ElMessage.warning('图片生成超时，请稍后刷新页面查看结果')
-          stopAll()
-          resolve()
-          return
-        }
-        try {
-          const imageGen = await imageAPI.getImage(imageGenId)
-          await handleStatus(imageGen)
-        } catch (error: any) {
-          console.error('[轮询] 检查图片状态失败:', error)
-        }
-      }, pollInterval)
-    }
-
-    const subscription = subscribeSSE({
-      url,
-      event: 'image_generation',
-      onMessage: (payload) => {
-        void handleStatus(payload)
-      },
-      fallback: startFallback
+    activeImageWatchers.set(imageGenId, {
+      done: false,
+      onComplete,
+      onFailed,
+      resolve,
+      timeoutTimer
     })
+
+    ensureImageStream()
 
     void (async () => {
       try {
         const imageGen = await imageAPI.getImage(imageGenId)
-        await handleStatus(imageGen)
+        await handleImageStatusUpdate(imageGen)
       } catch (error: any) {
         console.error('[轮询] 初始化图片状态失败:', error)
       }
@@ -1502,8 +1567,6 @@ const pollExtractTask = (taskId: string, type: 'character' | 'background') => {
     let attempts = 0
     let done = false
     let fallbackTimer: number | null = null
-    const url = buildSSEUrl('/api/v1/events/tasks', { task_ids: taskId })
-
     const stopAll = () => {
       if (done) return
       done = true
@@ -1558,9 +1621,9 @@ const pollExtractTask = (taskId: string, type: 'character' | 'background') => {
       }, interval)
     }
 
-    const subscription = subscribeSSE({
-      url,
-      event: 'task',
+    const subscription = subscribeUnifiedSSE({
+      types: ['task'],
+      params: { task_ids: taskId },
       onMessage: (payload) => {
         void handleTask(payload)
       },
@@ -1855,10 +1918,9 @@ const pollTaskStatus = async (taskId: string) => {
   }
 
   stopTaskStream()
-  const url = buildSSEUrl('/api/v1/events/tasks', { task_ids: taskId })
-  taskStreamStop = subscribeSSE({
-    url,
-    event: 'task',
+  taskStreamStop = subscribeUnifiedSSE({
+    types: ['task'],
+    params: { task_ids: taskId },
     onMessage: (payload) => {
       handleTask(payload)
     },
@@ -2105,6 +2167,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopTaskStream()
+  stopAllImagePollers()
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null

@@ -146,6 +146,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			events.GET("/video-generations", eventHandler.StreamVideoGenerations)
 			events.GET("/frame-prompt-tasks", eventHandler.StreamFramePromptTasks)
 			events.GET("/video-merges", eventHandler.StreamVideoMerges)
+			events.GET("/stream", eventHandler.StreamUnifiedEvents)
 		}
 
 		// 场景路由

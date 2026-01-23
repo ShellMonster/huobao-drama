@@ -175,7 +175,7 @@ import type { ImageGeneration, ImageStatus } from '@/types/image'
 import type { Drama } from '@/types/drama'
 import GenerateImageDialog from './components/GenerateImageDialog.vue'
 import ImageDetailDialog from './components/ImageDetailDialog.vue'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
@@ -234,13 +234,9 @@ const scheduleReload = () => {
 
 const startImageStream = () => {
   stopImageStream()
-  const url = buildSSEUrl('/api/v1/events/image-generations', {
-    drama_id: filters.drama_id || undefined
-  })
-
-  imageStreamStop = subscribeSSE({
-    url,
-    event: 'image_generation',
+  imageStreamStop = subscribeUnifiedSSE({
+    types: ['image_generation'],
+    params: { drama_id: filters.drama_id || undefined },
     onMessage: (imageGen) => {
       if (filters.drama_id && String(imageGen.drama_id) !== filters.drama_id) return
 

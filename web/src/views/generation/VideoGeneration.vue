@@ -178,7 +178,7 @@ import type { VideoGeneration, VideoStatus } from '@/types/video'
 import type { Drama } from '@/types/drama'
 import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
@@ -237,13 +237,9 @@ const scheduleReload = () => {
 
 const startVideoStream = () => {
   stopVideoStream()
-  const url = buildSSEUrl('/api/v1/events/video-generations', {
-    drama_id: filters.drama_id || undefined
-  })
-
-  videoStreamStop = subscribeSSE({
-    url,
-    event: 'video_generation',
+  videoStreamStop = subscribeUnifiedSSE({
+    types: ['video_generation'],
+    params: { drama_id: filters.drama_id || undefined },
     onMessage: (videoGen) => {
       if (filters.drama_id && String(videoGen.drama_id) !== filters.drama_id) return
 

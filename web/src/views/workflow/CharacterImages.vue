@@ -78,7 +78,7 @@ import { Edit, Picture } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { characterLibraryAPI } from '@/api/character-library'
 import type { Character } from '@/types/drama'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
 
@@ -347,10 +347,9 @@ const startPolling = () => {
     }
   }
 
-  const url = buildSSEUrl('/api/v1/events/image-generations', { drama_id: dramaId })
-  sseStop = subscribeSSE({
-    url,
-    event: 'image_generation',
+  sseStop = subscribeUnifiedSSE({
+    types: ['image_generation'],
+    params: { drama_id: dramaId },
     onMessage: handleImageEvent,
     fallback: startFallback
   }).close

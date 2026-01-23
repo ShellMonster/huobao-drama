@@ -1022,7 +1022,7 @@ import type { VideoMerge } from '@/api/videoMerge'
 import VideoTimelineEditor from '@/components/editor/VideoTimelineEditor.vue'
 import type { Drama, Episode, Storyboard } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
@@ -2218,12 +2218,9 @@ const startFramePromptPolling = (storyboardId: number) => {
 const startFramePromptStream = (storyboardId: number) => {
   stopFramePromptStream()
 
-  const url = buildSSEUrl('/api/v1/events/frame-prompt-tasks', {
-    storyboard_id: storyboardId
-  })
-  framePromptStreamStop = subscribeSSE({
-    url,
-    event: 'frame_prompt_task',
+  framePromptStreamStop = subscribeUnifiedSSE({
+    types: ['frame_prompt_task'],
+    params: { frame_prompt_storyboard_id: storyboardId },
     onOpen: () => {
       framePromptStreamOpen = true
     },
@@ -2682,17 +2679,13 @@ const startPolling = () => {
     }
   }
 
-  const url = storyboardId
-    ? buildSSEUrl('/api/v1/events/image-generations', {
+  if (storyboardId) {
+    imageStreamStop = subscribeUnifiedSSE({
+      types: ['image_generation'],
+      params: {
         storyboard_id: storyboardId,
         frame_type: pollingFrameType || undefined
-      })
-    : ''
-
-  if (url) {
-    imageStreamStop = subscribeSSE({
-      url,
-      event: 'image_generation',
+      },
       onMessage: () => {
         scheduleRefresh()
       },
@@ -3476,14 +3469,10 @@ const startVideoPolling = () => {
   }
 
   const storyboardId = currentStoryboard.value?.id
-  const url = storyboardId
-    ? buildSSEUrl('/api/v1/events/video-generations', { storyboard_id: storyboardId })
-    : ''
-
-  if (url) {
-    videoStreamStop = subscribeSSE({
-      url,
-      event: 'video_generation',
+  if (storyboardId) {
+    videoStreamStop = subscribeUnifiedSSE({
+      types: ['video_generation'],
+      params: { storyboard_id: storyboardId },
       onMessage: () => {
         scheduleRefresh()
       },
@@ -3793,13 +3782,9 @@ const loadVideoMerges = async () => {
 
 const startMergeStream = () => {
   if (!episodeId.value || mergeStreamStop) return
-  const url = buildSSEUrl('/api/v1/events/video-merges', {
-    episode_id: episodeId.value
-  })
-
-  mergeStreamStop = subscribeSSE({
-    url,
-    event: 'video_merge',
+  mergeStreamStop = subscribeUnifiedSSE({
+    types: ['video_merge'],
+    params: { merge_episode_id: episodeId.value },
     onMessage: (merge: VideoMerge) => {
       const index = videoMerges.value.findIndex(item => item.id === merge.id)
       if (index >= 0) {

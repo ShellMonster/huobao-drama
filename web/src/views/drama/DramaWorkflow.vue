@@ -571,7 +571,7 @@ import { characterLibraryAPI } from '@/api/character-library'
 import request from '@/utils/request'
 import type { Drama, DramaStatus } from '@/types/drama'
 import { AppHeader, LoadingSection } from '@/components/common'
-import { buildSSEUrl, subscribeSSE } from '@/utils/sse'
+import { subscribeUnifiedSSE } from '@/utils/sse'
 import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
@@ -1294,10 +1294,9 @@ const startCharacterPolling = () => {
     }
   }
 
-  const url = buildSSEUrl('/api/v1/events/image-generations', { drama_id: dramaId })
-  characterStreamStop = subscribeSSE({
-    url,
-    event: 'image_generation',
+  characterStreamStop = subscribeUnifiedSSE({
+    types: ['image_generation'],
+    params: { drama_id: dramaId },
     onMessage: handleImageEvent,
     fallback: startFallback
   }).close
@@ -1450,6 +1449,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  stopCharacterPolling()
   if (loadingTimer) {
     window.clearTimeout(loadingTimer)
     loadingTimer = null
