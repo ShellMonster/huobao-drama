@@ -1622,10 +1622,22 @@ const saveVideoReferenceSelection = () => {
   localStorage.setItem(videoReferenceSelectionKey, JSON.stringify(map))
 }
 
+const getVideoReferenceTimestamp = (image: ImageGeneration) => {
+  const raw = image.created_at || image.completed_at || image.updated_at || ''
+  const ts = Date.parse(raw)
+  if (!Number.isNaN(ts)) return ts
+  return typeof image.id === 'number' ? image.id : 0
+}
+
 const getValidVideoReferenceImages = () => {
-  return (videoReferenceImagesView.value || []).filter(
-    img => img.status === 'completed' && !!img.image_url
-  )
+  return (videoReferenceImagesView.value || [])
+    .filter(img => img.status === 'completed' && !!img.image_url)
+    .slice()
+    .sort((a, b) => {
+      const diff = getVideoReferenceTimestamp(b) - getVideoReferenceTimestamp(a)
+      if (diff !== 0) return diff
+      return (b.id || 0) - (a.id || 0)
+    })
 }
 
 const applyVideoReferenceSelection = (storyboardId: number, options: { allowAuto?: boolean } = {}) => {

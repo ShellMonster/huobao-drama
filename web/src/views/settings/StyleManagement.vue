@@ -391,15 +391,29 @@ onMounted(() => {
 }
 
 .preview-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
 }
 
+.preview-row :deep(.el-input) {
+  width: 100%;
+  min-width: 0;
+}
+
+.preview-row :deep(.el-upload) {
+  justify-self: end;
+}
+
+.preview-row :deep(.el-button) {
+  min-width: 96px;
+}
+
 .preview-thumb {
   margin-top: 10px;
-  width: 120px;
-  height: 120px;
+  width: 160px;
+  height: 160px;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-primary);
@@ -409,6 +423,17 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+@media (max-width: 640px) {
+  .preview-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .preview-row :deep(.el-upload) {
+    justify-self: start;
+  }
 }
 
 .dialog-footer {

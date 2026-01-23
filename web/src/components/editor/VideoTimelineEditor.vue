@@ -10,6 +10,37 @@
         <span class="time-display">{{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}</span>
       </div>
       <div class="toolbar-right">
+        <div class="toolbar-settings">
+          <div class="setting-item">
+            <span class="setting-label">全局转场</span>
+            <el-input-number
+              v-model="globalTransitionDuration"
+              :min="0.3"
+              :max="3"
+              :step="0.1"
+              :precision="1"
+              size="small"
+              controls-position="right"
+            />
+            <span class="setting-unit">s</span>
+            <el-button size="small" @click="applyGlobalTransitionDuration">应用</el-button>
+          </div>
+          <div class="setting-item">
+            <el-tooltip content="合成时对除首段外的片段裁剪开头，不影响时间线预览" placement="top">
+              <span class="setting-label">重叠裁剪</span>
+            </el-tooltip>
+            <el-input-number
+              v-model="globalOverlapTrim"
+              :min="0"
+              :max="10"
+              :step="0.1"
+              :precision="1"
+              size="small"
+              controls-position="right"
+            />
+            <span class="setting-unit">s</span>
+          </div>
+        </div>
         <el-button 
           type="primary" 
           :icon="VideoCamera"
@@ -514,6 +545,9 @@ const editingTransition = ref({
   type: 'fade' as 'fade' | 'fadeblack' | 'fadewhite' | 'fadegrays' | 'slideleft' | 'slideright' | 'slideup' | 'slidedown' | 'wipeleft' | 'wiperight' | 'wipeup' | 'wipedown' | 'circleopen' | 'circleclose' | 'dissolve' | 'distance' | 'horzopen' | 'horzclose' | 'vertopen' | 'vertclose' | 'none',
   duration: 1.0
 })
+const globalTransitionDuration = ref(1.0)
+const globalOverlapTrim = ref(0)
+const minClipDuration = 0.1
 
 // 计算总时长
 const totalDuration = computed(() => {
@@ -886,7 +920,7 @@ const addClipToTimeline = async (scene: Scene, insertAtPosition?: number) => {
     order: timelineClips.value.length,
     transition: {
       type: 'fade',
-      duration: 1.0
+      duration: globalTransitionDuration.value
     }
   }
   
@@ -1025,6 +1059,26 @@ const applyTransition = () => {
     console.error('❌ 未找到目标片段:', editingTransitionClipId.value)
   }
   transitionDialogVisible.value = false
+}
+
+const applyGlobalTransitionDuration = () => {
+  if (timelineClips.value.length === 0) {
+    ElMessage.warning('时间线上没有视频片段')
+    return
+  }
+  const duration = Number(globalTransitionDuration.value) || 0
+  let updated = 0
+  timelineClips.value.forEach((clip) => {
+    if (!clip.transition) return
+    if (clip.transition.type === 'none') return
+    clip.transition.duration = duration
+    updated += 1
+  })
+  if (updated > 0) {
+    ElMessage.success(`已应用到 ${updated} 个转场`)
+  } else {
+    ElMessage.info('没有可应用的转场')
+  }
 }
 
 // 选择和删除片段
@@ -1697,11 +1751,11 @@ const handleExport = async () => {
     })
 
     // 准备视频片段数据（包含转场信息）
-    const clips = timelineClips.value.map(clip => ({
+    const clips = buildMergeClips().map(clip => ({
       url: clip.video_url,
-      startTime: clip.start_time,
-      endTime: clip.end_time,
-      duration: clip.end_time - clip.start_time,
+      startTime: clip.startTime,
+      endTime: clip.endTime,
+      duration: clip.duration,
       transition: clip.transition
     }))
 
@@ -1756,10 +1810,10 @@ const mergeVideoInBrowser = async () => {
     ElMessage.info('开始加载FFmpeg引擎...')
 
     // 准备剪辑数据
-    const clips = timelineClips.value.map(clip => ({
+    const clips = buildMergeClips().map(clip => ({
       url: clip.video_url,
-      startTime: clip.start_time,
-      endTime: clip.end_time
+      startTime: clip.startTime,
+      endTime: clip.endTime
     }))
 
     // 使用FFmpeg合成
@@ -1815,9 +1869,10 @@ const submitTimelineForMerge = async () => {
     serverMerging.value = true
 
     // 准备时间线数据
+    const mergeClips = buildMergeClips()
     const timelineData = {
       episode_id: props.episodeId,
-      clips: timelineClips.value.map((clip, index) => {
+      clips: mergeClips.map((clip, index) => {
         console.log(`📹 片段 ${index}:`, {
           storyboard_id: clip.storyboard_id,
           transition: clip.transition
@@ -1825,8 +1880,8 @@ const submitTimelineForMerge = async () => {
         return {
           storyboard_id: String(clip.storyboard_id),
           order: index,
-          start_time: clip.start_time,
-          end_time: clip.end_time,
+          start_time: clip.startTime,
+          end_time: clip.endTime,
           duration: clip.duration,
           transition: clip.transition || { type: 'none', duration: 0 }
         }
@@ -1891,6 +1946,39 @@ const updateClipsByStoryboardId = (storyboardId: string | number, newVideoUrl: s
 defineExpose({
   updateClipsByStoryboardId
 })
+
+type MergeClip = {
+  storyboard_id: string
+  video_url: string
+  startTime: number
+  endTime: number
+  duration: number
+  transition?: TimelineClip['transition']
+}
+
+const buildMergeClips = (): MergeClip[] => {
+  const overlap = Math.max(0, Number(globalOverlapTrim.value) || 0)
+  return timelineClips.value.map((clip, index) => {
+    let startTime = clip.start_time
+    const endTime = clip.end_time
+
+    if (overlap > 0 && index > 0) {
+      const maxStart = Math.max(0, endTime - minClipDuration)
+      startTime = Math.min(startTime + overlap, maxStart)
+    }
+
+    const duration = Math.max(endTime - startTime, minClipDuration)
+
+    return {
+      storyboard_id: String(clip.storyboard_id),
+      video_url: clip.video_url,
+      startTime,
+      endTime,
+      duration,
+      transition: clip.transition
+    }
+  })
+}
 </script>
 
 <style scoped lang="scss">
@@ -1920,6 +2008,47 @@ defineExpose({
         color: var(--text-secondary);
         min-width: 160px;
       }
+    }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .toolbar-settings {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .setting-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border-primary);
+      background: var(--bg-card);
+    }
+
+    .setting-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .setting-unit {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .setting-item :deep(.el-input-number) {
+      width: 110px;
     }
   }
 
