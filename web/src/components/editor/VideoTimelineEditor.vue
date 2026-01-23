@@ -59,8 +59,19 @@
       <div class="preview-panel">
         <div class="video-preview" @click="togglePlay">
           <video 
-            ref="previewPlayer"
-            :src="currentPreviewUrl"
+            ref="previewPlayerA"
+            class="preview-video"
+            :class="{ active: activePlayerIndex === 0 }"
+            preload="auto"
+            @loadedmetadata="handlePreviewLoaded"
+            @timeupdate="handlePreviewTimeUpdate"
+            @ended="handlePreviewEnded"
+          />
+          <video 
+            ref="previewPlayerB"
+            class="preview-video"
+            :class="{ active: activePlayerIndex === 1 }"
+            preload="auto"
             @loadedmetadata="handlePreviewLoaded"
             @timeupdate="handlePreviewTimeUpdate"
             @ended="handlePreviewEnded"
@@ -340,7 +351,7 @@
         <el-form-item :label="$t('video.transitionDuration')" v-if="editingTransition.type !== 'none'">
           <el-slider
             v-model="editingTransition.duration"
-            :min="0.3"
+            :min="0"
             :max="3"
             :step="0.1"
             show-input
@@ -508,7 +519,8 @@ const timelineClips = ref<TimelineClip[]>([])
 const audioClips = ref<AudioClip[]>([])
 const selectedClipId = ref<string | null>(null)
 const selectedAudioClipId = ref<string | null>(null)
-const previewPlayer = ref<HTMLVideoElement | null>(null)
+const previewPlayerA = ref<HTMLVideoElement | null>(null)
+const previewPlayerB = ref<HTMLVideoElement | null>(null)
 const audioPlayer = ref<HTMLAudioElement | null>(null)
 const timelineContainer = ref<HTMLElement | null>(null)
 const showAudioTrack = ref(true)  // 是否显示音频轨道
@@ -521,6 +533,8 @@ const zoom = ref(1) // 缩放级别
 const pixelsPerSecond = computed(() => 50 * zoom.value) // 每秒对应的像素数
 const isPlaying = ref(false)
 const playbackTimer = ref<number | null>(null)
+const activePlayerIndex = ref(0)
+const isSwitchingPlayer = ref(false)
 
 // 转场预览状态（必须在模板使用前定义）
 const transitionState = ref({
@@ -577,6 +591,53 @@ const getSceneDesc = (scene: Scene) => {
 }
 
 // 预览相关
+const getActivePlayer = () => (activePlayerIndex.value === 0 ? previewPlayerA.value : previewPlayerB.value)
+const getInactivePlayer = () => (activePlayerIndex.value === 0 ? previewPlayerB.value : previewPlayerA.value)
+
+const isActivePlayerEvent = (event?: Event) => {
+  if (!event || !event.target) return true
+  return event.target === getActivePlayer()
+}
+
+const waitForPlayerReady = (player: HTMLVideoElement) => {
+  return new Promise<void>((resolve, reject) => {
+    if (player.readyState >= 2) {
+      resolve()
+      return
+    }
+    const onCanPlay = () => {
+      player.removeEventListener('canplay', onCanPlay)
+      player.removeEventListener('error', onError)
+      resolve()
+    }
+    const onError = () => {
+      player.removeEventListener('canplay', onCanPlay)
+      player.removeEventListener('error', onError)
+      reject(new Error('Video canplay failed'))
+    }
+    player.addEventListener('canplay', onCanPlay)
+    player.addEventListener('error', onError)
+  })
+}
+
+const preloadClipOnPlayer = (player: HTMLVideoElement | null, clip: TimelineClip | null) => {
+  if (!player || !clip) return
+  if (player.src !== clip.video_url) {
+    player.src = clip.video_url
+  }
+  try {
+    player.currentTime = clip.start_time
+  } catch {
+    // ignore seek failures during preload
+  }
+}
+
+const preloadNextClip = () => {
+  const nextClip = timelineClips.value[currentClipIndex.value + 1]
+  const inactivePlayer = getInactivePlayer()
+  preloadClipOnPlayer(inactivePlayer, nextClip || null)
+}
+
 const getCurrentClip = () => timelineClips.value[currentClipIndex.value] || null
 
 const resolveTimeToClip = (time: number) => {
@@ -625,14 +686,16 @@ const syncCurrentTimeFromState = () => {
 
 const syncPreviewToCurrent = (shouldPlay: boolean) => {
   const clip = getCurrentClip()
-  if (!clip || !previewPlayer.value) return
-  if (previewPlayer.value.src !== clip.video_url) {
-    previewPlayer.value.src = clip.video_url
+  const activePlayer = getActivePlayer()
+  if (!clip || !activePlayer) return
+  if (activePlayer.src !== clip.video_url) {
+    activePlayer.src = clip.video_url
   }
-  previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
+  activePlayer.currentTime = clip.start_time + currentClipOffset.value
   if (shouldPlay) {
-    previewPlayer.value.play().catch(() => {})
+    activePlayer.play().catch(() => {})
   }
+  preloadNextClip()
 }
 
 const syncAudioToCurrent = (shouldPlay: boolean) => {
@@ -676,18 +739,20 @@ const currentAudioUrl = computed(() => {
 })
 
 const previewScene = (scene: Scene) => {
-  if (previewPlayer.value) {
-    previewPlayer.value.src = scene.video_url
-    previewPlayer.value.play()
+  const activePlayer = getActivePlayer()
+  if (activePlayer) {
+    activePlayer.src = scene.video_url
+    activePlayer.play().catch(() => {})
   }
 }
 
-const handlePreviewLoaded = () => {
-  // 视频加载完成后跳转到正确的时间点
-  if (!previewPlayer.value) return
+const handlePreviewLoaded = (event?: Event) => {
+  if (!isActivePlayerEvent(event)) return
+  const activePlayer = getActivePlayer()
+  if (!activePlayer) return
   const clip = syncCurrentTimeFromState()
   if (clip) {
-    previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
+    activePlayer.currentTime = clip.start_time + currentClipOffset.value
   }
 }
 
@@ -713,8 +778,10 @@ const handleAudioEnded = () => {
   }
 }
 
-const handlePreviewTimeUpdate = () => {
-  if (!isPlaying.value || !previewPlayer.value) return
+const handlePreviewTimeUpdate = (event?: Event) => {
+  if (!isActivePlayerEvent(event)) return
+  const activePlayer = getActivePlayer()
+  if (!isPlaying.value || !activePlayer || isSwitchingPlayer.value) return
   
   const currentClip = getCurrentClip()
   if (!currentClip) {
@@ -722,7 +789,7 @@ const handlePreviewTimeUpdate = () => {
     return
   }
 
-  const videoTime = previewPlayer.value.currentTime
+  const videoTime = activePlayer.currentTime
   const clipOffset = Math.max(0, videoTime - currentClip.start_time)
   currentClipOffset.value = Math.min(clipOffset, currentClip.duration)
   currentTime.value = currentClip.position + currentClipOffset.value
@@ -744,10 +811,14 @@ const switchToClipByIndex = async (
   index: number,
   options: { offset?: number; useTransition?: boolean } = {}
 ) => {
-  if (!previewPlayer.value) return
+  if (isSwitchingPlayer.value) return
+  const activePlayer = getActivePlayer()
+  const inactivePlayer = getInactivePlayer()
+  if (!inactivePlayer) return
   const clip = timelineClips.value[index]
   if (!clip) return
   const offset = Math.max(0, Math.min(options.offset ?? 0, clip.duration))
+  isSwitchingPlayer.value = true
   
   // 获取转场配置
   const useTransition = options.useTransition !== false
@@ -769,7 +840,9 @@ const switchToClipByIndex = async (
   }
   
   // 暂停当前播放，避免冲突
-  previewPlayer.value.pause()
+  if (activePlayer) {
+    activePlayer.pause()
+  }
   if (audioPlayer.value) {
     audioPlayer.value.pause()
   }
@@ -778,7 +851,9 @@ const switchToClipByIndex = async (
   currentClipIndex.value = index
   currentClipOffset.value = offset
   syncCurrentTimeFromState()
-  previewPlayer.value.src = clip.video_url
+  if (inactivePlayer.src !== clip.video_url) {
+    inactivePlayer.src = clip.video_url
+  }
   
   // 同步切换音频源
   if (audioClips.value.length > 0 && audioPlayer.value) {
@@ -792,27 +867,11 @@ const switchToClipByIndex = async (
   
   // 等待视频加载
   try {
-    await new Promise((resolve, reject) => {
-      if (!previewPlayer.value) return reject()
-      
-      const onCanPlay = () => {
-        previewPlayer.value?.removeEventListener('canplay', onCanPlay)
-        previewPlayer.value?.removeEventListener('error', onError)
-        resolve(undefined)
-      }
-      
-      const onError = () => {
-        previewPlayer.value?.removeEventListener('canplay', onCanPlay)
-        previewPlayer.value?.removeEventListener('error', onError)
-        reject()
-      }
-      
-      previewPlayer.value.addEventListener('canplay', onCanPlay)
-      previewPlayer.value.addEventListener('error', onError)
-    })
+    await waitForPlayerReady(inactivePlayer)
     
     // 设置起始时间并播放
-    previewPlayer.value.currentTime = clip.start_time + currentClipOffset.value
+    inactivePlayer.currentTime = clip.start_time + currentClipOffset.value
+    activePlayerIndex.value = activePlayerIndex.value === 0 ? 1 : 0
     
     if (hasTransition) {
       // 切换到转场入场阶段
@@ -825,17 +884,21 @@ const switchToClipByIndex = async (
     }
     
     if (isPlaying.value) {
-      await previewPlayer.value.play()
+      await inactivePlayer.play()
     }
     syncAudioToCurrent(isPlaying.value)
+    preloadNextClip()
   } catch (error) {
     console.error('切换视频片段失败:', error)
     transitionState.value.active = false
     pauseTimeline()
+  } finally {
+    isSwitchingPlayer.value = false
   }
 }
 
-const handlePreviewEnded = () => {
+const handlePreviewEnded = (event?: Event) => {
+  if (!isActivePlayerEvent(event)) return
   // 视频自然结束，尝试播放下一个片段
   const nextIndex = currentClipIndex.value + 1
   if (nextIndex < timelineClips.value.length) {
@@ -1096,7 +1159,7 @@ const openTransitionDialog = (clip: TimelineClip) => {
   editingTransitionClipId.value = clip.id
   editingTransition.value = {
     type: clip.transition?.type || 'fade',
-    duration: clip.transition?.duration || 1.0
+    duration: clip.transition?.duration ?? 1.0
   }
   transitionDialogVisible.value = true
 }
@@ -1718,7 +1781,8 @@ const clickTimeline = (event: MouseEvent) => {
 const seekToTime = (time: number) => {
   const resolved = setCurrentFromTime(time)
   if (!resolved.clip) {
-    previewPlayer.value?.pause()
+    getActivePlayer()?.pause()
+    getInactivePlayer()?.pause()
     audioPlayer.value?.pause()
     return
   }
@@ -1742,8 +1806,13 @@ const playTimeline = () => {
 
 const pauseTimeline = () => {
   isPlaying.value = false
-  if (previewPlayer.value) {
-    previewPlayer.value.pause()
+  const activePlayer = getActivePlayer()
+  const inactivePlayer = getInactivePlayer()
+  if (activePlayer) {
+    activePlayer.pause()
+  }
+  if (inactivePlayer) {
+    inactivePlayer.pause()
   }
   // 同时暂停音频
   if (audioPlayer.value) {
@@ -2177,10 +2246,19 @@ const buildMergeClips = (): MergeClip[] => {
         align-items: center;
         justify-content: center;
 
-        video {
-          max-width: 100%;
-          max-height: 100%;
+        .preview-video {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
           object-fit: contain;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+
+        .preview-video.active {
+          opacity: 1;
         }
 
         .preview-overlay {
