@@ -502,29 +502,35 @@ server {
 
 ### 后端技术
 
-- **语言**: Go 1.23+
-- **Web 框架**: Gin 1.9+
-- **ORM**: GORM
-- **数据库**: SQLite
-- **日志**: Zap
-- **视频处理**: FFmpeg
-- **AI 服务**: OpenAI、Gemini、火山等
+- **语言**: Go 1.24+
+- **Web 框架**: Gin 1.9.1
+- **ORM**: GORM 1.30.0
+- **数据库**: SQLite 3.x (`modernc.org/sqlite` 纯Go驱动)
+- **日志**: Zap 1.26.0
+- **视频处理**: FFmpeg 4.0+
+- **AI SDK**:
+  - OpenAI Go SDK v3.16.0
+  - Google Genai v1.0.0
+  - 火山引擎 Volc SDK v1.0.235
+- **定时任务**: robfig/cron v3.0.1
+- **配置管理**: Viper 1.17.0
 
 ### 前端技术
 
-- **框架**: Vue 3.4+
-- **语言**: TypeScript 5+
-- **构建工具**: Vite 5
-- **UI 组件**: Element Plus
-- **CSS 框架**: TailwindCSS
-- **状态管理**: Pinia
-- **路由**: Vue Router 4
+- **框架**: Vue 3.4.0+
+- **语言**: TypeScript 5.3.0+
+- **构建工具**: Vite 5.0.0+
+- **UI 组件**: Element Plus 2.5.0+
+- **CSS 框架**: TailwindCSS 4.1.0+
+- **状态管理**: Pinia 2.1.0+
+- **路由**: Vue Router 4.2.0+
 
 ### 开发工具
 
-- **包管理**: Go Modules, npm
+- **包管理**: Go Modules, npm/pnpm
 - **代码规范**: ESLint, Prettier
 - **版本控制**: Git
+- **容器化**: Docker, Docker Compose
 
 ---
 
