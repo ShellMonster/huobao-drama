@@ -872,8 +872,8 @@ func (s *VideoGenerationService) BatchGenerateVideosForEpisode(episodeID string)
 }
 
 func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
+	var videoGen models.VideoGeneration
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
-		var videoGen models.VideoGeneration
 		if err := tx.Where("id = ?", id).First(&videoGen).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("video generation not found")
@@ -908,10 +908,27 @@ func (s *VideoGenerationService) DeleteVideoGeneration(id uint) error {
 		return err
 	}
 
+	s.deleteLocalVideoFiles(&videoGen)
+
 	cache.BumpNamespace(cache.NamespaceDramaList)
 	cache.BumpNamespace(cache.NamespaceDramaDetail)
 	cache.BumpNamespace(cache.NamespaceVideoList)
 	cache.BumpNamespace(cache.NamespaceVideoDetail)
 	cache.BumpNamespace(cache.NamespaceStoryboards)
 	return nil
+}
+
+func (s *VideoGenerationService) deleteLocalVideoFiles(videoGen *models.VideoGeneration) {
+	if s.localStorage == nil || videoGen == nil {
+		return
+	}
+	if videoGen.VideoURL == nil || *videoGen.VideoURL == "" {
+		return
+	}
+	if !s.localStorage.IsLocalURL(*videoGen.VideoURL) {
+		return
+	}
+	if err := s.localStorage.Delete(*videoGen.VideoURL); err != nil {
+		s.log.Warnw("Failed to delete local video file", "error", err, "id", videoGen.ID, "url", *videoGen.VideoURL)
+	}
 }

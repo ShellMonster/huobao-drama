@@ -45,7 +45,9 @@
       <div class="timeline-area">
         <VideoTimelineEditor ref="timelineEditorRef" v-if="storyboards.length > 0" :scenes="storyboards"
           :episode-id="episodeId.toString()" :drama-id="dramaId.toString()" :assets="videoAssets"
+          :importing-assets="importingVideosToAssets"
           @select-scene="handleTimelineSelect" @asset-deleted="loadVideoAssets"
+          @import-assets="importGeneratedVideosToAssets"
           @merge-completed="handleMergeCompleted" />
         <el-empty v-else :description="$t('storyboard.noStoryboard')" class="empty-timeline" />
       </div>
@@ -706,6 +708,21 @@
                     style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;">
                     <div v-for="video in generatedVideos" :key="video.id" class="image-item video-item"
                       style="position: relative; border-radius: 8px; overflow: hidden; background: #fff; border: 1px solid #e8e8e8; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); cursor: pointer; transition: all 0.2s ease;">
+                      <div
+                        v-if="video.status === 'completed'"
+                        style="position: absolute; top: 6px; right: 6px; z-index: 3;"
+                      >
+                        <el-button
+                          circle
+                          size="small"
+                          type="danger"
+                          plain
+                          :icon="Delete"
+                          :loading="deletingVideoIds.has(video.id)"
+                          :disabled="addingToAssets.has(video.id)"
+                          @click.stop="deleteGeneratedVideo(video)"
+                        />
+                      </div>
                       <div class="video-thumbnail" v-if="video.video_url"
                         style="position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; cursor: pointer;"
                         @mouseenter="(e) => e.currentTarget.querySelector('.play-overlay').style.opacity = '1'"
@@ -738,10 +755,6 @@
                           <el-button v-if="video.status === 'completed' && video.video_url" type="success" size="small"
                             :loading="addingToAssets.has(video.id)" @click.stop="addVideoToAssets(video)">
                             {{ addingToAssets.has(video.id) ? '添加中...' : '添加到素材库' }}
-                          </el-button>
-                          <el-button type="danger" size="small" plain :loading="deletingVideoIds.has(video.id)"
-                            :disabled="addingToAssets.has(video.id)" @click.stop="deleteGeneratedVideo(video)">
-                            {{ $t('common.delete') }}
                           </el-button>
                         </div>
                       </div>
@@ -1037,6 +1050,7 @@ const showSettings = ref(false)
 const showVideoPreview = ref(false)
 const previewVideo = ref<VideoGeneration | null>(null)
 const addingToAssets = ref<Set<number>>(new Set())
+const importingVideosToAssets = ref(false)
 const loadingStoryboards = ref(false)
 const cacheTTL = 60 * 1000
 let loadingTimer: number | null = null
@@ -2796,18 +2810,26 @@ const playVideo = (video: VideoGeneration) => {
   showVideoPreview.value = true
 }
 
-// 添加视频到素材库
-const addVideoToAssets = async (video: VideoGeneration) => {
+const importVideoToAssets = async (
+  video: VideoGeneration,
+  options: { reloadAssets?: boolean; showMessage?: boolean } = {}
+) => {
+  const { reloadAssets = true, showMessage = true } = options
   if (video.status !== 'completed' || !video.video_url) {
-    ElMessage.warning('只能添加已完成的视频到素材库')
-    return
+    if (showMessage) {
+      ElMessage.warning('只能添加已完成的视频到素材库')
+    }
+    return false
+  }
+
+  if (addingToAssets.value.has(video.id)) {
+    return false
   }
 
   addingToAssets.value.add(video.id)
-
+  let isReplacing = false
   try {
     // 检查该镜头是否已存在素材
-    let isReplacing = false
     if (video.storyboard_id) {
       const existingAsset = videoAssets.value.find(
         (asset: any) => asset.storyboard_id === video.storyboard_id
@@ -2826,31 +2848,129 @@ const addVideoToAssets = async (video: VideoGeneration) => {
 
     // 添加新素材
     await assetAPI.importFromVideo(video.id)
-    ElMessage.success('已添加到素材库')
 
-    // 重新加载素材库列表
-    await loadVideoAssets()
+    if (showMessage) {
+      ElMessage.success('已添加到素材库')
+    }
+
+    if (reloadAssets) {
+      await loadVideoAssets()
+    }
 
     // 如果是替换操作，更新时间线中使用该分镜的所有视频片段
     if (isReplacing && video.storyboard_id && video.video_url) {
-      console.log('=== 视频替换，准备更新时间线 ===')
-      console.log('timelineEditorRef.value:', timelineEditorRef.value)
-      console.log('video.storyboard_id:', video.storyboard_id)
-      console.log('video.video_url:', video.video_url)
-
       if (timelineEditorRef.value) {
         timelineEditorRef.value.updateClipsByStoryboardId(
           video.storyboard_id,
           video.video_url
         )
-      } else {
-        console.warn('⚠️ timelineEditorRef.value 为空，无法更新时间线')
       }
     }
+    return true
   } catch (error: any) {
-    ElMessage.error(error.message || '添加失败')
+    if (showMessage) {
+      ElMessage.error(error.message || '添加失败')
+    }
+    return false
   } finally {
     addingToAssets.value.delete(video.id)
+  }
+}
+
+// 添加视频到素材库
+const addVideoToAssets = async (video: VideoGeneration) => {
+  await importVideoToAssets(video)
+}
+
+const fetchCompletedVideosByDrama = async () => {
+  const pageSize = 100
+  let page = 1
+  let total = 0
+  const all: VideoGeneration[] = []
+
+  while (true) {
+    const result = await videoAPI.listVideos({
+      drama_id: dramaId.toString(),
+      status: 'completed',
+      page,
+      page_size: pageSize
+    })
+    const items = result.items || []
+    all.push(...items)
+    total = result.pagination?.total ?? all.length
+
+    if (all.length >= total || items.length === 0) {
+      break
+    }
+    page += 1
+  }
+
+  return all
+}
+
+const importGeneratedVideosToAssets = async () => {
+  if (importingVideosToAssets.value) return
+  const totalStoryboards = storyboards.value.length
+  if (totalStoryboards === 0) {
+    ElMessage.warning('没有可导入的镜头')
+    return
+  }
+
+  importingVideosToAssets.value = true
+  try {
+    const completedVideos = await fetchCompletedVideosByDrama()
+    const storyboardIds = new Set(storyboards.value.map(item => item.id))
+    const latestByStoryboard = new Map<number, VideoGeneration>()
+
+    for (const video of completedVideos) {
+      if (!video.storyboard_id || !storyboardIds.has(video.storyboard_id)) {
+        continue
+      }
+      if (!video.video_url) {
+        continue
+      }
+      if (!latestByStoryboard.has(video.storyboard_id)) {
+        latestByStoryboard.set(video.storyboard_id, video)
+      }
+    }
+
+    const sortedStoryboards = [...storyboards.value].sort((a, b) => {
+      const aNum = a.storyboard_number ?? a.id
+      const bNum = b.storyboard_number ?? b.id
+      return aNum - bNum
+    })
+
+    let successCount = 0
+    for (const storyboard of sortedStoryboards) {
+      const video = latestByStoryboard.get(storyboard.id)
+      if (!video) {
+        continue
+      }
+      const success = await importVideoToAssets(video, { reloadAssets: false, showMessage: false })
+      if (success) {
+        successCount += 1
+      }
+    }
+
+    if (successCount > 0) {
+      await loadVideoAssets()
+    }
+
+    const availableCount = latestByStoryboard.size
+    const missingCount = Math.max(totalStoryboards - availableCount, 0)
+    const failedCount = Math.max(availableCount - successCount, 0)
+
+    if (missingCount > 0 || failedCount > 0) {
+      const failedMsg = failedCount > 0 ? `，导入失败${failedCount}个` : ''
+      ElMessage.warning(`镜头共${totalStoryboards}个，成功导入${successCount}个素材，未完成${missingCount}个${failedMsg}`)
+      return
+    }
+
+    ElMessage.success(`镜头共${totalStoryboards}个，已导入${successCount}个素材`)
+  } catch (error: any) {
+    ElMessage.error(error.message || '导入素材失败')
+  } finally {
+    importingVideosToAssets.value = false
   }
 }
 

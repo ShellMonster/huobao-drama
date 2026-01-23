@@ -116,6 +116,15 @@
             <h4>{{ $t('video.mediaLibrary') }}</h4>
             <span>{{ $t('video.videoCount', { count: availableStoryboards.length }) }}</span>
           </div>
+          <el-button
+            size="small"
+            :icon="Download"
+            :loading="props.importingAssets"
+            :disabled="props.importingAssets || props.scenes.length === 0"
+            @click="handleImportAssets"
+          >
+            一键导入素材
+          </el-button>
           <el-button 
             type="primary" 
             size="small"
@@ -482,11 +491,13 @@ const props = defineProps<{
   episodeId: string
   dramaId: string
   assets?: any[]
+  importingAssets?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'merge-completed', mergeId: number): void
   (e: 'asset-deleted'): void
+  (e: 'import-assets'): void
 }>()
 
 // 基础状态
@@ -1124,6 +1135,10 @@ const addAllScenesInOrder = async () => {
   }
 
   ElMessage.success(`已批量添加 ${sortedScenes.length} 个场景到时间线`)
+}
+
+const handleImportAssets = () => {
+  emit('import-assets')
 }
 
 // 删除素材

@@ -65,6 +65,22 @@ func (s *LocalStorage) UploadBytes(data []byte, contentType string, category str
 }
 
 func (s *LocalStorage) Delete(url string) error {
+	if url == "" {
+		return nil
+	}
+	if !s.IsLocalURL(url) {
+		return nil
+	}
+	filePath, err := s.ResolvePath(url)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(filePath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
 
