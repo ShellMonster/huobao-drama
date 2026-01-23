@@ -86,7 +86,18 @@ export const characterLibraryAPI = {
 
   // 批量生成角色形象
   batchGenerateCharacterImages(characterIds: string[], model?: string) {
-    return request.post<{ message: string; count: number }>('/characters/batch-generate-images', {
+    return request.post<{
+      message: string
+      count: number
+      success_count?: number
+      fail_count?: number
+      items?: Array<{
+        character_id: string
+        image_generation_id?: number
+        status?: string
+        error?: string
+      }>
+    }>('/characters/batch-generate-images', {
       character_ids: characterIds,
       model
     })

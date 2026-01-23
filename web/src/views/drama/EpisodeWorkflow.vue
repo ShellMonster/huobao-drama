@@ -1151,10 +1151,16 @@ const checkAndStartPolling = async () => {
       }
       if (char.image_generation_id) {
         generatingCharacterImages.value[char.id] = true
-        pollImageStatus(char.image_generation_id, async () => {
-          await loadDramaData()
-          ElMessage.success(`${char.name}的图片生成完成！`)
-        }).finally(() => {
+        pollImageStatus(
+          char.image_generation_id,
+          async () => {
+            await loadDramaData(false)
+            ElMessage.success(`${char.name}的图片生成完成！`)
+          },
+          async () => {
+            await loadDramaData(false)
+          }
+        ).finally(() => {
           generatingCharacterImages.value[char.id] = false
         })
         continue
@@ -1174,10 +1180,16 @@ const checkAndStartPolling = async () => {
         if (charImageGen) {
           // 启动轮询
           generatingCharacterImages.value[char.id] = true
-          pollImageStatus(charImageGen.id, async () => {
-            await loadDramaData()
-            ElMessage.success(`${char.name}的图片生成完成！`)
-          }).finally(() => {
+          pollImageStatus(
+            charImageGen.id,
+            async () => {
+              await loadDramaData(false)
+              ElMessage.success(`${char.name}的图片生成完成！`)
+            },
+            async () => {
+              await loadDramaData(false)
+            }
+          ).finally(() => {
             generatingCharacterImages.value[char.id] = false
           })
         }
@@ -1195,10 +1207,16 @@ const checkAndStartPolling = async () => {
       }
       if (scene.image_generation_id) {
         generatingSceneImages.value[scene.id] = true
-        pollImageStatus(scene.image_generation_id, async () => {
-          await loadDramaData()
-          ElMessage.success(`${scene.location}的图片生成完成！`)
-        }).finally(() => {
+        pollImageStatus(
+          scene.image_generation_id,
+          async () => {
+            await loadDramaData(false)
+            ElMessage.success(`${scene.location}的图片生成完成！`)
+          },
+          async () => {
+            await loadDramaData(false)
+          }
+        ).finally(() => {
           generatingSceneImages.value[scene.id] = false
         })
         continue
@@ -1218,10 +1236,16 @@ const checkAndStartPolling = async () => {
         if (sceneImageGen) {
           // 启动轮询
           generatingSceneImages.value[scene.id] = true
-          pollImageStatus(sceneImageGen.id, async () => {
-            await loadDramaData()
-            ElMessage.success(`${scene.location}的图片生成完成！`)
-          }).finally(() => {
+          pollImageStatus(
+            sceneImageGen.id,
+            async () => {
+              await loadDramaData(false)
+              ElMessage.success(`${scene.location}的图片生成完成！`)
+            },
+            async () => {
+              await loadDramaData(false)
+            }
+          ).finally(() => {
             generatingSceneImages.value[scene.id] = false
           })
         }
@@ -1324,7 +1348,11 @@ const handleExtractCharactersAndBackgrounds = async () => {
 }
 
 // 轮询检查图片生成状态（SSE优先，轮询兜底）
-const pollImageStatus = (imageGenId: number, onComplete: () => Promise<void>) => {
+const pollImageStatus = (
+  imageGenId: number,
+  onComplete: () => Promise<void>,
+  onFailed?: (imageGen: any) => Promise<void> | void
+) => {
   const maxAttempts = 100
   const pollInterval = 6000
 
@@ -1358,6 +1386,13 @@ const pollImageStatus = (imageGenId: number, onComplete: () => Promise<void>) =>
       }
       if (imageGen.status === 'failed') {
         ElMessage.error(`图片生成失败: ${imageGen.error_msg || '未知错误'}`)
+        if (onFailed) {
+          try {
+            await onFailed(imageGen)
+          } catch (error) {
+            console.error('[SSE] 图片失败回调失败:', error)
+          }
+        }
         stopAll()
         resolve()
       }
@@ -1557,10 +1592,16 @@ const generateCharacterImage = async (characterId: number) => {
     if (imageGenId) {
       ElMessage.info('角色图片生成中，请稍候...')
       // 轮询检查生成状态
-      await pollImageStatus(imageGenId, async () => {
-        await loadDramaData()
-        ElMessage.success('角色图片生成完成！')
-      })
+      await pollImageStatus(
+        imageGenId,
+        async () => {
+          await loadDramaData(false)
+          ElMessage.success('角色图片生成完成！')
+        },
+        async () => {
+          await loadDramaData(false)
+        }
+      )
     } else {
       ElMessage.success('角色图片生成已启动')
       await loadDramaData()
@@ -1600,13 +1641,52 @@ const batchGenerateCharacterImages = async () => {
     const model = selectedImageModel.value || undefined
     
     // 使用批量生成API
-    await characterLibraryAPI.batchGenerateCharacterImages(
+    const response = await characterLibraryAPI.batchGenerateCharacterImages(
       selectedCharacterIds.value.map(id => id.toString()),
       model
     )
     
     ElMessage.success($t('workflow.batchTaskSubmitted'))
-    await loadDramaData()
+
+    const items = response.items || []
+    if (items.length > 0) {
+      const failedItems = items.filter(item => !item.image_generation_id)
+      const currentChars = currentEpisode.value?.characters || []
+
+      items.forEach((item) => {
+        const charId = Number(item.character_id)
+        const char = currentChars.find(c => c.id === charId)
+        if (item.image_generation_id) {
+          generatingCharacterImages.value[charId] = true
+          if (char) {
+            char.image_generation_status = item.status || 'pending'
+            char.image_generation_id = item.image_generation_id
+          }
+          pollImageStatus(
+            item.image_generation_id,
+            async () => {
+              await loadDramaData(false)
+            },
+            async () => {
+              await loadDramaData(false)
+            }
+          ).finally(() => {
+            generatingCharacterImages.value[charId] = false
+          })
+        } else {
+          if (char) {
+            char.image_generation_status = 'failed'
+            char.image_generation_error = item.error || '生成失败'
+          }
+        }
+      })
+
+      if (failedItems.length > 0) {
+        ElMessage.warning(`批量生成提交完成：${items.length - failedItems.length} 个成功，${failedItems.length} 个失败`)
+      }
+    } else {
+      await loadDramaData()
+    }
   } catch (error: any) {
     ElMessage.error(error.message || $t('workflow.batchGenerateFailed'))
   } finally {
@@ -1629,10 +1709,16 @@ const generateSceneImage = async (sceneId: string) => {
     if (imageGenId) {
       ElMessage.info($t('workflow.sceneImageGenerating'))
       // 轮询检查生成状态
-      await pollImageStatus(imageGenId, async () => {
-        await loadDramaData()
-        ElMessage.success($t('workflow.sceneImageComplete'))
-      })
+      await pollImageStatus(
+        imageGenId,
+        async () => {
+          await loadDramaData(false)
+          ElMessage.success($t('workflow.sceneImageComplete'))
+        },
+        async () => {
+          await loadDramaData(false)
+        }
+      )
     } else {
       ElMessage.success($t('workflow.sceneImageStarted'))
       await loadDramaData()

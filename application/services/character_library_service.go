@@ -450,30 +450,43 @@ func (s *CharacterLibraryService) UpdateCharacter(characterID string, req interf
 	return nil
 }
 
-// BatchGenerateCharacterImages 批量生成角色图片（并发执行）
-func (s *CharacterLibraryService) BatchGenerateCharacterImages(characterIDs []string, imageService *ImageGenerationService, modelName string) {
+type BatchCharacterImageResult struct {
+	CharacterID       string `json:"character_id"`
+	ImageGenerationID *uint  `json:"image_generation_id,omitempty"`
+	Status            string `json:"status,omitempty"`
+	Error             string `json:"error,omitempty"`
+}
+
+// BatchGenerateCharacterImages 批量生成角色图片（同步创建记录，返回ID用于追踪）
+func (s *CharacterLibraryService) BatchGenerateCharacterImages(characterIDs []string, imageService *ImageGenerationService, modelName string) []BatchCharacterImageResult {
 	s.log.Infow("Starting batch character image generation",
 		"count", len(characterIDs),
 		"model", modelName)
 
-	// 使用 goroutine 并发生成所有角色图片
-	for _, characterID := range characterIDs {
-		// 为每个角色启动单独的 goroutine
-		go func(charID string) {
-			imageGen, err := s.GenerateCharacterImage(charID, imageService, modelName)
-			if err != nil {
-				s.log.Errorw("Failed to generate character image in batch",
-					"character_id", charID,
-					"error", err)
-				return
-			}
+	results := make([]BatchCharacterImageResult, 0, len(characterIDs))
 
-			s.log.Infow("Character image generated in batch",
-				"character_id", charID,
-				"image_gen_id", imageGen.ID)
-		}(characterID)
+	for _, characterID := range characterIDs {
+		imageGen, err := s.GenerateCharacterImage(characterID, imageService, modelName)
+		if err != nil {
+			s.log.Errorw("Failed to generate character image in batch",
+				"character_id", characterID,
+				"error", err)
+			results = append(results, BatchCharacterImageResult{
+				CharacterID: characterID,
+				Error:       err.Error(),
+			})
+			continue
+		}
+		status := string(imageGen.Status)
+		imageGenID := imageGen.ID
+		results = append(results, BatchCharacterImageResult{
+			CharacterID:       characterID,
+			ImageGenerationID: &imageGenID,
+			Status:            status,
+		})
 	}
 
 	s.log.Infow("Batch character image generation tasks submitted",
 		"total", len(characterIDs))
+	return results
 }

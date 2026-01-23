@@ -230,14 +230,49 @@ const batchGenerate = async () => {
   generatingIds.value = [...selectedCharacters.value]
   
   try {
-    await characterLibraryAPI.batchGenerateCharacterImages(
+    const response = await characterLibraryAPI.batchGenerateCharacterImages(
       selectedCharacters.value.map(id => String(id))
     )
     
     ElMessage.success(`批量生成任务已提交，正在后台生成 ${selectedCharacters.value.length} 个角色形象`)
     
-    // 轮询检查生成状态
-    startPolling()
+    const items = response.items || []
+    if (items.length > 0) {
+      const successIds: Array<number | string> = []
+      const failedItems = items.filter(item => !item.image_generation_id)
+      items.forEach((item) => {
+        const charId = Number(item.character_id)
+        const idx = characters.value.findIndex(c => c.id === charId)
+        if (item.image_generation_id) {
+          successIds.push(charId)
+          if (idx !== -1) {
+            characters.value[idx] = {
+              ...characters.value[idx],
+              image_generation_status: item.status || 'pending',
+              image_generation_id: item.image_generation_id
+            }
+          }
+        } else if (idx !== -1) {
+          characters.value[idx] = {
+            ...characters.value[idx],
+            image_generation_status: 'failed',
+            image_generation_error: item.error || '生成失败'
+          }
+        }
+      })
+      generatingIds.value = successIds
+      if (failedItems.length > 0) {
+        ElMessage.warning(`批量生成提交完成：${items.length - failedItems.length} 个成功，${failedItems.length} 个失败`)
+      }
+      if (successIds.length > 0) {
+        startPolling()
+      } else {
+        batchGenerating.value = false
+      }
+    } else {
+      // 兼容旧接口响应
+      startPolling()
+    }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.message || '批量生成失败')
     batchGenerating.value = false

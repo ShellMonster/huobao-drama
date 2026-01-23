@@ -24,11 +24,22 @@ func (h *CharacterLibraryHandler) BatchGenerateCharacterImages(c *gin.Context) {
 		return
 	}
 
-	// 异步批量生成
-	go h.libraryService.BatchGenerateCharacterImages(req.CharacterIDs, h.imageService, req.Model)
+	results := h.libraryService.BatchGenerateCharacterImages(req.CharacterIDs, h.imageService, req.Model)
+	successCount := 0
+	failCount := 0
+	for _, item := range results {
+		if item.ImageGenerationID != nil {
+			successCount++
+		} else {
+			failCount++
+		}
+	}
 
 	response.Success(c, gin.H{
-		"message": "批量生成任务已提交",
-		"count":   len(req.CharacterIDs),
+		"message":       "批量生成任务已提交",
+		"count":         len(req.CharacterIDs),
+		"success_count": successCount,
+		"fail_count":    failCount,
+		"items":         results,
 	})
 }
