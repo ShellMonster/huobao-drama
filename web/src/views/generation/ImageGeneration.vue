@@ -175,7 +175,7 @@ import type { ImageGeneration, ImageStatus } from '@/types/image'
 import type { Drama } from '@/types/drama'
 import GenerateImageDialog from './components/GenerateImageDialog.vue'
 import ImageDetailDialog from './components/ImageDetailDialog.vue'
-import { subscribeUnifiedSSE } from '@/utils/sse'
+import { createListStream } from '@/utils/generationManager'
 import { LoadingSection } from '@/components/common'
 
 const route = useRoute()
@@ -210,58 +210,40 @@ const getImageQueryKey = () => [
   pagination.page_size
 ].join(':')
 
-let imageStreamStop: (() => void) | null = null
-let reloadTimer: number | null = null
+const imageStream = createListStream<ImageGeneration>({
+  types: ['image_generation'],
+  getParams: () => ({
+    drama_id: filters.drama_id || undefined
+  }),
+  onMessage: (imageGen) => {
+    if (filters.drama_id && String(imageGen.drama_id) !== filters.drama_id) return
+
+    if (filters.status && imageGen.status !== filters.status) {
+      images.value = images.value.filter(img => img.id !== imageGen.id)
+      return
+    }
+
+    const index = images.value.findIndex(img => img.id === imageGen.id)
+    if (index >= 0) {
+      images.value[index] = { ...images.value[index], ...imageGen }
+    } else {
+      imageStream.scheduleReload()
+    }
+  },
+  poll: () => {
+    loadImages({ showLoading: false })
+  },
+  shouldPoll: () => images.value.some(img => img.status === 'processing'),
+  pollIntervalMs: 5000,
+  scheduleDelayMs: 500
+})
 
 const stopImageStream = () => {
-  if (imageStreamStop) {
-    imageStreamStop()
-    imageStreamStop = null
-  }
-  if (reloadTimer) {
-    clearTimeout(reloadTimer)
-    reloadTimer = null
-  }
-}
-
-const scheduleReload = () => {
-  if (reloadTimer) return
-  reloadTimer = window.setTimeout(() => {
-    reloadTimer = null
-    loadImages({ showLoading: false })
-  }, 500)
+  imageStream.stop()
 }
 
 const startImageStream = () => {
-  stopImageStream()
-  imageStreamStop = subscribeUnifiedSSE({
-    types: ['image_generation'],
-    params: { drama_id: filters.drama_id || undefined },
-    onMessage: (imageGen) => {
-      if (filters.drama_id && String(imageGen.drama_id) !== filters.drama_id) return
-
-      if (filters.status && imageGen.status !== filters.status) {
-        images.value = images.value.filter(img => img.id !== imageGen.id)
-        return
-      }
-
-      const index = images.value.findIndex(img => img.id === imageGen.id)
-      if (index >= 0) {
-        images.value[index] = { ...images.value[index], ...imageGen }
-      } else {
-        scheduleReload()
-      }
-    },
-    fallback: () => {
-      const interval = window.setInterval(() => {
-        const hasProcessing = images.value.some(img => img.status === 'processing')
-      if (hasProcessing) {
-          loadImages({ showLoading: false })
-        }
-      }, 5000)
-      return () => clearInterval(interval)
-    }
-  }).close
+  imageStream.start()
 }
 
 const loadImages = async (options: { showLoading?: boolean } = {}) => {
