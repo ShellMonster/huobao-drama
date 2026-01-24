@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <div class="content-wrapper animate-fade-in">
-      <AppHeader :fixed="false">
+      <AppHeader :fixed="false" :show-logo="false">
         <template #left>
           <div class="page-title">
             <h1>风格管理</h1>

@@ -23,13 +23,13 @@ type VideoGenerationService struct {
 	db              *gorm.DB
 	transferService *ResourceTransferService
 	log             *logger.Logger
-	localStorage    *storage.LocalStorage
+	localStorage    storage.Storage
 	aiService       *AIService
 	ffmpeg          *ffmpeg.FFmpeg
 	events          *events.VideoGenerationHub
 }
 
-func NewVideoGenerationService(db *gorm.DB, transferService *ResourceTransferService, localStorage *storage.LocalStorage, aiService *AIService, log *logger.Logger, events *events.VideoGenerationHub) *VideoGenerationService {
+func NewVideoGenerationService(db *gorm.DB, transferService *ResourceTransferService, localStorage storage.Storage, aiService *AIService, log *logger.Logger, events *events.VideoGenerationHub) *VideoGenerationService {
 	service := &VideoGenerationService{
 		db:              db,
 		localStorage:    localStorage,

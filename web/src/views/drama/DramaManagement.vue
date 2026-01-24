@@ -1,27 +1,44 @@
 <template>
   <div class="page-container">
     <div class="content-wrapper animate-fade-in">
-      <!-- Page Header / 页面头部 -->
-      <AppHeader :fixed="false" :show-logo="false">
-        <template #left>
-          <el-button text @click="goBack" class="back-btn" native-type="button">
-            <el-icon><ArrowLeft /></el-icon>
-            <span>{{ $t('common.back') }}</span>
-          </el-button>
-          <div class="page-title">
-            <h1>{{ drama?.title || '' }}</h1>
-            <span class="subtitle">{{ drama?.description || $t('drama.management.overview') }}</span>
-          </div>
-        </template>
-      </AppHeader>
+        <!-- Page Header / 页面头部 -->
+        <AppHeader :fixed="false" :show-logo="false">
+          <template #left>
+            <el-button
+              text
+              @click="goBack"
+              class="back-btn"
+              native-type="button"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+              <span>{{ $t('common.back') }}</span>
+            </el-button>
+            <div class="page-title">
+              <h1>{{ drama?.title || '' }}</h1>
+              <span class="subtitle">{{ drama?.description || $t('drama.management.overview') }}</span>
+            </div>
+          </template>
+        </AppHeader>
 
-      <!-- Tabs / 标签页 -->
-      <LoadingSection
-        class="tabs-wrapper"
-        :loading="pageLoading"
-        :text="$t('common.loading')"
-      >
-        <el-tabs v-model="activeTab" class="management-tabs">
+        <el-tabs v-model="mainTab" class="primary-tabs">
+          <el-tab-pane label="生图" name="images">
+            <LoadingSection class="module-wrapper" :loading="pageLoading" :text="$t('common.loading')">
+              <AdImageStudio :drama-id="dramaId" />
+            </LoadingSection>
+          </el-tab-pane>
+          <el-tab-pane label="生视频" name="videos">
+            <div class="module-wrapper">
+              <VideoGeneration :embedded="true" :drama-id="dramaId" />
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="高级生视频" name="advanced">
+            <!-- Tabs / 标签页 -->
+            <LoadingSection
+              class="tabs-wrapper"
+              :loading="pageLoading"
+              :text="$t('common.loading')"
+            >
+              <el-tabs v-model="advancedTab" class="management-tabs">
       <!-- 项目概览 -->
       <el-tab-pane :label="$t('drama.management.overview')" name="overview">
         <div class="stats-grid">
@@ -83,6 +100,16 @@
             </el-descriptions-item>
             <el-descriptions-item :label="$t('common.createdAt')">
               <span class="info-value">{{ formatDate(drama?.created_at) }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="广告主">
+              <span class="info-value">
+                {{ drama?.brand?.display_name || drama?.brand?.name || '未选择' }}
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item label="素材规范">
+              <span class="info-value">
+                {{ drama?.spec?.name || '未选择' }}
+              </span>
             </el-descriptions-item>
             <el-descriptions-item :label="$t('drama.management.projectDesc')" :span="2">
               <span class="info-desc">{{ drama?.description || $t('drama.management.noDescription') }}</span>
@@ -221,8 +248,11 @@
 
         <el-empty v-if="scenes.length === 0" :description="$t('drama.management.noScenes')" />
       </el-tab-pane>
+
         </el-tabs>
       </LoadingSection>
+    </el-tab-pane>
+  </el-tabs>
 
       <!-- 添加角色对话框 -->
     <el-dialog v-model="addCharacterDialogVisible" :title="editingCharacterId ? $t('common.edit') : $t('character.add')" width="600px">
@@ -276,7 +306,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Document, User, Picture, Plus } from '@element-plus/icons-vue'
@@ -286,13 +316,19 @@ import { characterLibraryAPI } from '@/api/character-library'
 import type { Drama } from '@/types/drama'
 import { AppHeader, StatCard, EmptyState, LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
+import AdImageStudio from './AdImageStudio.vue'
+import VideoGeneration from '../generation/VideoGeneration.vue'
+import { disableWorkspace, isWorkspaceActive } from '@/utils/workspace'
 
 const router = useRouter()
 const route = useRoute()
 const dramaId = route.params.id as string
 
+const workspaceActive = ref(isWorkspaceActive())
+
 const drama = ref<Drama>()
-const activeTab = ref(route.query.tab as string || 'overview')
+const mainTab = ref((route.query.section as string) || 'advanced')
+const advancedTab = ref(route.query.tab as string || 'overview')
 const scenes = ref<any[]>([])
 const pageLoading = ref(false)
 const cacheTTL = 60 * 1000
@@ -338,6 +374,7 @@ const sceneForm = ref({
 const episodesCount = computed(() => drama.value?.episodes?.length || 0)
 const charactersCount = computed(() => drama.value?.characters?.length || 0)
 const scenesCount = computed(() => scenes.value.length)
+
 
 const sortedEpisodes = computed(() => {
   if (!drama.value?.episodes) return []
@@ -451,6 +488,11 @@ const createNewEpisode = () => {
 }
 
 const goBack = () => {
+  if (workspaceActive.value) {
+    disableWorkspace()
+    router.push({ name: 'DramaList' })
+    return
+  }
   const target = { name: 'DramaList' }
   const targetPath = router.resolve(target).path
   if (route.path === targetPath) {
@@ -699,14 +741,22 @@ const deleteScene = async (scene: any) => {
 }
 
 onMounted(() => {
+  workspaceActive.value = isWorkspaceActive()
   const hasCache = hydrateDramaFromCache()
   loadDramaData(!hasCache)
 
   // 如果有query参数指定tab，切换到对应tab
   if (route.query.tab) {
-    activeTab.value = route.query.tab as string
+    advancedTab.value = route.query.tab as string
   }
 })
+
+watch(
+  () => route.fullPath,
+  () => {
+    workspaceActive.value = isWorkspaceActive()
+  }
+)
 
 onBeforeUnmount(() => {
   if (loadingTimer) {
@@ -770,7 +820,8 @@ onBeforeUnmount(() => {
 /* ========================================
    Tabs Wrapper / 标签页容器 - 紧凑内边距
    ======================================== */
-.tabs-wrapper {
+.tabs-wrapper,
+.module-wrapper {
   background: var(--bg-card);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
@@ -778,8 +829,19 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-card);
 }
 
+.primary-tabs {
+  margin-top: var(--space-3);
+}
+
+.primary-tabs :deep(.el-tabs__header) {
+  margin-bottom: var(--space-4);
+  padding: 0 var(--space-4);
+  box-sizing: border-box;
+}
+
 @media (min-width: 768px) {
-  .tabs-wrapper {
+  .tabs-wrapper,
+  .module-wrapper {
     padding: var(--space-4);
   }
 }

@@ -4,7 +4,7 @@ import (
 	handlers2 "github.com/drama-generator/backend/api/handlers"
 	middlewares2 "github.com/drama-generator/backend/api/middlewares"
 	services2 "github.com/drama-generator/backend/application/services"
-	storage2 "github.com/drama-generator/backend/infrastructure/storage"
+	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStorage interface{}) *gin.Engine {
+func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, storageService storage.Storage) *gin.Engine {
 	r := gin.New()
 
 	r.Use(gin.Recovery())
@@ -31,19 +31,18 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	})
 
 	aiService := services2.NewAIService(db, log)
-	localStoragePtr := localStorage.(*storage2.LocalStorage)
 	transferService := services2.NewResourceTransferService(db, log)
 	eventHub := events.NewEventHub()
 	dramaHandler := handlers2.NewDramaHandler(db, cfg, log, nil, eventHub.VideoMerges)
 	aiConfigHandler := handlers2.NewAIConfigHandler(db, cfg, log)
 	scriptGenHandler := handlers2.NewScriptGenerationHandler(db, cfg, log, eventHub.Tasks)
-	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, localStoragePtr, log, eventHub.ImageGenerations)
-	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, localStoragePtr, eventHub.Tasks, eventHub.ImageGenerations)
-	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, localStoragePtr, aiService, log, eventHub.VideoGenerations)
+	imageGenService := services2.NewImageGenerationService(db, cfg, transferService, storageService, log, eventHub.ImageGenerations)
+	imageGenHandler := handlers2.NewImageGenerationHandler(db, cfg, log, transferService, storageService, eventHub.Tasks, eventHub.ImageGenerations)
+	videoGenHandler := handlers2.NewVideoGenerationHandler(db, transferService, storageService, aiService, log, eventHub.VideoGenerations)
 	videoMergeHandler := handlers2.NewVideoMergeHandler(db, nil, cfg.Storage.LocalPath, cfg.Storage.BaseURL, log, eventHub.VideoMerges)
 	assetHandler := handlers2.NewAssetHandler(db, cfg, log)
 	characterLibraryService := services2.NewCharacterLibraryService(db, log)
-	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, localStoragePtr, eventHub.ImageGenerations)
+	characterLibraryHandler := handlers2.NewCharacterLibraryHandler(db, cfg, log, transferService, storageService, eventHub.ImageGenerations)
 	uploadHandler, err := handlers2.NewUploadHandler(cfg, log, characterLibraryService)
 	if err != nil {
 		log.Fatalw("Failed to create upload handler", "error", err)
@@ -56,6 +55,10 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 	audioExtractionHandler := handlers2.NewAudioExtractionHandler(log, cfg.Storage.LocalPath)
 	settingsHandler := handlers2.NewSettingsHandler(cfg, log)
 	styleHandler := handlers2.NewStyleHandler(db, log)
+	brandService := services2.NewBrandService(db, log)
+	brandHandler := handlers2.NewBrandHandler(brandService)
+	adPromptService := services2.NewAdImagePromptService(db, log, storageService)
+	adPromptHandler := handlers2.NewAdImagePromptHandler(adPromptService)
 	eventHandler := handlers2.NewEventHandler(eventHub, log)
 
 	api := r.Group("/api/v1")
@@ -75,6 +78,25 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, localStora
 			dramas.GET("/:id", dramaHandler.GetDrama)
 			dramas.PUT("/:id", dramaHandler.UpdateDrama)
 			dramas.DELETE("/:id", dramaHandler.DeleteDrama)
+		}
+
+		brands := api.Group("/brands")
+		{
+			brands.GET("", brandHandler.ListBrands)
+			brands.POST("", brandHandler.CreateBrand)
+			brands.GET("/:id", brandHandler.GetBrand)
+			brands.PUT("/:id", brandHandler.UpdateBrand)
+			brands.DELETE("/:id", brandHandler.DeleteBrand)
+			brands.GET("/:id/specs", brandHandler.ListBrandSpecs)
+			brands.POST("/:id/specs", brandHandler.CreateBrandSpec)
+			brands.PUT("/:id/specs/:specId", brandHandler.UpdateBrandSpec)
+			brands.DELETE("/:id/specs/:specId", brandHandler.DeleteBrandSpec)
+		}
+
+		adPrompts := api.Group("/ad-image-prompts")
+		{
+			adPrompts.POST("/text", adPromptHandler.GenerateTextPrompts)
+			adPrompts.POST("/image", adPromptHandler.GenerateImagePrompts)
 		}
 
 		aiConfigs := api.Group("/ai-configs")

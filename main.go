@@ -56,14 +56,18 @@ func main() {
 		logr.Warn("Failed to migrate legacy style prompts", "error", err)
 	}
 
-	// 初始化本地存储
-	var localStorage *storage.LocalStorage
-	if cfg.Storage.Type == "local" {
-		localStorage, err = storage.NewLocalStorage(cfg.Storage.LocalPath, cfg.Storage.BaseURL)
-		if err != nil {
-			logr.Fatal("Failed to initialize local storage", "error", err)
+	// 初始化存储
+	storageService, err := storage.NewStorage(cfg.Storage)
+	if err != nil {
+		logr.Fatal("Failed to initialize storage", "error", err)
+	}
+	if storageService != nil {
+		logr.Info("Storage initialized successfully", "type", cfg.Storage.Type, "path", cfg.Storage.LocalPath)
+		if cfg.Storage.Type != "" && cfg.Storage.Type != "local" {
+			if _, ok := storageService.(*storage.LocalStorage); ok {
+				logr.Warnw("Storage type not supported, falling back to local", "type", cfg.Storage.Type)
+			}
 		}
-		logr.Info("Local storage initialized successfully", "path", cfg.Storage.LocalPath)
 	}
 
 	if cfg.App.Debug {
@@ -72,7 +76,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := routes.SetupRouter(cfg, db, logr, localStorage)
+	router := routes.SetupRouter(cfg, db, logr, storageService)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),

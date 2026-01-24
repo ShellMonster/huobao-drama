@@ -30,6 +30,8 @@ type CreateDramaRequest struct {
 	Genre       string `json:"genre"`
 	Style       string `json:"style"`
 	Tags        string `json:"tags"`
+	BrandID     *uint  `json:"brand_id"`
+	SpecID      *uint  `json:"spec_id"`
 }
 
 type UpdateDramaRequest struct {
@@ -39,6 +41,8 @@ type UpdateDramaRequest struct {
 	Style       string `json:"style"`
 	Tags        string `json:"tags"`
 	Status      string `json:"status" binding:"omitempty,oneof=draft planning production completed archived"`
+	BrandID     *uint  `json:"brand_id"`
+	SpecID      *uint  `json:"spec_id"`
 }
 
 type DramaListQuery struct {
@@ -62,6 +66,25 @@ func (s *DramaService) CreateDrama(req *CreateDramaRequest) (*models.Drama, erro
 	if req.Genre != "" {
 		drama.Genre = &req.Genre
 	}
+	if req.BrandID != nil {
+		var brand models.Brand
+		if err := s.db.Select("id").Where("id = ?", *req.BrandID).First(&brand).Error; err != nil {
+			return nil, fmt.Errorf("brand not found")
+		}
+		drama.BrandID = req.BrandID
+	}
+	if req.SpecID != nil {
+		if req.BrandID == nil {
+			return nil, fmt.Errorf("brand_id is required when spec_id is provided")
+		}
+		var spec models.BrandSpec
+		if err := s.db.Select("id", "brand_id").
+			Where("id = ? AND brand_id = ?", *req.SpecID, *req.BrandID).
+			First(&spec).Error; err != nil {
+			return nil, fmt.Errorf("brand spec not found")
+		}
+		drama.SpecID = req.SpecID
+	}
 
 	if err := s.db.Create(drama).Error; err != nil {
 		s.log.Errorw("Failed to create drama", "error", err)
@@ -79,6 +102,8 @@ func (s *DramaService) GetDrama(dramaID string) (*models.Drama, error) {
 		Preload("Scenes").              // 加载Drama级别的场景
 		Preload("Episodes.Characters"). // 加载每个章节关联的角色
 		Preload("Episodes.Scenes").     // 加载每个章节关联的场景
+		Preload("Brand").
+		Preload("Spec").
 		Preload("Episodes.Storyboards", func(db *gorm.DB) *gorm.DB {
 			return db.Order("storyboards.storyboard_number ASC")
 		}).
@@ -225,6 +250,8 @@ func (s *DramaService) ListDramas(query *DramaListQuery) ([]models.Drama, int64,
 	err := db.Order("updated_at DESC").
 		Offset(offset).
 		Limit(query.PageSize).
+		Preload("Brand").
+		Preload("Spec").
 		Preload("Episodes.Storyboards", func(db *gorm.DB) *gorm.DB {
 			return db.Order("storyboards.storyboard_number ASC")
 		}).
@@ -279,6 +306,30 @@ func (s *DramaService) UpdateDrama(dramaID string, req *UpdateDramaRequest) (*mo
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status
+	}
+	if req.BrandID != nil {
+		var brand models.Brand
+		if err := s.db.Select("id").Where("id = ?", *req.BrandID).First(&brand).Error; err != nil {
+			return nil, fmt.Errorf("brand not found")
+		}
+		updates["brand_id"] = req.BrandID
+		if req.SpecID == nil {
+			updates["spec_id"] = nil
+		}
+	}
+	if req.SpecID != nil {
+		brandID := drama.BrandID
+		if req.BrandID != nil {
+			brandID = req.BrandID
+		}
+		if brandID == nil {
+			return nil, fmt.Errorf("brand_id is required when spec_id is provided")
+		}
+		var spec models.BrandSpec
+		if err := s.db.Select("id").Where("id = ? AND brand_id = ?", *req.SpecID, *brandID).First(&spec).Error; err != nil {
+			return nil, fmt.Errorf("brand spec not found")
+		}
+		updates["spec_id"] = req.SpecID
 	}
 
 	updates["updated_at"] = time.Now()

@@ -67,7 +67,8 @@ func (p *PromptI18n) GetStoryboardSystemPrompt() string {
      * Weak ↓ (-1): Emotion subsiding
 
 [Output Requirements]
-1. Generate an array, each element is a shot containing:
+1. Generate a JSON object containing:
+   - storyboards: an array of shots, each element containing:
    - shot_number: Shot number
    - scene_description: Scene (location + time, e.g., "bedroom interior, morning")
    - shot_type: Shot type (extreme long shot/long shot/medium shot/close-up/extreme close-up)
@@ -79,7 +80,7 @@ func (p *PromptI18n) GetStoryboardSystemPrompt() string {
    - emotion: Current emotion
    - emotion_intensity: Emotion intensity level (3/2/1/0/-1)
 
-**CRITICAL: Return ONLY a valid JSON array. Do NOT include any markdown code blocks, explanations, or other text. Start directly with [ and end with ].**
+**CRITICAL: Return ONLY a valid JSON object. Do NOT include any markdown code blocks, explanations, or other text. Start directly with { and end with }.**
 
 [Important Notes]
 - Shot count must match number of independent actions in the script (not allowed to merge or reduce)
@@ -122,7 +123,8 @@ func (p *PromptI18n) GetStoryboardSystemPrompt() string {
      * 弱 ↓ (-1)：情绪回落
 
 【输出要求】
-1. 生成一个数组，每个元素是一个镜头，包含：
+1. 生成一个JSON对象，包含：
+   - storyboards：镜头数组，每个元素是一个镜头，包含：
    - shot_number：镜头号
    - scene_description：场景（地点+时间，如"卧室内，早晨"）
    - shot_type：景别（大远景/远景/中景/近景/特写）
@@ -134,7 +136,7 @@ func (p *PromptI18n) GetStoryboardSystemPrompt() string {
    - emotion：当前情绪
    - emotion_intensity：情绪强度等级（3/2/1/0/-1）
 
-**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
+**重要：必须只返回纯JSON对象，不要包含任何markdown代码块、说明文字或其他内容。直接以 { 开头，以 } 结尾。**
 
 【重要提示】
 - 镜头数量必须与剧本中的独立动作数量匹配（不允许合并或减少）
@@ -159,12 +161,13 @@ func (p *PromptI18n) GetSceneExtractionPrompt() string {
    - Must match the drama's genre and tone
 
 [Output Format]
-**CRITICAL: Return ONLY a valid JSON array. Do NOT include any markdown code blocks, explanations, or other text. Start directly with [ and end with ].**
+**CRITICAL: Return ONLY a valid JSON object. Do NOT include any markdown code blocks, explanations, or other text. Start directly with { and end with }.**
 
-Each element containing:
-- location: Location (e.g., "luxurious office")
-- time: Time period (e.g., "afternoon")
-- prompt: Complete English image generation prompt (pure background, explicitly stating no people)`
+Return:
+- backgrounds: array of scenes, each element containing:
+  - location: Location (e.g., "luxurious office")
+  - time: Time period (e.g., "afternoon")
+  - prompt: Complete English image generation prompt (pure background, explicitly stating no people)`
 	}
 
 	return `【任务】从剧本中提取所有唯一的场景背景
@@ -180,12 +183,13 @@ Each element containing:
    - 要符合剧本的题材和氛围
 
 【输出格式】
-**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
+**重要：必须只返回纯JSON对象，不要包含任何markdown代码块、说明文字或其他内容。直接以 { 开头，以 } 结尾。**
 
-每个元素包含：
-- location：地点（如"豪华办公室"）
-- time：时间（如"下午"）
-- prompt：完整的中文图片生成提示词（纯背景，明确说明无人物）`
+返回：
+- backgrounds：场景数组，每个元素包含：
+  - location：地点（如"豪华办公室"）
+  - time：时间（如"下午"）
+  - prompt：完整的中文图片生成提示词（纯背景，明确说明无人物）`
 }
 
 // GetFirstFramePrompt 获取首帧提示词
@@ -361,8 +365,9 @@ Requirements:
 4. Main characters require more detailed descriptions, supporting characters can be simplified
 
 Output Format:
-**CRITICAL: Return ONLY a valid JSON array. Do NOT include any markdown code blocks, explanations, or other text. Start directly with [ and end with ].**
-Each element is a character object containing the above fields.`
+**CRITICAL: Return ONLY a valid JSON object. Do NOT include any markdown code blocks, explanations, or other text. Start directly with { and end with }.**
+Return:
+- characters: array of character objects containing the above fields.`
 	}
 
 	return `你是一个专业的角色分析师，擅长从剧本中提取和分析角色信息。
@@ -381,8 +386,9 @@ Each element is a character object containing the above fields.`
 4. 主要角色需要更详细的描述，次要角色可以简化
 
 输出格式：
-**重要：必须只返回纯JSON数组，不要包含任何markdown代码块、说明文字或其他内容。直接以 [ 开头，以 ] 结尾。**
-每个元素是一个角色对象，包含上述字段。`
+**重要：必须只返回纯JSON对象，不要包含任何markdown代码块、说明文字或其他内容。直接以 { 开头，以 } 结尾。**
+返回：
+- characters：角色数组，每个元素是一个角色对象，包含上述字段。`
 }
 
 // GetEpisodeScriptPrompt 获取分集剧本生成提示词

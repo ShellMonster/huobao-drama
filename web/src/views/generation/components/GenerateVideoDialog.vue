@@ -9,7 +9,12 @@
     <LoadingSection :loading="dataLoading" text="加载中...">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-form-item label="选择剧本" prop="drama_id">
-          <el-select v-model="form.drama_id" placeholder="选择剧本" @change="onDramaChange">
+          <el-select
+            v-model="form.drama_id"
+            placeholder="选择剧本"
+            :disabled="isDramaLocked"
+            @change="onDramaChange"
+          >
             <el-option
               v-for="drama in dramas"
               :key="drama.id"
@@ -160,6 +165,8 @@ const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit('update:modelValue', val)
 })
+
+const isDramaLocked = computed(() => Boolean(props.dramaId))
 
 const formRef = ref<FormInstance>()
 const generating = ref(false)

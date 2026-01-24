@@ -17,6 +17,39 @@
             <el-form-item label="项目描述">
               <el-input v-model="form.description" type="textarea" :rows="4" />
             </el-form-item>
+            <el-form-item label="广告主">
+              <el-skeleton v-if="brandsLoading" :rows="1" animated />
+              <template v-else>
+                <el-select
+                  v-model="form.brand_id"
+                  placeholder="请选择广告主（可选）"
+                  clearable
+                  @change="handleBrandChange"
+                >
+                  <el-option
+                    v-for="brand in brands"
+                    :key="brand.id"
+                    :label="brand.display_name || brand.name"
+                    :value="brand.id"
+                  />
+                </el-select>
+              </template>
+            </el-form-item>
+            <el-form-item label="素材规范">
+              <el-select
+                v-model="form.spec_id"
+                placeholder="请选择规范模板（可选）"
+                clearable
+                :disabled="specs.length === 0"
+              >
+                <el-option
+                  v-for="spec in specs"
+                  :key="spec.id"
+                  :label="spec.name"
+                  :value="spec.id"
+                />
+              </el-select>
+            </el-form-item>
             <el-form-item label="类型">
               <el-select v-model="form.genre">
                 <el-option label="都市" value="都市" />
@@ -64,6 +97,8 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dramaAPI } from '@/api/drama'
+import { brandAPI } from '@/api/brand'
+import type { Brand, BrandSpec } from '@/types/brand'
 import { LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
 
@@ -77,11 +112,16 @@ const cacheTTL = 60 * 1000
 let loadingTimer: number | null = null
 const saving = ref(false)
 const deleting = ref(false)
+const brandsLoading = ref(false)
+const brands = ref<Brand[]>([])
+const specs = ref<BrandSpec[]>([])
 const form = reactive({
   title: '',
   description: '',
   genre: '',
-  status: 'draft' as any
+  status: 'draft' as any,
+  brand_id: undefined as number | undefined,
+  spec_id: undefined as number | undefined
 })
 
 const getDramaCacheKey = () => `drama:detail:${dramaId}`
@@ -106,6 +146,9 @@ const applyDramaToForm = (drama: any) => {
   form.description = drama.description || ''
   form.genre = drama.genre || ''
   form.status = drama.status || 'draft'
+  form.brand_id = drama.brand_id
+  form.spec_id = drama.spec_id
+  handleBrandChange(form.brand_id, true)
 }
 
 const hydrateDramaFromCache = () => {
@@ -130,6 +173,38 @@ const loadDrama = async (showLoading = true) => {
       stopPageLoading()
     }
   }
+}
+
+const loadBrands = async () => {
+  if (brandsLoading.value) return
+  brandsLoading.value = true
+  try {
+    brands.value = await brandAPI.list({ include_inactive: false, with_specs: true })
+  } catch (error: any) {
+    brands.value = []
+  } finally {
+    brandsLoading.value = false
+  }
+}
+
+const handleBrandChange = (value: number | undefined, preserveSpec = false) => {
+  if (preserveSpec && brands.value.length === 0) {
+    return
+  }
+  const brand = brands.value.find((item) => item.id === value)
+  specs.value = brand?.specs || []
+  if (!value || specs.value.length === 0) {
+    form.spec_id = undefined
+    return
+  }
+  if (preserveSpec && form.spec_id) {
+    const matched = specs.value.find((spec) => spec.id === form.spec_id)
+    if (matched) {
+      return
+    }
+  }
+  const defaultSpec = specs.value.find((spec) => spec.is_default) || specs.value[0]
+  form.spec_id = defaultSpec?.id
 }
 
 const goBack = () => {
@@ -176,6 +251,7 @@ const deleteProject = async () => {
 
 onMounted(async () => {
   const hasCache = hydrateDramaFromCache()
+  await loadBrands()
   await loadDrama(!hasCache)
 })
 

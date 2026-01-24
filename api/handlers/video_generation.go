@@ -19,7 +19,7 @@ type VideoGenerationHandler struct {
 	log          *logger.Logger
 }
 
-func NewVideoGenerationHandler(db *gorm.DB, transferService *services.ResourceTransferService, localStorage *storage.LocalStorage, aiService *services.AIService, log *logger.Logger, hub *events.VideoGenerationHub) *VideoGenerationHandler {
+func NewVideoGenerationHandler(db *gorm.DB, transferService *services.ResourceTransferService, localStorage storage.Storage, aiService *services.AIService, log *logger.Logger, hub *events.VideoGenerationHub) *VideoGenerationHandler {
 	return &VideoGenerationHandler{
 		videoService: services.NewVideoGenerationService(db, transferService, localStorage, aiService, log, hub),
 		log:          log,

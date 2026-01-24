@@ -30,6 +30,43 @@
             />
           </el-form-item>
 
+          <el-form-item label="广告主" prop="brand_id">
+            <el-skeleton v-if="brandsLoading" :rows="1" animated />
+            <template v-else>
+              <el-select
+                v-model="form.brand_id"
+                placeholder="请选择广告主（可选）"
+                size="large"
+                clearable
+                @change="handleBrandChange"
+              >
+                <el-option
+                  v-for="brand in brands"
+                  :key="brand.id"
+                  :label="brand.display_name || brand.name"
+                  :value="brand.id"
+                />
+              </el-select>
+            </template>
+          </el-form-item>
+
+          <el-form-item label="素材规范" prop="spec_id">
+            <el-select
+              v-model="form.spec_id"
+              placeholder="请选择规范模板（可选）"
+              size="large"
+              clearable
+              :disabled="specs.length === 0"
+            >
+              <el-option
+                v-for="spec in specs"
+                :key="spec.id"
+                :label="spec.name"
+                :value="spec.id"
+              />
+            </el-select>
+          </el-form-item>
+
           <el-form-item :label="$t('drama.projectDesc')" prop="description">
             <el-input 
               v-model="form.description" 
@@ -81,7 +118,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
+import { brandAPI } from '@/api/brand'
 import type { CreateDramaRequest } from '@/types/drama'
+import type { Brand, BrandSpec } from '@/types/brand'
 import type { StyleOption } from '@/types/style'
 import { styleAPI } from '@/api/style'
 import StylePicker from './StylePicker.vue'
@@ -104,6 +143,9 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const stylesLoading = ref(false)
 const styles = ref<StyleOption[]>([])
+const brandsLoading = ref(false)
+const brands = ref<Brand[]>([])
+const specs = ref<BrandSpec[]>([])
 
 // v-model binding / 双向绑定
 const visible = ref(props.modelValue)
@@ -118,7 +160,9 @@ watch(visible, (val) => {
 const form = reactive<CreateDramaRequest>({
   title: '',
   description: '',
-  style: ''
+  style: '',
+  brand_id: undefined,
+  spec_id: undefined
 })
 
 // Validation rules / 验证规则
@@ -134,6 +178,9 @@ const handleClosed = () => {
   form.title = ''
   form.description = ''
   form.style = ''
+  form.brand_id = undefined
+  form.spec_id = undefined
+  specs.value = []
   formRef.value?.resetFields()
 }
 
@@ -159,9 +206,33 @@ const loadStyles = async () => {
   }
 }
 
+const loadBrands = async () => {
+  if (brandsLoading.value) return
+  brandsLoading.value = true
+  try {
+    brands.value = await brandAPI.list({ include_inactive: false, with_specs: true })
+  } catch (error: any) {
+    brands.value = []
+  } finally {
+    brandsLoading.value = false
+  }
+}
+
+const handleBrandChange = (value: number | undefined) => {
+  const brand = brands.value.find((item) => item.id === value)
+  specs.value = brand?.specs || []
+  if (specs.value.length === 0) {
+    form.spec_id = undefined
+    return
+  }
+  const defaultSpec = specs.value.find((spec) => spec.is_default) || specs.value[0]
+  form.spec_id = defaultSpec?.id
+}
+
 watch(visible, (val) => {
   if (val) {
     loadStyles()
+    loadBrands()
   }
 })
 

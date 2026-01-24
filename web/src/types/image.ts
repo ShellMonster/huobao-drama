@@ -61,6 +61,7 @@ export interface ImageGenerationListParams {
   scene_id?: string
   storyboard_id?: number
   frame_type?: string
+  image_type?: string
   status?: ImageStatus
   include_reuse_prev_last?: boolean
   page?: number

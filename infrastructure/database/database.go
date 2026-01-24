@@ -109,6 +109,8 @@ func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		// 核心模型
 		&models.Drama{},
+		&models.Brand{},
+		&models.BrandSpec{},
 		&models.Episode{},
 		&models.Character{},
 		&models.Scene{},

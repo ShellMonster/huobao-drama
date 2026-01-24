@@ -19,8 +19,9 @@ type GeminiClient struct {
 }
 
 type GeminiTextRequest struct {
-	Contents          []GeminiContent    `json:"contents"`
-	SystemInstruction *GeminiInstruction `json:"systemInstruction,omitempty"`
+	Contents          []GeminiContent         `json:"contents"`
+	SystemInstruction *GeminiInstruction      `json:"systemInstruction,omitempty"`
+	GenerationConfig  *GeminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
 type GeminiContent struct {
@@ -34,6 +35,10 @@ type GeminiPart struct {
 
 type GeminiInstruction struct {
 	Parts []GeminiPart `json:"parts"`
+}
+
+type GeminiGenerationConfig struct {
+	ResponseMIMEType string `json:"responseMimeType,omitempty"`
 }
 
 type GeminiTextResponse struct {
@@ -81,6 +86,10 @@ func NewGeminiClient(baseURL, apiKey, model, endpoint string) *GeminiClient {
 
 func (c *GeminiClient) GenerateText(prompt string, systemPrompt string, options ...func(*ChatCompletionRequest)) (string, error) {
 	model := c.Model
+	optionsReq := &ChatCompletionRequest{Model: c.Model}
+	for _, option := range options {
+		option(optionsReq)
+	}
 
 	// 构建请求体
 	reqBody := GeminiTextRequest{
@@ -90,6 +99,9 @@ func (c *GeminiClient) GenerateText(prompt string, systemPrompt string, options 
 				Role:  "user",
 			},
 		},
+	}
+	if optionsReq.RequireJSON {
+		reqBody.GenerationConfig = &GeminiGenerationConfig{ResponseMIMEType: "application/json"}
 	}
 
 	// 使用 systemInstruction 字段处理系统提示
@@ -119,16 +131,16 @@ func (c *GeminiClient) GenerateText(prompt string, systemPrompt string, options 
 	}
 	fmt.Printf("Gemini: Request body: %s\n", requestPreview)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		fmt.Printf("Gemini: Failed to create request: %v\n", err)
 		return "", fmt.Errorf("create request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 
 	fmt.Printf("Gemini: Executing HTTP request...\n")
-	resp, err := c.HTTPClient.Do(req)
+	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
 		fmt.Printf("Gemini: HTTP request failed: %v\n", err)
 		return "", fmt.Errorf("send request: %w", err)

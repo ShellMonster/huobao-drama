@@ -1,6 +1,6 @@
 <template>
-  <div class="video-generation-container">
-    <el-page-header @back="goBack" class="page-header">
+  <div class="video-generation-container" :class="{ embedded: embedded }">
+    <el-page-header v-if="!embedded" @back="goBack" class="page-header">
       <template #content>
         <div class="header-content">
           <h2>{{ $t('video.title') }}</h2>
@@ -14,7 +14,14 @@
       </template>
     </el-page-header>
 
-    <el-card shadow="never" class="filter-card">
+    <div v-else class="embedded-toolbar">
+      <el-button type="primary" @click="showGenerateDialog = true">
+        <el-icon><VideoPlay /></el-icon>
+        {{ $t('video.generate') }}
+      </el-button>
+    </div>
+
+    <el-card v-if="!embedded" shadow="never" class="filter-card">
       <el-form inline>
         <el-form-item :label="$t('video.filter.drama')">
           <el-select v-model="filters.drama_id" :placeholder="$t('video.filter.allDramas')" clearable>
@@ -27,6 +34,23 @@
           </el-select>
         </el-form-item>
 
+        <el-form-item :label="$t('video.filter.status')">
+          <el-select v-model="filters.status" :placeholder="$t('video.filter.allStatus')" clearable>
+            <el-option :label="$t('video.status.processing')" value="processing" />
+            <el-option :label="$t('video.status.completed')" value="completed" />
+            <el-option :label="$t('video.status.failed')" value="failed" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item>
+          <el-button type="primary" @click="loadVideos">{{ $t('video.filter.query') }}</el-button>
+          <el-button @click="resetFilters">{{ $t('video.filter.reset') }}</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card v-else shadow="never" class="filter-card compact">
+      <el-form inline>
         <el-form-item :label="$t('video.filter.status')">
           <el-select v-model="filters.status" :placeholder="$t('video.filter.allStatus')" clearable>
             <el-option :label="$t('video.status.processing')" value="processing" />
@@ -165,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -180,6 +204,18 @@ import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
 import { createListStream } from '@/utils/generationManager'
 import { LoadingSection } from '@/components/common'
+
+interface Props {
+  embedded?: boolean
+  dramaId?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  embedded: false,
+  dramaId: ''
+})
+
+const embedded = computed(() => props.embedded)
 
 const route = useRoute()
 const router = useRouter()
@@ -224,7 +260,7 @@ let videoRequestId = 0
 let videoLoadingRequestId = 0
 
 const filters = reactive({
-  drama_id: undefined as string | undefined,
+  drama_id: props.dramaId || undefined,
   status: undefined as VideoStatus | undefined
 })
 
@@ -293,7 +329,7 @@ const loadDramas = async () => {
 }
 
 const resetFilters = () => {
-  filters.drama_id = undefined
+  filters.drama_id = props.dramaId || undefined
   filters.status = undefined
   pagination.page = 1
   loadVideos()
@@ -368,15 +404,27 @@ const stopPolling = () => {
 }
 
 onMounted(() => {
-  const dramaId = route.query.drama_id as string
-  if (dramaId) {
-    filters.drama_id = dramaId
+  const queryDramaId = route.query.drama_id as string
+  if (props.dramaId) {
+    filters.drama_id = props.dramaId
+  } else if (queryDramaId) {
+    filters.drama_id = queryDramaId
   }
   
   loadDramas()
   loadVideos()
   startPolling()
 })
+
+watch(
+  () => props.dramaId,
+  (value) => {
+    if (!value) return
+    filters.drama_id = value
+    pagination.page = 1
+    loadVideos()
+  }
+)
 
 onUnmounted(() => {
   stopPolling()
@@ -390,6 +438,11 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
+.video-generation-container.embedded {
+  padding: 0;
+  max-width: none;
+}
+
 .page-header {
   margin-bottom: 20px;
 }
@@ -399,8 +452,26 @@ onUnmounted(() => {
   font-size: 24px;
 }
 
+.embedded-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
 .filter-card {
   margin-bottom: 20px;
+}
+
+.filter-card.compact {
+  margin-bottom: 16px;
+}
+
+.filter-card.compact :deep(.el-select) {
+  min-width: 160px;
+}
+
+.filter-card.compact :deep(.el-input__inner) {
+  color: var(--text-primary);
 }
 
 .video-card {

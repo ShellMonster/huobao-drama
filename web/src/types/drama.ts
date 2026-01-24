@@ -1,3 +1,5 @@
+import type { Brand, BrandSpec } from './brand'
+
 export interface Drama {
   id: string
   
@@ -5,6 +7,8 @@ export interface Drama {
   description?: string
   genre?: string
   style?: string
+  brand_id?: number
+  spec_id?: number
   total_episodes: number
   total_duration: number
   total_scenes?: number
@@ -13,6 +17,8 @@ export interface Drama {
   thumbnail?: string
   tags?: any
   metadata?: any
+  brand?: Brand
+  spec?: BrandSpec
   created_at: string
   updated_at: string
   characters?: Character[]
@@ -124,6 +130,8 @@ export interface CreateDramaRequest {
   genre?: string
   style?: string
   tags?: string
+  brand_id?: number
+  spec_id?: number
 }
 
 export interface UpdateDramaRequest {
@@ -133,6 +141,8 @@ export interface UpdateDramaRequest {
   style?: string
   tags?: string
   status?: DramaStatus
+  brand_id?: number
+  spec_id?: number
 }
 
 export interface DramaListQuery {

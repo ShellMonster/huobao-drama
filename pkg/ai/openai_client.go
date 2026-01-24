@@ -23,12 +23,18 @@ type ChatMessage struct {
 }
 
 type ChatCompletionRequest struct {
-	Model       string        `json:"model"`
-	Messages    []ChatMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	TopP        float64       `json:"top_p,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
+	Model          string                        `json:"model"`
+	Messages       []ChatMessage                 `json:"messages"`
+	Temperature    float64                       `json:"temperature,omitempty"`
+	MaxTokens      int                           `json:"max_tokens,omitempty"`
+	TopP           float64                       `json:"top_p,omitempty"`
+	Stream         bool                          `json:"stream,omitempty"`
+	ResponseFormat *ChatCompletionResponseFormat `json:"response_format,omitempty"`
+	RequireJSON    bool                          `json:"-"`
+}
+
+type ChatCompletionResponseFormat struct {
+	Type string `json:"type"`
 }
 
 type ChatCompletionResponse struct {
@@ -83,6 +89,9 @@ func (c *OpenAIClient) ChatCompletion(messages []ChatMessage, options ...func(*C
 
 	for _, option := range options {
 		option(req)
+	}
+	if req.RequireJSON && req.ResponseFormat == nil {
+		req.ResponseFormat = &ChatCompletionResponseFormat{Type: "json_object"}
 	}
 
 	return c.sendChatRequest(req)
@@ -199,6 +208,17 @@ func WithMaxTokens(tokens int) func(*ChatCompletionRequest) {
 func WithTopP(topP float64) func(*ChatCompletionRequest) {
 	return func(req *ChatCompletionRequest) {
 		req.TopP = topP
+	}
+}
+
+func WithRequireJSON(required bool) func(*ChatCompletionRequest) {
+	return func(req *ChatCompletionRequest) {
+		req.RequireJSON = required
+		if required {
+			req.ResponseFormat = &ChatCompletionResponseFormat{Type: "json_object"}
+		} else {
+			req.ResponseFormat = nil
+		}
 	}
 }
 

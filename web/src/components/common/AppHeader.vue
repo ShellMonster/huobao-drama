@@ -125,6 +125,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   padding: 0 var(--space-4);
   height: 70px;
   max-width: 100%;
@@ -135,14 +136,15 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  flex-shrink: 0;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .header-center {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -182,6 +184,17 @@ defineExpose({
 
 .header-btn .btn-text {
   margin-left: 4px;
+}
+
+:deep(.page-title) {
+  min-width: 0;
+}
+
+:deep(.page-title h1),
+:deep(.page-title .subtitle) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Dark mode adjustments | 深色模式适配 */

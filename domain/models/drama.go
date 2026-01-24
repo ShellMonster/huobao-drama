@@ -13,6 +13,8 @@ type Drama struct {
 	Description   *string        `gorm:"type:text" json:"description"`
 	Genre         *string        `gorm:"type:varchar(50)" json:"genre"`
 	Style         string         `gorm:"type:varchar(50);default:'c65ac50bb5eba9a88cde3dd51919440e'" json:"style"`
+	BrandID       *uint          `gorm:"index" json:"brand_id,omitempty"`
+	SpecID        *uint          `gorm:"index" json:"spec_id,omitempty"`
 	TotalEpisodes int            `gorm:"default:1" json:"total_episodes"`
 	TotalDuration int            `gorm:"default:0" json:"total_duration"`
 	Status        string         `gorm:"type:varchar(20);default:'draft';not null" json:"status"`
@@ -26,6 +28,8 @@ type Drama struct {
 	Episodes   []Episode   `gorm:"foreignKey:DramaID" json:"episodes,omitempty"`
 	Characters []Character `gorm:"foreignKey:DramaID" json:"characters,omitempty"`
 	Scenes     []Scene     `gorm:"foreignKey:DramaID" json:"scenes,omitempty"`
+	Brand      *Brand      `gorm:"foreignKey:BrandID" json:"brand,omitempty"`
+	Spec       *BrandSpec  `gorm:"foreignKey:SpecID" json:"spec,omitempty"`
 }
 
 func (d *Drama) TableName() string {

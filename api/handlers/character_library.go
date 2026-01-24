@@ -19,7 +19,7 @@ type CharacterLibraryHandler struct {
 	log            *logger.Logger
 }
 
-func NewCharacterLibraryHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services2.ResourceTransferService, localStorage *storage.LocalStorage, imageHub *events.ImageGenerationHub) *CharacterLibraryHandler {
+func NewCharacterLibraryHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services2.ResourceTransferService, localStorage storage.Storage, imageHub *events.ImageGenerationHub) *CharacterLibraryHandler {
 	return &CharacterLibraryHandler{
 		libraryService: services2.NewCharacterLibraryService(db, log),
 		imageService:   services2.NewImageGenerationService(db, cfg, transferService, localStorage, log, imageHub),

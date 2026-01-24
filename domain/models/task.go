@@ -21,3 +21,10 @@ type AsyncTask struct {
 	CompletedAt *time.Time     `json:"completed_at,omitempty"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+const (
+	TaskStatusPending    = "pending"
+	TaskStatusProcessing = "processing"
+	TaskStatusCompleted  = "completed"
+	TaskStatusFailed     = "failed"
+)

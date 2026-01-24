@@ -1,21 +1,31 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
+import { enableWorkspace } from '@/utils/workspace'
 
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'DramaList',
-    component: () => import('../views/drama/DramaList.vue')
+    component: () => import('../views/drama/DramaList.vue'),
+    meta: { sideNav: true }
   },
   {
     path: '/dramas/create',
     name: 'DramaCreate',
-    component: () => import('../views/drama/DramaCreate.vue')
+    component: () => import('../views/drama/DramaCreate.vue'),
+    meta: { sideNav: true }
+  },
+  {
+    path: '/dramas/:id/workspace',
+    name: 'DramaWorkspace',
+    component: () => import('../views/drama/DramaManagement.vue'),
+    meta: { sideNav: false }
   },
   {
     path: '/dramas/:id',
     name: 'DramaManagement',
-    component: () => import('../views/drama/DramaManagement.vue')
+    component: () => import('../views/drama/DramaManagement.vue'),
+    meta: { sideNav: true }
   },
   {
     path: '/dramas/:id/episode/:episodeNumber',
@@ -70,13 +80,28 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/settings/styles',
     name: 'StyleManagement',
-    component: () => import('../views/settings/StyleManagement.vue')
+    component: () => import('../views/settings/StyleManagement.vue'),
+    meta: { sideNav: true }
+  },
+  {
+    path: '/settings/brands',
+    name: 'BrandManagement',
+    component: () => import('../views/settings/BrandManagement.vue'),
+    meta: { sideNav: true }
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
+})
+
+router.beforeEach((to, _from, next) => {
+  if (to.name === 'DramaWorkspace') {
+    const dramaId = typeof to.params?.id === 'string' ? to.params.id : undefined
+    enableWorkspace(dramaId)
+  }
+  next()
 })
 
 // 开源版本 - 无需认证

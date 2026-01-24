@@ -29,7 +29,7 @@ type ImageGenerationHandler struct {
 	log          *logger.Logger
 }
 
-func NewImageGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService, localStorage *storage.LocalStorage, taskHub *events.TaskHub, imageHub *events.ImageGenerationHub) *ImageGenerationHandler {
+func NewImageGenerationHandler(db *gorm.DB, cfg *config.Config, log *logger.Logger, transferService *services.ResourceTransferService, localStorage storage.Storage, taskHub *events.TaskHub, imageHub *events.ImageGenerationHub) *ImageGenerationHandler {
 	return &ImageGenerationHandler{
 		imageService: services.NewImageGenerationService(db, cfg, transferService, localStorage, log, imageHub),
 		taskService:  services.NewTaskService(db, log, taskHub),
@@ -95,55 +95,29 @@ func (h *ImageGenerationHandler) ExtractBackgroundsForEpisode(c *gin.Context) {
 		req.Model = ""
 	}
 
-	// 创建异步任务
-	task, err := h.taskService.CreateTask("background_extraction", episodeID)
+	// 创建异步任务并统一执行入口
+	task, err := h.taskService.RunAsync("background_extraction", episodeID, "开始提取场景...", func(update services.TaskUpdater) (interface{}, error) {
+		backgrounds, err := h.imageService.ExtractBackgroundsForEpisode(episodeID, req.Model)
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{
+			"backgrounds": backgrounds,
+			"total":       len(backgrounds),
+		}, nil
+	})
 	if err != nil {
 		h.log.Errorw("Failed to create task", "error", err)
 		response.InternalError(c, err.Error())
 		return
 	}
 
-	// 启动后台goroutine处理
-	go h.processBackgroundExtraction(task.ID, episodeID, req.Model)
-
 	// 立即返回任务ID
 	response.Success(c, gin.H{
 		"task_id": task.ID,
-		"status":  "pending",
+		"status":  models.TaskStatusPending,
 		"message": "场景提取任务已创建，正在后台处理...",
 	})
-}
-
-// processBackgroundExtraction 后台处理场景提取
-func (h *ImageGenerationHandler) processBackgroundExtraction(taskID, episodeID, model string) {
-	h.log.Infow("Starting background extraction", "task_id", taskID, "episode_id", episodeID, "model", model)
-
-	// 更新任务状态为处理中
-	if err := h.taskService.UpdateTaskStatus(taskID, "processing", 10, "开始提取场景..."); err != nil {
-		h.log.Errorw("Failed to update task status", "error", err)
-	}
-
-	// 调用实际的提取逻辑
-	backgrounds, err := h.imageService.ExtractBackgroundsForEpisode(episodeID, model)
-	if err != nil {
-		h.log.Errorw("Failed to extract backgrounds", "error", err, "task_id", taskID)
-		if updateErr := h.taskService.UpdateTaskError(taskID, err); updateErr != nil {
-			h.log.Errorw("Failed to update task error", "error", updateErr)
-		}
-		return
-	}
-
-	// 更新任务结果
-	result := gin.H{
-		"backgrounds": backgrounds,
-		"total":       len(backgrounds),
-	}
-	if err := h.taskService.UpdateTaskResult(taskID, result); err != nil {
-		h.log.Errorw("Failed to update task result", "error", err)
-		return
-	}
-
-	h.log.Infow("Background extraction completed", "task_id", taskID, "total", len(backgrounds))
 }
 
 func (h *ImageGenerationHandler) BatchGenerateForEpisode(c *gin.Context) {
@@ -214,6 +188,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	}
 
 	frameType := c.Query("frame_type")
+	imageType := c.Query("image_type")
 	status := c.Query("status")
 	includeReusePrevLast := c.Query("include_reuse_prev_last") == "true"
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -277,6 +252,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		"storyboard_id", storyboardIDVal,
 		"drama_id", dramaIDVal,
 		"frame_type", frameType,
+		"image_type", imageType,
 		"status", status,
 		"page", page,
 		"page_size", pageSize,
@@ -303,7 +279,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 
 	h.log.Infow("List images db query start", withFields("cache_key", cacheKey)...)
 	dbStart := time.Now()
-	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, status, page, pageSize)
+	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, imageType, status, page, pageSize)
 
 	if err != nil {
 		h.log.Errorw("Failed to list images", withFields(

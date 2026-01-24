@@ -4,7 +4,7 @@
   <div class="page-container">
     <div class="content-wrapper animate-fade-in">
       <!-- App Header / 应用头部 -->
-      <AppHeader :fixed="false">
+      <AppHeader :fixed="false" :show-logo="false">
         <template #left>
           <div class="page-title">
             <h1>{{ $t('drama.title') }}</h1>
@@ -12,12 +12,6 @@
           </div>
         </template>
         <template #right>
-          <el-button @click="goToStyleManagement" class="header-btn">
-            <el-icon>
-              <Brush />
-            </el-icon>
-            <span class="btn-text">风格管理</span>
-          </el-button>
           <el-button type="primary" @click="handleCreate" class="header-btn primary">
             <el-icon>
               <Plus />
@@ -119,7 +113,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Plus,
-  Brush,
   Film,
   Edit,
   Delete
@@ -188,8 +181,13 @@ const loadDramas = async () => {
 
 // Navigation handlers / 导航处理
 const handleCreate = () => createDialogVisible.value = true
-const viewDrama = (id: string) => router.push(`/dramas/${id}`)
-const goToStyleManagement = () => router.push('/settings/styles')
+const viewDrama = (id: string) => {
+  const url = router.resolve({ name: 'DramaWorkspace', params: { id } }).href
+  const newWindow = window.open(url, '_blank', 'noopener')
+  if (newWindow) {
+    newWindow.opener = null
+  }
+}
 
 // Edit dialog state / 编辑对话框状态
 const editDialogVisible = ref(false)

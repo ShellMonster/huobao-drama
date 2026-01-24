@@ -93,6 +93,87 @@ func (c *OpenAISDKClient) GenerateText(prompt string, systemPrompt string, optio
 	if req.MaxTokens > 0 {
 		params.MaxTokens = param.NewOpt(int64(req.MaxTokens))
 	}
+	if req.RequireJSON {
+		responseFormat := shared.NewResponseFormatJSONObjectParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: &responseFormat,
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), openaiSDKDefaultTimeout)
+	defer cancel()
+
+	resp, err := c.client.Chat.Completions.New(
+		ctx,
+		params,
+		option.WithRequestTimeout(openaiSDKDefaultTimeout),
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
+	}
+
+	content := resp.Choices[0].Message.Content
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("empty response content")
+	}
+
+	return content, nil
+}
+
+func (c *OpenAISDKClient) GenerateVisionText(prompt string, imageURLs []string, systemPrompt string, options ...func(*ChatCompletionRequest)) (string, error) {
+	req := &ChatCompletionRequest{Model: c.model}
+	for _, option := range options {
+		option(req)
+	}
+
+	model := req.Model
+	if model == "" {
+		model = c.model
+	}
+
+	parts := []openai.ChatCompletionContentPartUnionParam{}
+	if strings.TrimSpace(prompt) != "" {
+		parts = append(parts, openai.TextContentPart(prompt))
+	}
+	for _, url := range imageURLs {
+		trimmed := strings.TrimSpace(url)
+		if trimmed == "" {
+			continue
+		}
+		parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: trimmed}))
+	}
+	if len(parts) == 0 {
+		return "", fmt.Errorf("empty vision prompt")
+	}
+
+	messages := []openai.ChatCompletionMessageParamUnion{}
+	if strings.TrimSpace(systemPrompt) != "" {
+		messages = append(messages, openai.SystemMessage(systemPrompt))
+	}
+	messages = append(messages, openai.UserMessage(parts))
+
+	params := openai.ChatCompletionNewParams{
+		Model:    shared.ChatModel(model),
+		Messages: messages,
+	}
+	if req.Temperature != 0 {
+		params.Temperature = param.NewOpt(req.Temperature)
+	}
+	if req.TopP != 0 {
+		params.TopP = param.NewOpt(req.TopP)
+	}
+	if req.MaxTokens > 0 {
+		params.MaxTokens = param.NewOpt(int64(req.MaxTokens))
+	}
+	if req.RequireJSON {
+		responseFormat := shared.NewResponseFormatJSONObjectParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONObject: &responseFormat,
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), openaiSDKDefaultTimeout)
 	defer cancel()

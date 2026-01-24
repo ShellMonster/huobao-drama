@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
@@ -38,54 +39,29 @@ func (h *StoryboardHandler) GenerateStoryboard(c *gin.Context) {
 		req.Model = ""
 	}
 
-	// 创建异步任务
-	task, err := h.taskService.CreateTask("storyboard_generation", episodeID)
+	// 创建异步任务并统一执行入口
+	task, err := h.taskService.RunAsync("storyboard_generation", episodeID, "开始生成分镜...", func(update services.TaskUpdater) (interface{}, error) {
+		result, err := h.storyboardService.GenerateStoryboard(episodeID, req.Model)
+		if err != nil {
+			return nil, err
+		}
+		cache.BumpNamespace(cache.NamespaceDramaList)
+		cache.BumpNamespace(cache.NamespaceDramaDetail)
+		cache.BumpNamespace(cache.NamespaceStoryboards)
+		return result, nil
+	})
 	if err != nil {
 		h.log.Errorw("Failed to create task", "error", err)
 		response.InternalError(c, err.Error())
 		return
 	}
 
-	// 启动后台goroutine处理
-	go h.processStoryboardGeneration(task.ID, episodeID, req.Model)
-
 	// 立即返回任务ID
 	response.Success(c, gin.H{
 		"task_id": task.ID,
-		"status":  "pending",
+		"status":  models.TaskStatusPending,
 		"message": "分镜头生成任务已创建，正在后台处理...",
 	})
-}
-
-// processStoryboardGeneration 后台处理分镜生成
-func (h *StoryboardHandler) processStoryboardGeneration(taskID, episodeID, model string) {
-	h.log.Infow("Starting storyboard generation", "task_id", taskID, "episode_id", episodeID, "model", model)
-
-	// 更新任务状态为处理中
-	if err := h.taskService.UpdateTaskStatus(taskID, "processing", 10, "开始生成分镜..."); err != nil {
-		h.log.Errorw("Failed to update task status", "error", err)
-	}
-
-	// 调用实际的生成逻辑
-	result, err := h.storyboardService.GenerateStoryboard(episodeID, model)
-	if err != nil {
-		h.log.Errorw("Failed to generate storyboard", "error", err, "task_id", taskID)
-		if updateErr := h.taskService.UpdateTaskError(taskID, err); updateErr != nil {
-			h.log.Errorw("Failed to update task error", "error", updateErr)
-		}
-		return
-	}
-
-	// 更新任务结果
-	if err := h.taskService.UpdateTaskResult(taskID, result); err != nil {
-		h.log.Errorw("Failed to update task result", "error", err)
-		return
-	}
-
-	cache.BumpNamespace(cache.NamespaceDramaList)
-	cache.BumpNamespace(cache.NamespaceDramaDetail)
-	cache.BumpNamespace(cache.NamespaceStoryboards)
-	h.log.Infow("Storyboard generation completed", "task_id", taskID, "total", result.Total)
 }
 
 // UpdateStoryboard 更新分镜

@@ -3,6 +3,9 @@ package services
 import (
 	"errors"
 	"fmt"
+	"math/rand"
+	"strings"
+	"time"
 
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/ai"
@@ -20,6 +23,28 @@ func NewAIService(db *gorm.DB, log *logger.Logger) *AIService {
 		db:  db,
 		log: log,
 	}
+}
+
+const (
+	defaultRetryAttempts = 3
+	defaultRetryDelay    = 2 * time.Second
+	defaultRetryMaxDelay = 12 * time.Second
+	defaultRetryJitterMs = 500
+)
+
+type AIRequest struct {
+	ServiceType        string
+	Model              string
+	Prompt             string
+	SystemPrompt       string
+	ImageURLs          []string
+	RequireJSON        bool
+	Options            []func(*ai.ChatCompletionRequest)
+	MaxAttempts        int
+	RetryDelay         time.Duration
+	RetryMaxDelay      time.Duration
+	AllowJSONFallback  bool
+	AllowModelFallback bool
 }
 
 type CreateAIConfigRequest struct {
@@ -360,34 +385,7 @@ func (s *AIService) GetAIClient(serviceType string) (ai.AIClient, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// 使用第一个模型
-	model := ""
-	if len(config.Model) > 0 {
-		model = config.Model[0]
-	}
-
-	// 使用数据库配置中的 endpoint，如果为空则根据 provider 设置默认值
-	endpoint := config.Endpoint
-	if endpoint == "" {
-		switch config.Provider {
-		case "gemini", "google":
-			endpoint = "/v1beta/models/{model}:generateContent"
-		default:
-			endpoint = "/chat/completions"
-		}
-	}
-
-	// 根据 provider 创建对应的客户端
-	switch config.Provider {
-	case "gemini", "google":
-		return ai.NewGeminiSDKClient(config.BaseURL, config.APIKey, model)
-	case "openai":
-		return ai.NewOpenAISDKClient(config.BaseURL, config.APIKey, model), nil
-	default:
-		// openai, chatfire 等其他厂商都使用 OpenAI 格式
-		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, model, endpoint), nil
-	}
+	return s.buildClientFromConfig(config, "")
 }
 
 // GetAIClientForModel 根据服务类型和模型名称获取对应的AI客户端
@@ -396,8 +394,118 @@ func (s *AIService) GetAIClientForModel(serviceType string, modelName string) (a
 	if err != nil {
 		return nil, err
 	}
+	return s.buildClientFromConfig(config, modelName)
+}
 
-	// 使用数据库配置中的 endpoint，如果为空则根据 provider 设置默认值
+func (s *AIService) GenerateText(prompt string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	return s.GenerateTextWithModel(prompt, systemPrompt, "", false, options...)
+}
+
+func (s *AIService) GenerateTextJSON(prompt string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	return s.GenerateTextWithModel(prompt, systemPrompt, "", true, options...)
+}
+
+func (s *AIService) GenerateVisionText(prompt string, imageURLs []string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	return s.GenerateVisionTextWithModel(prompt, imageURLs, systemPrompt, "", false, options...)
+}
+
+func (s *AIService) GenerateVisionTextJSON(prompt string, imageURLs []string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	return s.GenerateVisionTextWithModel(prompt, imageURLs, systemPrompt, "", true, options...)
+}
+
+func (s *AIService) GenerateTextWithModel(prompt string, systemPrompt string, model string, requireJSON bool, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	req := &AIRequest{
+		ServiceType:        "text",
+		Model:              model,
+		Prompt:             prompt,
+		SystemPrompt:       systemPrompt,
+		RequireJSON:        requireJSON,
+		Options:            options,
+		AllowJSONFallback:  true,
+		AllowModelFallback: true,
+	}
+	return s.Generate(req)
+}
+
+func (s *AIService) GenerateVisionTextWithModel(prompt string, imageURLs []string, systemPrompt string, model string, requireJSON bool, options ...func(*ai.ChatCompletionRequest)) (string, error) {
+	req := &AIRequest{
+		ServiceType:        "text",
+		Model:              model,
+		Prompt:             prompt,
+		SystemPrompt:       systemPrompt,
+		ImageURLs:          imageURLs,
+		RequireJSON:        requireJSON,
+		Options:            options,
+		AllowJSONFallback:  true,
+		AllowModelFallback: true,
+	}
+	return s.Generate(req)
+}
+
+func (s *AIService) Generate(req *AIRequest) (string, error) {
+	if req == nil {
+		return "", fmt.Errorf("AI request is nil")
+	}
+	serviceType := req.ServiceType
+	if serviceType == "" {
+		serviceType = "text"
+	}
+
+	client, cfg, err := s.getClientWithConfig(serviceType, req.Model, req.AllowModelFallback)
+	if err != nil {
+		return "", fmt.Errorf("failed to get AI client: %w", err)
+	}
+
+	call := func(requireJSON bool) (string, error) {
+		options := buildAIOptions(req.Options, requireJSON)
+		if len(req.ImageURLs) == 0 {
+			return client.GenerateText(req.Prompt, req.SystemPrompt, options...)
+		}
+		visionClient, ok := client.(ai.VisionClient)
+		if !ok {
+			return "", fmt.Errorf("current provider does not support vision inputs")
+		}
+		return visionClient.GenerateVisionText(req.Prompt, req.ImageURLs, req.SystemPrompt, options...)
+	}
+
+	result, err := s.callWithRetry(req, call, req.RequireJSON)
+	if err != nil && req.RequireJSON && req.AllowJSONFallback && isJSONModeUnsupported(err) {
+		s.log.Warnw("JSON mode unsupported, retrying without response_format",
+			"provider", safeConfigProvider(cfg),
+			"model", safeConfigModel(cfg, req.Model),
+			"error", err)
+		return s.callWithRetry(req, call, false)
+	}
+	return result, err
+}
+
+func (s *AIService) getClientWithConfig(serviceType string, model string, allowFallback bool) (ai.AIClient, *models.AIServiceConfig, error) {
+	if model != "" {
+		cfg, err := s.GetConfigForModel(serviceType, model)
+		if err == nil {
+			client, buildErr := s.buildClientFromConfig(cfg, model)
+			return client, cfg, buildErr
+		}
+		if !allowFallback {
+			return nil, nil, err
+		}
+		s.log.Warnw("Failed to resolve model config, fallback to default", "model", model, "error", err)
+	}
+
+	cfg, err := s.GetDefaultConfig(serviceType)
+	if err != nil {
+		return nil, nil, err
+	}
+	client, buildErr := s.buildClientFromConfig(cfg, "")
+	return client, cfg, buildErr
+}
+
+func (s *AIService) buildClientFromConfig(config *models.AIServiceConfig, modelOverride string) (ai.AIClient, error) {
+	model := modelOverride
+	if model == "" && len(config.Model) > 0 {
+		model = config.Model[0]
+	}
+
 	endpoint := config.Endpoint
 	if endpoint == "" {
 		switch config.Provider {
@@ -408,23 +516,119 @@ func (s *AIService) GetAIClientForModel(serviceType string, modelName string) (a
 		}
 	}
 
-	// 根据 provider 创建对应的客户端
 	switch config.Provider {
 	case "gemini", "google":
-		return ai.NewGeminiSDKClient(config.BaseURL, config.APIKey, modelName)
+		client, err := ai.NewGeminiSDKClient(config.BaseURL, config.APIKey, model)
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
 	case "openai":
-		return ai.NewOpenAISDKClient(config.BaseURL, config.APIKey, modelName), nil
+		return ai.NewOpenAISDKClient(config.BaseURL, config.APIKey, model), nil
 	default:
-		// openai, chatfire 等其他厂商都使用 OpenAI 格式
-		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, modelName, endpoint), nil
+		return ai.NewOpenAIClient(config.BaseURL, config.APIKey, model, endpoint), nil
 	}
 }
 
-func (s *AIService) GenerateText(prompt string, systemPrompt string, options ...func(*ai.ChatCompletionRequest)) (string, error) {
-	client, err := s.GetAIClient("text")
-	if err != nil {
-		return "", fmt.Errorf("failed to get AI client: %w", err)
+func (s *AIService) callWithRetry(req *AIRequest, call func(requireJSON bool) (string, error), requireJSON bool) (string, error) {
+	attempts := req.MaxAttempts
+	if attempts <= 0 {
+		attempts = defaultRetryAttempts
+	}
+	delay := req.RetryDelay
+	if delay <= 0 {
+		delay = defaultRetryDelay
+	}
+	maxDelay := req.RetryMaxDelay
+	if maxDelay <= 0 {
+		maxDelay = defaultRetryMaxDelay
 	}
 
-	return client.GenerateText(prompt, systemPrompt, options...)
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		resp, err := call(requireJSON)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !shouldRetryAIError(err) || attempt == attempts {
+			break
+		}
+		sleep := delay
+		if sleep > maxDelay {
+			sleep = maxDelay
+		}
+		jitter := time.Duration(rand.Intn(defaultRetryJitterMs+1)) * time.Millisecond
+		time.Sleep(sleep + jitter)
+		delay = minDuration(delay*2, maxDelay)
+	}
+	return "", lastErr
+}
+
+func buildAIOptions(base []func(*ai.ChatCompletionRequest), requireJSON bool) []func(*ai.ChatCompletionRequest) {
+	options := make([]func(*ai.ChatCompletionRequest), 0, len(base)+1)
+	options = append(options, base...)
+	options = append(options, ai.WithRequireJSON(requireJSON))
+	return options
+}
+
+func shouldRetryAIError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "timeout"),
+		strings.Contains(msg, "temporarily unavailable"),
+		strings.Contains(msg, "connection reset"),
+		strings.Contains(msg, "connection refused"),
+		strings.Contains(msg, "connection closed"),
+		strings.Contains(msg, "eof"),
+		strings.Contains(msg, "rate limit"),
+		strings.Contains(msg, "429"),
+		strings.Contains(msg, "502"),
+		strings.Contains(msg, "503"),
+		strings.Contains(msg, "504"),
+		strings.Contains(msg, "gateway"),
+		strings.Contains(msg, "service unavailable"):
+		return true
+	default:
+		return false
+	}
+}
+
+func isJSONModeUnsupported(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "response_format") ||
+		strings.Contains(msg, "json_object") ||
+		strings.Contains(msg, "response_mime_type") ||
+		strings.Contains(msg, "responsemimetype") ||
+		strings.Contains(msg, "response mime")
+}
+
+func safeConfigProvider(cfg *models.AIServiceConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Provider
+}
+
+func safeConfigModel(cfg *models.AIServiceConfig, override string) string {
+	if override != "" {
+		return override
+	}
+	if cfg == nil || len(cfg.Model) == 0 {
+		return ""
+	}
+	return cfg.Model[0]
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

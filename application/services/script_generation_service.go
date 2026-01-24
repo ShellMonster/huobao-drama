@@ -64,21 +64,8 @@ func (s *ScriptGenerationService) GenerateCharacters(req *GenerateCharactersRequ
 		temperature = 0.7
 	}
 
-	// 如果指定了模型，使用指定的模型；否则使用默认配置
-	var text string
-	var err error
-	if req.Model != "" {
-		s.log.Infow("Using specified model for character generation", "model", req.Model)
-		client, getErr := s.aiService.GetAIClientForModel("text", req.Model)
-		if getErr != nil {
-			s.log.Warnw("Failed to get client for specified model, using default", "model", req.Model, "error", getErr)
-			text, err = s.aiService.GenerateText(userPrompt, systemPrompt, ai.WithTemperature(temperature))
-		} else {
-			text, err = client.GenerateText(userPrompt, systemPrompt, ai.WithTemperature(temperature))
-		}
-	} else {
-		text, err = s.aiService.GenerateText(userPrompt, systemPrompt, ai.WithTemperature(temperature))
-	}
+	// 如果指定了模型，优先使用指定模型；失败则自动回退默认配置
+	text, err := s.aiService.GenerateTextWithModel(userPrompt, systemPrompt, req.Model, true, ai.WithTemperature(temperature))
 
 	if err != nil {
 		s.log.Errorw("Failed to generate characters", "error", err)
@@ -87,8 +74,7 @@ func (s *ScriptGenerationService) GenerateCharacters(req *GenerateCharactersRequ
 
 	s.log.Infow("AI response received", "length", len(text), "preview", text[:minInt(200, len(text))])
 
-	// AI直接返回数组格式
-	var result []struct {
+	type characterPayload struct {
 		Name        string `json:"name"`
 		Role        string `json:"role"`
 		Description string `json:"description"`
@@ -97,7 +83,8 @@ func (s *ScriptGenerationService) GenerateCharacters(req *GenerateCharactersRequ
 		VoiceStyle  string `json:"voice_style"`
 	}
 
-	if err := utils.SafeParseAIJSON(text, &result); err != nil {
+	result, err := utils.ParseAIJSONList[characterPayload](text, []string{"characters"}, false)
+	if err != nil {
 		s.log.Errorw("Failed to parse characters JSON", "error", err, "raw_response", text[:minInt(500, len(text))])
 		return nil, fmt.Errorf("解析 AI 返回结果失败: %w", err)
 	}

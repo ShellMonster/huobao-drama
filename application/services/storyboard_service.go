@@ -322,58 +322,23 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 - 为视频生成AI提供足够的画面构建信息
 - 避免抽象词汇，使用具象的视觉化描述`, systemPrompt, taskLabel, taskInstruction, charListLabel, characterList, charConstraint, sceneListLabel, sceneList, sceneConstraint, scriptContent)
 
-	// 调用AI服务生成（如果指定了模型则使用指定的模型）
+	// 调用AI服务生成（支持指定模型、重试、JSON降级）
 	// 设置较大的max_tokens以确保完整返回所有分镜的JSON
-	var text string
-	if model != "" {
-		s.log.Infow("Using specified model for storyboard generation", "model", model)
-		client, getErr := s.aiService.GetAIClientForModel("text", model)
-		if getErr != nil {
-			s.log.Warnw("Failed to get client for specified model, using default", "model", model, "error", getErr)
-			var err error
-			text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(30000))
-			if err != nil {
-				s.log.Errorw("Failed to generate storyboard", "error", err)
-				return nil, fmt.Errorf("生成分镜头失败: %w", err)
-			}
-		} else {
-			var err error
-			text, err = client.GenerateText(prompt, "", ai.WithMaxTokens(30000))
-			if err != nil {
-				s.log.Errorw("Failed to generate storyboard", "error", err)
-				return nil, fmt.Errorf("生成分镜头失败: %w", err)
-			}
-		}
-	} else {
-		var err error
-		text, err = s.aiService.GenerateText(prompt, "", ai.WithMaxTokens(30000))
-		if err != nil {
-			s.log.Errorw("Failed to generate storyboard", "error", err)
-			return nil, fmt.Errorf("生成分镜头失败: %w", err)
-		}
+	text, err := s.aiService.GenerateTextWithModel(prompt, "", model, true, ai.WithMaxTokens(30000))
+	if err != nil {
+		s.log.Errorw("Failed to generate storyboard", "error", err)
+		return nil, fmt.Errorf("生成分镜头失败: %w", err)
 	}
 
-	// 解析JSON结果
-	// AI可能返回两种格式：
-	// 1. 数组格式: [{...}, {...}]
-	// 2. 对象格式: {"storyboards": [{...}, {...}]}
-	var result GenerateStoryboardResult
+	storyboards, err := utils.ParseAIJSONList[Storyboard](text, []string{"storyboards"}, false)
+	if err != nil {
+		s.log.Errorw("Failed to parse storyboard JSON", "error", err, "response", text[:min(500, len(text))])
+		return nil, fmt.Errorf("解析分镜头结果失败: %w", err)
+	}
 
-	// 先尝试解析为数组格式
-	var storyboards []Storyboard
-	if err := utils.SafeParseAIJSON(text, &storyboards); err == nil {
-		// 成功解析为数组，包装为对象
-		result.Storyboards = storyboards
-		result.Total = len(storyboards)
-		s.log.Infow("Parsed storyboard as array format", "count", len(storyboards))
-	} else {
-		// 尝试解析为对象格式
-		if err := utils.SafeParseAIJSON(text, &result); err != nil {
-			s.log.Errorw("Failed to parse storyboard JSON in both formats", "error", err, "response", text[:min(500, len(text))])
-			return nil, fmt.Errorf("解析分镜头结果失败: %w", err)
-		}
-		result.Total = len(result.Storyboards)
-		s.log.Infow("Parsed storyboard as object format", "count", len(result.Storyboards))
+	result := GenerateStoryboardResult{
+		Storyboards: storyboards,
+		Total:       len(storyboards),
 	}
 
 	// 计算总时长（所有分镜时长之和）

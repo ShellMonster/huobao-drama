@@ -41,7 +41,7 @@ func (s *AssetService) UpdateAssetDurationFromFile(assetID uint, localFilePath s
 }
 
 // UpdateAssetDurationFromURL 下载视频并探测时长
-func (s *AssetService) UpdateAssetDurationFromURL(assetID uint, localStorage *storage.LocalStorage) error {
+func (s *AssetService) UpdateAssetDurationFromURL(assetID uint, storageService storage.Storage) error {
 	var asset models.Asset
 	if err := s.db.Where("id = ?", assetID).First(&asset).Error; err != nil {
 		return fmt.Errorf("asset not found")
@@ -51,12 +51,12 @@ func (s *AssetService) UpdateAssetDurationFromURL(assetID uint, localStorage *st
 		return fmt.Errorf("asset is not a video")
 	}
 
-	if localStorage == nil {
-		return fmt.Errorf("local storage not available")
+	if storageService == nil {
+		return fmt.Errorf("storage not available")
 	}
 
 	// 下载视频到本地
-	localPath, err := localStorage.DownloadFromURL(asset.URL, "videos")
+	localPath, err := storageService.DownloadFromURL(asset.URL, "videos")
 	if err != nil {
 		return fmt.Errorf("failed to download video: %w", err)
 	}

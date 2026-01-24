@@ -24,7 +24,7 @@ type ImageGenerationService struct {
 	db              *gorm.DB
 	aiService       *AIService
 	transferService *ResourceTransferService
-	localStorage    *storage.LocalStorage
+	localStorage    storage.Storage
 	log             *logger.Logger
 	config          *config.Config
 	promptI18n      *PromptI18n
@@ -144,7 +144,7 @@ func (s *ImageGenerationService) storeImageToLocal(imageURL string, category str
 	return "", fmt.Errorf("unsupported image url format")
 }
 
-func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService *ResourceTransferService, localStorage *storage.LocalStorage, log *logger.Logger, events *events.ImageGenerationHub) *ImageGenerationService {
+func NewImageGenerationService(db *gorm.DB, cfg *config.Config, transferService *ResourceTransferService, localStorage storage.Storage, log *logger.Logger, events *events.ImageGenerationHub) *ImageGenerationService {
 	return &ImageGenerationService{
 		db:              db,
 		aiService:       NewAIService(db, log),
@@ -637,7 +637,7 @@ func (s *ImageGenerationService) GetImageGeneration(imageGenID uint) (*models.Im
 	return &imageGen, nil
 }
 
-func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *uint, storyboardID *uint, frameType string, status string, page, pageSize int) ([]models.ImageGeneration, int64, error) {
+func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *uint, storyboardID *uint, frameType string, imageType string, status string, page, pageSize int) ([]models.ImageGeneration, int64, error) {
 	query := s.db.Model(&models.ImageGeneration{})
 
 	if dramaID != nil {
@@ -654,6 +654,10 @@ func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *ui
 
 	if frameType != "" {
 		query = query.Where("frame_type = ?", frameType)
+	}
+
+	if imageType != "" {
+		query = query.Where("image_type = ?", imageType)
 	}
 
 	if status != "" {
@@ -982,23 +986,6 @@ func (s *ImageGenerationService) extractBackgroundsFromScript(scriptContent stri
 		return []BackgroundInfo{}, nil
 	}
 
-	// 获取AI客户端（如果指定了模型则使用指定的模型）
-	var client ai.AIClient
-	var err error
-	if model != "" {
-		s.log.Infow("Using specified model for background extraction", "model", model)
-		client, err = s.aiService.GetAIClientForModel("text", model)
-		if err != nil {
-			s.log.Warnw("Failed to get client for specified model, using default", "model", model, "error", err)
-			client, err = s.aiService.GetAIClient("text")
-		}
-	} else {
-		client, err = s.aiService.GetAIClient("text")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get AI client: %w", err)
-	}
-
 	// 使用国际化提示词
 	systemPrompt := s.promptI18n.GetSceneExtractionPrompt()
 	contentLabel := s.promptI18n.FormatUserPrompt("script_content_label")
@@ -1098,7 +1085,7 @@ Please strictly follow the JSON format and ensure all fields use English.`
 		"prompt_length", len(prompt),
 		"full_prompt", prompt)
 
-	response, err := client.GenerateText(prompt, "", ai.WithTemperature(0.7))
+	response, err := s.aiService.GenerateTextWithModel(prompt, "", model, true, ai.WithTemperature(0.7))
 	if err != nil {
 		s.log.Errorw("Failed to extract backgrounds with AI", "error", err)
 		return nil, fmt.Errorf("AI提取场景失败: %w", err)
@@ -1110,22 +1097,10 @@ Please strictly follow the JSON format and ensure all fields use English.`
 		"raw_response", response)
 
 	// 解析AI返回的JSON
-	var backgrounds []BackgroundInfo
-
-	// 先尝试解析为数组格式
-	if err := utils.SafeParseAIJSON(response, &backgrounds); err == nil {
-		s.log.Infow("Parsed backgrounds as array format", "count", len(backgrounds))
-	} else {
-		// 尝试解析为对象格式
-		var result struct {
-			Backgrounds []BackgroundInfo `json:"backgrounds"`
-		}
-		if err := utils.SafeParseAIJSON(response, &result); err != nil {
-			s.log.Errorw("Failed to parse AI response in both formats", "error", err, "response", response[:min(len(response), 500)])
-			return nil, fmt.Errorf("解析AI响应失败: %w", err)
-		}
-		backgrounds = result.Backgrounds
-		s.log.Infow("Parsed backgrounds as object format", "count", len(backgrounds))
+	backgrounds, err := utils.ParseAIJSONList[BackgroundInfo](response, []string{"backgrounds"}, false)
+	if err != nil {
+		s.log.Errorw("Failed to parse AI response", "error", err, "response", response[:min(len(response), 500)])
+		return nil, fmt.Errorf("解析AI响应失败: %w", err)
 	}
 
 	s.log.Infow("Extracted backgrounds from script",
@@ -1276,7 +1251,7 @@ Please strictly follow the JSON format and ensure:
 		"full_prompt", prompt)
 
 	// 调用AI服务
-	text, err := s.aiService.GenerateText(prompt, "")
+	text, err := s.aiService.GenerateTextJSON(prompt, "")
 	if err != nil {
 		return nil, fmt.Errorf("AI analysis failed: %w", err)
 	}

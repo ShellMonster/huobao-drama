@@ -221,3 +221,41 @@ func minInt(a, b int) int {
 	}
 	return b
 }
+
+// ParseAIJSONList 解析AI返回的JSON列表，支持数组或对象包装，并进行基础结构校验。
+func ParseAIJSONList[T any](aiResponse string, keys []string, allowEmpty bool) ([]T, error) {
+	var list []T
+	if err := SafeParseAIJSON(aiResponse, &list); err == nil {
+		if len(list) == 0 && !allowEmpty {
+			return nil, fmt.Errorf("parsed list is empty")
+		}
+		return list, nil
+	}
+
+	var wrapped map[string]json.RawMessage
+	if err := SafeParseAIJSON(aiResponse, &wrapped); err == nil {
+		for _, key := range keys {
+			raw, ok := wrapped[key]
+			if !ok {
+				continue
+			}
+			if err := json.Unmarshal(raw, &list); err == nil {
+				if len(list) == 0 && !allowEmpty {
+					return nil, fmt.Errorf("parsed list is empty for key: %s", key)
+				}
+				return list, nil
+			}
+		}
+
+		for _, raw := range wrapped {
+			if err := json.Unmarshal(raw, &list); err == nil {
+				if len(list) == 0 && !allowEmpty {
+					continue
+				}
+				return list, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("failed to parse json list")
+}
