@@ -49,6 +49,48 @@ func truncateImageURL(url string) string {
 	return url
 }
 
+const (
+	referenceConsistencyZh = "严格遵循参考图中的主体外观、结构与构图，保持一致性；若存在人物，保持面容与服装细节不变"
+	referenceConsistencyEn = "Follow the reference images strictly for subject appearance, structure, and composition; if people appear, keep facial features and clothing consistent"
+	physicalConstraintZh   = "空间结构符合现实物理逻辑与透视关系，布局合理，不出现不可能的结构或穿插"
+	physicalConstraintEn   = "Ensure spatial structure follows realistic physics and perspective, with coherent layout and no impossible overlaps"
+)
+
+func appendPromptConstraint(prompt, addition string, isEnglish bool) string {
+	if strings.TrimSpace(addition) == "" || strings.Contains(prompt, addition) {
+		return prompt
+	}
+	base := strings.TrimSpace(prompt)
+	if base == "" {
+		return addition
+	}
+	if isEnglish {
+		return strings.TrimSpace(fmt.Sprintf("%s, %s", base, addition))
+	}
+	return strings.TrimSpace(fmt.Sprintf("%s，%s", base, addition))
+}
+
+func applyImagePromptConstraints(prompt string, hasReferenceImages bool, isEnglish bool) string {
+	trimmed := strings.TrimSpace(prompt)
+	if trimmed == "" {
+		return prompt
+	}
+	updated := prompt
+	if hasReferenceImages {
+		if isEnglish {
+			updated = appendPromptConstraint(updated, referenceConsistencyEn, isEnglish)
+		} else {
+			updated = appendPromptConstraint(updated, referenceConsistencyZh, isEnglish)
+		}
+	}
+	if isEnglish {
+		updated = appendPromptConstraint(updated, physicalConstraintEn, isEnglish)
+	} else {
+		updated = appendPromptConstraint(updated, physicalConstraintZh, isEnglish)
+	}
+	return updated
+}
+
 func buildMediaCategory(base string, dramaID uint, episodeID uint, storyboardID uint) string {
 	return fmt.Sprintf("%s/dramas/%d/episodes/%d/storyboards/%d", base, dramaID, episodeID, storyboardID)
 }
@@ -173,7 +215,9 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		imageType = string(models.ImageTypeStoryboard)
 	}
 
+	isEnglish := isEnglishPrompt(request.Prompt)
 	prompt := applyStyleToPrompt(request.Prompt, drama.Style)
+	prompt = applyImagePromptConstraints(prompt, len(request.ReferenceImages) > 0, isEnglish)
 
 	imageGen := &models.ImageGeneration{
 		StoryboardID:    request.StoryboardID,
