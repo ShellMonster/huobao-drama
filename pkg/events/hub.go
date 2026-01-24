@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/google/uuid"
 )
 
@@ -17,6 +18,14 @@ type taskSubscriber struct {
 	filter func(*models.AsyncTask) bool
 }
 
+func channelBufferSize() int {
+	size := config.GetTuning().SSE.ChannelBuffer
+	if size > 0 {
+		return size
+	}
+	return 20
+}
+
 func NewTaskHub() *TaskHub {
 	return &TaskHub{
 		subs: make(map[string]*taskSubscriber),
@@ -25,7 +34,7 @@ func NewTaskHub() *TaskHub {
 
 func (h *TaskHub) Subscribe(filter func(*models.AsyncTask) bool) (string, <-chan *models.AsyncTask, func()) {
 	id := uuid.New().String()
-	ch := make(chan *models.AsyncTask, 20)
+	ch := make(chan *models.AsyncTask, channelBufferSize())
 
 	h.mu.Lock()
 	h.subs[id] = &taskSubscriber{ch: ch, filter: filter}
@@ -81,7 +90,7 @@ func NewImageGenerationHub() *ImageGenerationHub {
 
 func (h *ImageGenerationHub) Subscribe(filter func(*models.ImageGeneration) bool) (string, <-chan *models.ImageGeneration, func()) {
 	id := uuid.New().String()
-	ch := make(chan *models.ImageGeneration, 20)
+	ch := make(chan *models.ImageGeneration, channelBufferSize())
 
 	h.mu.Lock()
 	h.subs[id] = &imageSubscriber{ch: ch, filter: filter}
@@ -137,7 +146,7 @@ func NewVideoGenerationHub() *VideoGenerationHub {
 
 func (h *VideoGenerationHub) Subscribe(filter func(*models.VideoGeneration) bool) (string, <-chan *models.VideoGeneration, func()) {
 	id := uuid.New().String()
-	ch := make(chan *models.VideoGeneration, 20)
+	ch := make(chan *models.VideoGeneration, channelBufferSize())
 
 	h.mu.Lock()
 	h.subs[id] = &videoSubscriber{ch: ch, filter: filter}
@@ -193,7 +202,7 @@ func NewFramePromptTaskHub() *FramePromptTaskHub {
 
 func (h *FramePromptTaskHub) Subscribe(filter func(*models.FramePromptTask) bool) (string, <-chan *models.FramePromptTask, func()) {
 	id := uuid.New().String()
-	ch := make(chan *models.FramePromptTask, 20)
+	ch := make(chan *models.FramePromptTask, channelBufferSize())
 
 	h.mu.Lock()
 	h.subs[id] = &framePromptSubscriber{ch: ch, filter: filter}
@@ -249,7 +258,7 @@ func NewVideoMergeHub() *VideoMergeHub {
 
 func (h *VideoMergeHub) Subscribe(filter func(*models.VideoMerge) bool) (string, <-chan *models.VideoMerge, func()) {
 	id := uuid.New().String()
-	ch := make(chan *models.VideoMerge, 20)
+	ch := make(chan *models.VideoMerge, channelBufferSize())
 
 	h.mu.Lock()
 	h.subs[id] = &videoMergeSubscriber{ch: ch, filter: filter}
@@ -288,11 +297,11 @@ func (h *VideoMergeHub) Publish(merge *models.VideoMerge) {
 }
 
 type EventHub struct {
-	Tasks             *TaskHub
-	ImageGenerations  *ImageGenerationHub
-	VideoGenerations  *VideoGenerationHub
-	FramePromptTasks  *FramePromptTaskHub
-	VideoMerges       *VideoMergeHub
+	Tasks            *TaskHub
+	ImageGenerations *ImageGenerationHub
+	VideoGenerations *VideoGenerationHub
+	FramePromptTasks *FramePromptTaskHub
+	VideoMerges      *VideoMergeHub
 }
 
 func NewEventHub() *EventHub {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/utils"
 	"github.com/volcengine/volc-sdk-golang/service/visual"
 )
@@ -58,9 +59,9 @@ type jimengResultResponse struct {
 	Message   string `json:"message"`
 	RequestID string `json:"request_id"`
 	Data      struct {
-		Status    string `json:"status"`
-		VideoURL  string `json:"video_url"`
-		Tagged    bool   `json:"aigc_meta_tagged"`
+		Status   string `json:"status"`
+		VideoURL string `json:"video_url"`
+		Tagged   bool   `json:"aigc_meta_tagged"`
 	} `json:"data"`
 }
 
@@ -68,6 +69,7 @@ func NewJimengCVClient(baseURL, accessKey, secretKey, model, sessionToken string
 	if baseURL == "" {
 		baseURL = jimengDefaultBaseURL
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 10*time.Minute)
 	return &JimengCVClient{
 		BaseURL:      baseURL,
 		AccessKey:    accessKey,
@@ -75,14 +77,14 @@ func NewJimengCVClient(baseURL, accessKey, secretKey, model, sessionToken string
 		SessionToken: sessionToken,
 		Model:        model,
 		Region:       jimengDefaultRegion,
-		Timeout:      10 * time.Minute,
+		Timeout:      timeout,
 	}
 }
 
 func (c *JimengCVClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    5,
-		AspectRatio: "16:9",
+		Duration:    defaultVideoDuration(5),
+		AspectRatio: defaultVideoAspectRatio("16:9"),
 	}
 	for _, opt := range opts {
 		opt(options)

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type VideoClient interface {
@@ -142,20 +144,21 @@ type RunwayResponse struct {
 }
 
 func NewRunwayClient(baseURL, apiKey, model string) *RunwayClient {
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 180*time.Second)
 	return &RunwayClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		HTTPClient: &http.Client{
-			Timeout: 180 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *RunwayClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    5,
-		AspectRatio: "16:9",
+		Duration:    defaultVideoDuration(5),
+		AspectRatio: defaultVideoAspectRatio("16:9"),
 	}
 
 	for _, opt := range opts {
@@ -297,21 +300,22 @@ type PikaResponse struct {
 }
 
 func NewPikaClient(baseURL, apiKey, model string) *PikaClient {
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 180*time.Second)
 	return &PikaClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		HTTPClient: &http.Client{
-			Timeout: 180 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *PikaClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    3,
-		AspectRatio: "16:9",
-		MotionLevel: 50,
+		Duration:    defaultVideoDuration(3),
+		AspectRatio: defaultVideoAspectRatio("16:9"),
+		MotionLevel: defaultVideoMotionLevel(50),
 	}
 
 	for _, opt := range opts {

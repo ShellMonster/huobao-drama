@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/utils"
 	"google.golang.org/genai"
 )
@@ -19,7 +20,10 @@ type GeminiSDKClient struct {
 
 func NewGeminiSDKClient(baseURL, apiKey, model string) (*GeminiSDKClient, error) {
 	if model == "" {
-		model = "gemini-3-pro"
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.GeminiText)
+		if model == "" {
+			model = "gemini-3-pro"
+		}
 	}
 
 	config := &genai.ClientConfig{

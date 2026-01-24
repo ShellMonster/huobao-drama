@@ -194,7 +194,12 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 
 	provider := request.Provider
 	if provider == "" {
-		provider = "openai"
+		if s.config != nil {
+			provider = s.config.AI.DefaultImageProvider
+		}
+		if provider == "" {
+			provider = "openai"
+		}
 	}
 
 	// 序列化参考图片
@@ -359,8 +364,12 @@ func (s *ImageGenerationService) ProcessImageGeneration(imageGenID uint) {
 }
 
 func (s *ImageGenerationService) pollTaskStatus(imageGenID uint, client image.ImageClient, taskID string) {
-	maxAttempts := 60
-	pollInterval := 5 * time.Second
+	tuning := config.GetTuning()
+	maxAttempts := tuning.Polling.Image.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 60
+	}
+	pollInterval := config.DurationFromSeconds(tuning.Polling.Image.IntervalSeconds, 5*time.Second)
 
 	for i := 0; i < maxAttempts; i++ {
 		time.Sleep(pollInterval)

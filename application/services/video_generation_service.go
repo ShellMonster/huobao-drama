@@ -12,6 +12,7 @@ import (
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/cache"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/utils"
@@ -95,7 +96,11 @@ func (s *VideoGenerationService) GenerateVideo(request *GenerateVideoRequest) (*
 
 	provider := request.Provider
 	if provider == "" {
-		provider = "doubao"
+		aiCfg := config.GetAIConfig()
+		provider = aiCfg.DefaultVideoProvider
+		if provider == "" {
+			provider = "doubao"
+		}
 	}
 
 	dramaID, _ := strconv.ParseUint(request.DramaID, 10, 32)
@@ -348,8 +353,12 @@ func (s *VideoGenerationService) pollTaskStatus(videoGenID uint, taskID string, 
 		return
 	}
 
-	maxAttempts := 300
-	interval := 10 * time.Second
+	tuning := config.GetTuning()
+	maxAttempts := tuning.Polling.Video.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 300
+	}
+	interval := config.DurationFromSeconds(tuning.Polling.Video.IntervalSeconds, 10*time.Second)
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		time.Sleep(interval)
@@ -833,8 +842,11 @@ func (s *VideoGenerationService) GenerateVideoFromImage(imageGenID uint) (*model
 		ImageGenID:   &imageGenID,
 		ImageURL:     *imageGen.ImageURL,
 		Prompt:       imageGen.Prompt,
-		Provider:     "doubao",
+		Provider:     config.GetAIConfig().DefaultVideoProvider,
 		Duration:     duration,
+	}
+	if req.Provider == "" {
+		req.Provider = "doubao"
 	}
 
 	return s.GenerateVideo(req)

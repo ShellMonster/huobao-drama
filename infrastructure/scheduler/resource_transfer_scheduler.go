@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
@@ -40,8 +41,19 @@ func (s *ResourceTransferScheduler) Start() error {
 
 	s.log.Info("Starting resource transfer scheduler...")
 
+	tuning := config.GetTuning()
+	resourceCfg := tuning.Scheduler.ResourceTransfer
+	hourlyCron := resourceCfg.HourlyCron
+	if hourlyCron == "" {
+		hourlyCron = "0 0 * * * *"
+	}
+	dailyCron := resourceCfg.DailyCron
+	if dailyCron == "" {
+		dailyCron = "0 0 2 * * *"
+	}
+
 	// 每小时执行一次资源转存任务
-	_, err := s.cron.AddFunc("0 0 * * * *", func() {
+	_, err := s.cron.AddFunc(hourlyCron, func() {
 		s.log.Info("Starting scheduled resource transfer task")
 		s.transferPendingResources()
 	})
@@ -50,7 +62,7 @@ func (s *ResourceTransferScheduler) Start() error {
 	}
 
 	// 每天凌晨2点执行完整扫描
-	_, err = s.cron.AddFunc("0 0 2 * * *", func() {
+	_, err = s.cron.AddFunc(dailyCron, func() {
 		s.log.Info("Starting daily full resource scan and transfer")
 		s.transferAllPendingResources()
 	})
@@ -80,7 +92,18 @@ func (s *ResourceTransferScheduler) Stop() {
 
 // transferPendingResources 转存最近生成的待转存资源（最近24小时）
 func (s *ResourceTransferScheduler) transferPendingResources() {
-	s.log.Info("Scanning for pending resources to transfer (last 24 hours)...")
+	tuning := config.GetTuning()
+	resourceCfg := tuning.Scheduler.ResourceTransfer
+	recentHours := resourceCfg.RecentHours
+	if recentHours <= 0 {
+		recentHours = 24
+	}
+	batchLimit := resourceCfg.BatchLimit
+	if batchLimit <= 0 {
+		batchLimit = 50
+	}
+
+	s.log.Infof("Scanning for pending resources to transfer (last %d hours)...", recentHours)
 
 	// 查找最近24小时内完成的、还未转存的图片和视频
 	type DramaCount struct {
@@ -99,12 +122,12 @@ func (s *ResourceTransferScheduler) transferPendingResources() {
 		AND (minio_url IS NULL OR minio_url = '')
 		AND completed_at >= ?
 		GROUP BY drama_id
-	`, time.Now().Add(-24*time.Hour)).Scan(&imageDramas)
+	`, time.Now().Add(-time.Duration(recentHours)*time.Hour)).Scan(&imageDramas)
 
 	// 转存图片
 	imageCount := 0
 	for _, drama := range imageDramas {
-		count, err := s.transferService.BatchTransferImagesToMinio(drama.DramaID, 50) // 每个剧本最多转50个
+		count, err := s.transferService.BatchTransferImagesToMinio(drama.DramaID, batchLimit) // 每个剧本最多转 batchLimit 个
 		if err != nil {
 			s.log.Errorw("Failed to transfer images for drama",
 				"drama_id", drama.DramaID,
@@ -128,12 +151,12 @@ func (s *ResourceTransferScheduler) transferPendingResources() {
 		AND (minio_url IS NULL OR minio_url = '')
 		AND completed_at >= ?
 		GROUP BY drama_id
-	`, time.Now().Add(-24*time.Hour)).Scan(&videoDramas)
+	`, time.Now().Add(-time.Duration(recentHours)*time.Hour)).Scan(&videoDramas)
 
 	// 转存视频
 	videoCount := 0
 	for _, drama := range videoDramas {
-		count, err := s.transferService.BatchTransferVideosToMinio(drama.DramaID, 50) // 每个剧本最多转50个
+		count, err := s.transferService.BatchTransferVideosToMinio(drama.DramaID, batchLimit) // 每个剧本最多转 batchLimit 个
 		if err != nil {
 			s.log.Errorw("Failed to transfer videos for drama",
 				"drama_id", drama.DramaID,

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type GeminiImageClient struct {
@@ -92,23 +94,27 @@ func NewGeminiImageClient(baseURL, apiKey, model, endpoint string) *GeminiImageC
 		endpoint = "/v1beta/models/{model}:generateContent"
 	}
 	if model == "" {
-		model = "gemini-3-pro-image-preview"
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.GeminiImage)
+		if model == "" {
+			model = "gemini-3-pro-image-preview"
+		}
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
 	return &GeminiImageClient{
 		BaseURL:  baseURL,
 		APIKey:   apiKey,
 		Model:    model,
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *GeminiImageClient) GenerateImage(prompt string, opts ...ImageOption) (*ImageResult, error) {
 	options := &ImageOptions{
-		Size:    "1024x1024",
-		Quality: "standard",
+		Size:    defaultImageSize("1024x1024"),
+		Quality: defaultImageQuality("standard"),
 	}
 
 	for _, opt := range opts {

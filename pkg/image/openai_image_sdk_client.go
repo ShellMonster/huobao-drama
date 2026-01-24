@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/drama-generator/backend/pkg/config"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
@@ -26,7 +28,10 @@ func NewOpenAIImageSDKClient(baseURL, apiKey, model string) *OpenAIImageSDKClien
 	client := openai.NewClient(opts...)
 
 	if model == "" {
-		model = openai.ImageModelDallE3
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.OpenAIImage)
+		if model == "" {
+			model = openai.ImageModelDallE3
+		}
 	}
 
 	return &OpenAIImageSDKClient{
@@ -37,8 +42,8 @@ func NewOpenAIImageSDKClient(baseURL, apiKey, model string) *OpenAIImageSDKClien
 
 func (c *OpenAIImageSDKClient) GenerateImage(prompt string, opts ...ImageOption) (*ImageResult, error) {
 	options := &ImageOptions{
-		Size:    "1024x1024",
-		Quality: "standard",
+		Size:    defaultImageSize("1024x1024"),
+		Quality: defaultImageQuality("standard"),
 	}
 
 	for _, opt := range opts {
@@ -68,7 +73,10 @@ func (c *OpenAIImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 	}
 	params.ResponseFormat = openai.ImageGenerateParamsResponseFormatURL
 
-	resp, err := c.client.Images.Generate(context.Background(), params)
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	resp, err := c.client.Images.Generate(ctx, params)
 	if err != nil {
 		return nil, err
 	}

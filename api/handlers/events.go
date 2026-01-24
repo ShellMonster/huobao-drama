@@ -7,10 +7,18 @@ import (
 	"time"
 
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
+
+var sseHeartbeat = 25 * time.Second
+
+func ApplySSEConfig() {
+	tuning := config.GetTuning()
+	sseHeartbeat = config.DurationFromSeconds(tuning.SSE.HeartbeatSeconds, 25*time.Second)
+}
 
 type EventHandler struct {
 	hub *events.EventHub
@@ -253,7 +261,7 @@ func (h *EventHandler) StreamUnifiedEvents(c *gin.Context) {
 	mergeDramaID := parseUintPointer(c.Query("merge_drama_id"))
 
 	ctx := c.Request.Context()
-	heartbeat := time.NewTicker(25 * time.Second)
+	heartbeat := time.NewTicker(sseHeartbeat)
 	defer heartbeat.Stop()
 
 	type envelope = SSEEnvelope
@@ -464,7 +472,7 @@ func streamSSE[T any](c *gin.Context, eventName string, ch <-chan T) {
 	c.Writer.Flush()
 
 	ctx := c.Request.Context()
-	heartbeat := time.NewTicker(25 * time.Second)
+	heartbeat := time.NewTicker(sseHeartbeat)
 	defer heartbeat.Stop()
 
 	for {

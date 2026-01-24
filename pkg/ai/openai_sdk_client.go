@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/config"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
@@ -20,12 +21,17 @@ type OpenAISDKClient struct {
 
 const openaiSDKDefaultTimeout = 10 * time.Minute
 
+func openaiSDKTimeout() time.Duration {
+	return config.DurationFromSeconds(config.GetTuning().HTTPTimeout.AISeconds, openaiSDKDefaultTimeout)
+}
+
 func NewOpenAISDKClient(baseURL, apiKey, model string) *OpenAISDKClient {
 	opts := []option.RequestOption{}
 	if strings.TrimSpace(apiKey) != "" {
 		opts = append(opts, option.WithAPIKey(strings.TrimSpace(apiKey)))
 	}
-	httpClient := &http.Client{Timeout: openaiSDKDefaultTimeout}
+	timeout := openaiSDKTimeout()
+	httpClient := &http.Client{Timeout: timeout}
 	opts = append(opts, option.WithHTTPClient(httpClient))
 	if normalizedBaseURL := normalizeOpenAIBaseURL(baseURL); normalizedBaseURL != "" {
 		opts = append(opts, option.WithBaseURL(normalizedBaseURL))
@@ -33,7 +39,12 @@ func NewOpenAISDKClient(baseURL, apiKey, model string) *OpenAISDKClient {
 	client := openai.NewClient(opts...)
 
 	if model == "" {
-		model = "gpt-4o"
+		defaultModel := strings.TrimSpace(config.GetTuning().Defaults.Models.OpenAIText)
+		if defaultModel != "" {
+			model = defaultModel
+		} else {
+			model = "gpt-4o"
+		}
 	}
 
 	return &OpenAISDKClient{
@@ -68,6 +79,7 @@ func (c *OpenAISDKClient) GenerateText(prompt string, systemPrompt string, optio
 	for _, option := range options {
 		option(req)
 	}
+	timeout := openaiSDKTimeout()
 
 	model := req.Model
 	if model == "" {
@@ -100,13 +112,13 @@ func (c *OpenAISDKClient) GenerateText(prompt string, systemPrompt string, optio
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), openaiSDKDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	resp, err := c.client.Chat.Completions.New(
 		ctx,
 		params,
-		option.WithRequestTimeout(openaiSDKDefaultTimeout),
+		option.WithRequestTimeout(timeout),
 	)
 	if err != nil {
 		return "", err
@@ -128,6 +140,7 @@ func (c *OpenAISDKClient) GenerateVisionText(prompt string, imageURLs []string, 
 	for _, option := range options {
 		option(req)
 	}
+	timeout := openaiSDKTimeout()
 
 	model := req.Model
 	if model == "" {
@@ -175,13 +188,13 @@ func (c *OpenAISDKClient) GenerateVisionText(prompt string, imageURLs []string, 
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), openaiSDKDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	resp, err := c.client.Chat.Completions.New(
 		ctx,
 		params,
-		option.WithRequestTimeout(openaiSDKDefaultTimeout),
+		option.WithRequestTimeout(timeout),
 	)
 	if err != nil {
 		return "", err

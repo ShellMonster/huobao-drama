@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Storage  StorageConfig  `mapstructure:"storage"`
 	AI       AIConfig       `mapstructure:"ai"`
+	Tuning   TuningConfig   `mapstructure:"tuning"`
 }
 
 type AppConfig struct {
@@ -30,16 +31,18 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	Type     string `mapstructure:"type"` // sqlite, mysql
-	Path     string `mapstructure:"path"` // SQLite数据库文件路径
-	Host     string `mapstructure:"host"`
-	Port     int    `mapstructure:"port"`
-	User     string `mapstructure:"user"`
-	Password string `mapstructure:"password"`
-	Database string `mapstructure:"database"`
-	Charset  string `mapstructure:"charset"`
-	MaxIdle  int    `mapstructure:"max_idle"`
-	MaxOpen  int    `mapstructure:"max_open"`
+	Type                   string `mapstructure:"type"` // sqlite, mysql
+	Path                   string `mapstructure:"path"` // SQLite数据库文件路径
+	Host                   string `mapstructure:"host"`
+	Port                   int    `mapstructure:"port"`
+	User                   string `mapstructure:"user"`
+	Password               string `mapstructure:"password"`
+	Database               string `mapstructure:"database"`
+	Charset                string `mapstructure:"charset"`
+	MaxIdle                int    `mapstructure:"max_idle"`
+	MaxOpen                int    `mapstructure:"max_open"`
+	ConnMaxLifetimeSeconds int    `mapstructure:"conn_max_lifetime_seconds"`
+	SQLiteBusyTimeoutMs    int    `mapstructure:"sqlite_busy_timeout_ms"`
 }
 
 type StorageConfig struct {
@@ -52,6 +55,13 @@ type AIConfig struct {
 	DefaultTextProvider  string `mapstructure:"default_text_provider"`
 	DefaultImageProvider string `mapstructure:"default_image_provider"`
 	DefaultVideoProvider string `mapstructure:"default_video_provider"`
+}
+
+func GetAIConfig() AIConfig {
+	if Current == nil {
+		return AIConfig{}
+	}
+	return Current.AI
 }
 
 func LoadConfig() (*Config, error) {
@@ -71,6 +81,7 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	Current = &config
 	return &config, nil
 }
 

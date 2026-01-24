@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type GeminiClient struct {
@@ -71,15 +73,20 @@ func NewGeminiClient(baseURL, apiKey, model, endpoint string) *GeminiClient {
 		endpoint = "/v1beta/models/{model}:generateContent"
 	}
 	if model == "" {
-		model = "gemini-3-pro"
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.GeminiText)
+		if model == "" {
+			model = "gemini-3-pro"
+		}
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.AISeconds, 10*time.Minute)
+
 	return &GeminiClient{
 		BaseURL:  baseURL,
 		APIKey:   apiKey,
 		Model:    model,
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }

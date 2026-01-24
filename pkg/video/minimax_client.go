@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 // MiniMax Hailuo 支持的模型
@@ -92,12 +94,13 @@ func NewMinimaxClient(baseURL, apiKey, model string) *MinimaxClient {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = minimaxDefaultBaseURL
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 300*time.Second)
 	return &MinimaxClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		HTTPClient: &http.Client{
-			Timeout: 300 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
@@ -106,8 +109,8 @@ func NewMinimaxClient(baseURL, apiKey, model string) *MinimaxClient {
 // 步骤1：创建任务，返回 task_id
 func (c *MinimaxClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:   6,
-		Resolution: "1080P",
+		Duration:   defaultVideoDuration(6),
+		Resolution: defaultVideoResolution("1080P"),
 	}
 
 	for _, opt := range opts {

@@ -11,6 +11,7 @@ import (
 
 	models "github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/external/ffmpeg"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/video"
@@ -221,8 +222,12 @@ func (s *VideoMergeService) mergeVideoClips(client video.VideoClient, scenes []m
 }
 
 func (s *VideoMergeService) pollMergeStatus(mergeID uint, client video.VideoClient, taskID string) {
-	maxAttempts := 240
-	pollInterval := 5 * time.Second
+	tuning := config.GetTuning()
+	maxAttempts := tuning.Polling.VideoMerge.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 240
+	}
+	pollInterval := config.DurationFromSeconds(tuning.Polling.VideoMerge.IntervalSeconds, 5*time.Second)
 
 	for i := 0; i < maxAttempts; i++ {
 		time.Sleep(pollInterval)

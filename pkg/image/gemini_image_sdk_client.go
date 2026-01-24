@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/config"
 	"google.golang.org/genai"
 )
 
@@ -20,11 +21,15 @@ type GeminiImageSDKClient struct {
 
 func NewGeminiImageSDKClient(baseURL, apiKey, model string) (*GeminiImageSDKClient, error) {
 	if model == "" {
-		model = "gemini-3-pro-image-preview"
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.GeminiImage)
+		if model == "" {
+			model = "gemini-3-pro-image-preview"
+		}
 	}
 
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
 	httpClient := &http.Client{
-		Timeout: 10 * time.Minute,
+		Timeout: timeout,
 		Transport: &http.Transport{
 			DisableKeepAlives:   true,
 			ForceAttemptHTTP2:   false,
@@ -36,19 +41,19 @@ func NewGeminiImageSDKClient(baseURL, apiKey, model string) (*GeminiImageSDKClie
 		},
 	}
 
-	config := &genai.ClientConfig{
+	clientConfig := &genai.ClientConfig{
 		APIKey:     strings.TrimSpace(apiKey),
 		Backend:    genai.BackendGeminiAPI,
 		HTTPClient: httpClient,
 	}
 	if strings.TrimSpace(baseURL) != "" {
 		apiBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-		config.HTTPOptions = genai.HTTPOptions{
+		clientConfig.HTTPOptions = genai.HTTPOptions{
 			BaseURL: apiBase,
 		}
 	}
 
-	client, err := genai.NewClient(context.Background(), config)
+	client, err := genai.NewClient(context.Background(), clientConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +66,8 @@ func NewGeminiImageSDKClient(baseURL, apiKey, model string) (*GeminiImageSDKClie
 
 func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption) (*ImageResult, error) {
 	options := &ImageOptions{
-		Size:    "1024x1024",
-		Quality: "standard",
+		Size:    defaultImageSize("1024x1024"),
+		Quality: defaultImageQuality("standard"),
 	}
 
 	for _, opt := range opts {
@@ -102,14 +107,15 @@ func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 		Parts: parts,
 	}}
 
-	config := &genai.GenerateContentConfig{
+	genConfig := &genai.GenerateContentConfig{
 		ResponseModalities: []string{"TEXT", "IMAGE"},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	resp, err := c.client.Models.GenerateContent(ctx, model, contents, config)
+	resp, err := c.client.Models.GenerateContent(ctx, model, contents, genConfig)
 	if err != nil {
 		return nil, err
 	}

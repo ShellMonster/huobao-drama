@@ -9,14 +9,16 @@ server:
   host: "0.0.0.0"
   cors_origins:
     - "http://localhost:3012"
-  read_timeout: 600
-  write_timeout: 600
+  read_timeout: 600        # 读取超时（秒）
+  write_timeout: 600       # 写入超时（秒）
 
 database:
   type: "sqlite"
   path: "./data/drama_generator.db"
   max_idle: 10
   max_open: 100
+  conn_max_lifetime_seconds: 3600 # 连接最大生命周期（秒）
+  sqlite_busy_timeout_ms: 5000    # SQLite 忙等待超时（毫秒）
 
 storage:
   type: "local"
@@ -27,3 +29,69 @@ ai:
   default_text_provider: "openai"
   default_image_provider: "openai"
   default_video_provider: "doubao"
+
+tuning:
+  ai_retry:
+    attempts: 3           # 重试次数
+    delay_seconds: 2      # 基础退避（秒）
+    max_delay_seconds: 12 # 最大退避（秒）
+    jitter_ms: 500        # 随机抖动（毫秒）
+  polling:
+    image:
+      max_attempts: 60
+      interval_seconds: 5 # 间隔（秒）
+    video:
+      max_attempts: 300
+      interval_seconds: 10 # 间隔（秒）
+    video_merge:
+      max_attempts: 240
+      interval_seconds: 5 # 间隔（秒）
+    character_image:
+      max_attempts: 60
+      interval_seconds: 5 # 间隔（秒）
+  sse:
+    heartbeat_seconds: 25 # 心跳间隔（秒）
+    channel_buffer: 20    # SSE 通道缓冲区大小
+  cache:
+    drama_list_seconds: 30   # 剧集列表缓存（秒）
+    drama_detail_seconds: 15 # 剧集详情缓存（秒）
+    drama_stats_seconds: 30  # 剧集统计缓存（秒）
+    ai_config_seconds: 30    # AI 配置缓存（秒）
+    image_list_seconds: 20   # 图片列表缓存（秒）
+    video_list_seconds: 20   # 视频列表缓存（秒）
+    image_detail_seconds: 15 # 图片详情缓存（秒）
+    video_detail_seconds: 15 # 视频详情缓存（秒）
+    storyboards_seconds: 15  # 分镜列表缓存（秒）
+    style_catalog_seconds: 600 # 风格列表缓存（秒）
+  rate_limit:
+    limit: 2000         # 单窗口请求上限
+    window_seconds: 60  # 窗口时长（秒）
+  http_timeout:
+    ai_seconds: 600        # AI 请求超时（秒）
+    image_seconds: 600     # 图像请求超时（秒）
+    video_seconds: 300     # 视频请求超时（秒）
+    style_fetch_seconds: 30 # 风格拉取超时（秒）
+  scheduler:
+    resource_transfer:
+      hourly_cron: "0 0 * * * *" # cron（含秒）
+      daily_cron: "0 0 2 * * *"  # cron（含秒）
+      recent_hours: 24           # 最近窗口（小时）
+      batch_limit: 50            # 单次批量上限
+  defaults:
+    character_image:
+      provider: "openai"   # 角色图默认供应商
+      size: "2560x1440"    # 角色图默认尺寸
+      quality: "standard"  # 角色图默认质量
+    image:
+      size: ""            # 默认图片尺寸（空则使用客户端默认值）
+      quality: ""         # 默认图片质量（空则使用客户端默认值）
+    video:
+      duration_seconds: 0 # 默认时长（秒，0 表示不覆盖客户端默认值）
+      aspect_ratio: ""    # 默认宽高比（空则使用客户端默认值）
+      resolution: ""      # 默认分辨率（空则使用客户端默认值）
+      motion_level: 0     # 默认运动强度（0 表示不覆盖客户端默认值）
+    models:
+      openai_text: "gpt-4o"                    # OpenAI 文本/视觉默认模型
+      gemini_text: "gemini-3-pro"              # Gemini 文本/视觉默认模型
+      openai_image: "dall-e-3"                 # OpenAI 图像默认模型
+      gemini_image: "gemini-3-pro-image-preview" # Gemini 图像默认模型

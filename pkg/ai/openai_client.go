@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type OpenAIClient struct {
@@ -69,6 +72,10 @@ func NewOpenAIClient(baseURL, apiKey, model, endpoint string) *OpenAIClient {
 	if endpoint == "" {
 		endpoint = "/v1/chat/completions"
 	}
+	if model == "" {
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.OpenAIText)
+	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.AISeconds, 10*time.Minute)
 
 	return &OpenAIClient{
 		BaseURL:  baseURL,
@@ -76,7 +83,7 @@ func NewOpenAIClient(baseURL, apiKey, model, endpoint string) *OpenAIClient {
 		Model:    model,
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }

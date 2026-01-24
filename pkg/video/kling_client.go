@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 const (
@@ -75,20 +77,21 @@ func NewKlingClient(baseURL, apiKey, model string) *KlingClient {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = klingDefaultBaseURL
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 10*time.Minute)
 	return &KlingClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *KlingClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    5,
-		AspectRatio: "16:9",
+		Duration:    defaultVideoDuration(5),
+		AspectRatio: defaultVideoAspectRatio("16:9"),
 	}
 	for _, opt := range opts {
 		opt(options)

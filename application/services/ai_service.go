@@ -9,6 +9,7 @@ import (
 
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/ai"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -531,17 +532,25 @@ func (s *AIService) buildClientFromConfig(config *models.AIServiceConfig, modelO
 }
 
 func (s *AIService) callWithRetry(req *AIRequest, call func(requireJSON bool) (string, error), requireJSON bool) (string, error) {
+	tuning := config.GetTuning()
 	attempts := req.MaxAttempts
+	if attempts <= 0 {
+		attempts = tuning.AIRetry.Attempts
+	}
 	if attempts <= 0 {
 		attempts = defaultRetryAttempts
 	}
 	delay := req.RetryDelay
 	if delay <= 0 {
-		delay = defaultRetryDelay
+		delay = config.DurationFromSeconds(tuning.AIRetry.DelaySeconds, defaultRetryDelay)
 	}
 	maxDelay := req.RetryMaxDelay
 	if maxDelay <= 0 {
-		maxDelay = defaultRetryMaxDelay
+		maxDelay = config.DurationFromSeconds(tuning.AIRetry.MaxDelaySeconds, defaultRetryMaxDelay)
+	}
+	jitterMs := tuning.AIRetry.JitterMs
+	if jitterMs <= 0 {
+		jitterMs = defaultRetryJitterMs
 	}
 
 	var lastErr error
@@ -558,7 +567,7 @@ func (s *AIService) callWithRetry(req *AIRequest, call func(requireJSON bool) (s
 		if sleep > maxDelay {
 			sleep = maxDelay
 		}
-		jitter := time.Duration(rand.Intn(defaultRetryJitterMs+1)) * time.Millisecond
+		jitter := time.Duration(rand.Intn(jitterMs+1)) * time.Millisecond
 		time.Sleep(sleep + jitter)
 		delay = minDuration(delay*2, maxDelay)
 	}

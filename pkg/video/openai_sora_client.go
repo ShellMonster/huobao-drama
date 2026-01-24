@@ -8,6 +8,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type OpenAISoraClient struct {
@@ -39,19 +41,21 @@ type OpenAISoraResponse struct {
 }
 
 func NewOpenAISoraClient(baseURL, apiKey, model string) *OpenAISoraClient {
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 300*time.Second)
 	return &OpenAISoraClient{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		HTTPClient: &http.Client{
-			Timeout: 300 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *OpenAISoraClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration: 4,
+		Duration:   defaultVideoDuration(4),
+		Resolution: defaultVideoResolution(""),
 	}
 
 	for _, opt := range opts {

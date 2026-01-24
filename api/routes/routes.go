@@ -17,6 +17,9 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, storageSer
 
 	r.Use(gin.Recovery())
 	r.Use(middlewares2.LoggerMiddleware(log))
+	middlewares2.ApplyRateLimitConfig()
+	handlers2.ApplyCacheConfig()
+	handlers2.ApplySSEConfig()
 	r.Use(middlewares2.CORSMiddleware(cfg.Server.CORSOrigins))
 
 	// 静态文件服务（用户上传的文件）

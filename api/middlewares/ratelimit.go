@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +20,16 @@ var limiter = &rateLimiter{
 	requests: make(map[string][]time.Time),
 	limit:    2000, // 每分钟最多 2000 次请求
 	window:   time.Minute,
+}
+
+func ApplyRateLimitConfig() {
+	tuning := config.GetTuning()
+	if tuning.RateLimit.Limit > 0 {
+		limiter.limit = tuning.RateLimit.Limit
+	}
+	if tuning.RateLimit.WindowSeconds > 0 {
+		limiter.window = time.Duration(tuning.RateLimit.WindowSeconds) * time.Second
+	}
 }
 
 func RateLimitMiddleware() gin.HandlerFunc {

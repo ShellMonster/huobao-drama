@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 // VolcesArkClient 火山引擎ARK视频生成客户端
@@ -64,6 +66,7 @@ func NewVolcesArkClient(baseURL, apiKey, model, endpoint, queryEndpoint string) 
 	if queryEndpoint == "" {
 		queryEndpoint = endpoint
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 300*time.Second)
 	return &VolcesArkClient{
 		BaseURL:       baseURL,
 		APIKey:        apiKey,
@@ -71,7 +74,7 @@ func NewVolcesArkClient(baseURL, apiKey, model, endpoint, queryEndpoint string) 
 		Endpoint:      endpoint,
 		QueryEndpoint: queryEndpoint,
 		HTTPClient: &http.Client{
-			Timeout: 300 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
@@ -79,8 +82,8 @@ func NewVolcesArkClient(baseURL, apiKey, model, endpoint, queryEndpoint string) 
 // GenerateVideo 生成视频（支持首帧、首尾帧、参考图等多种模式）
 func (c *VolcesArkClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    5,
-		AspectRatio: "adaptive",
+		Duration:    defaultVideoDuration(5),
+		AspectRatio: defaultVideoAspectRatio("adaptive"),
 	}
 
 	for _, opt := range opts {

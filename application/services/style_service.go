@@ -14,6 +14,7 @@ import (
 
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/pkg/cache"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -130,7 +131,9 @@ func (s *StyleService) ListActiveStyles() ([]models.Style, error) {
 		return nil, err
 	}
 
-	if _, err := cache.Set(cacheKey, styles, 10*time.Minute); err != nil {
+	tuning := config.GetTuning()
+	cacheTTL := config.DurationFromSeconds(tuning.Cache.StyleCatalogSeconds, 10*time.Minute)
+	if _, err := cache.Set(cacheKey, styles, cacheTTL); err != nil {
 		s.log.Warnw("Failed to cache styles", "error", err)
 	}
 
@@ -394,7 +397,8 @@ func downloadStyleImage(url, path string) error {
 	}
 
 	tmpPath := path + ".tmp"
-	client := &http.Client{Timeout: 30 * time.Second}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.StyleFetchSeconds, 30*time.Second)
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(url)
 	if err != nil {
 		return err

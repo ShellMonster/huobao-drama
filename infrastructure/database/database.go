@@ -35,7 +35,7 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	if cfg.Type == "sqlite" {
 		// 使用 modernc.org/sqlite 纯 Go 驱动（无需 CGO）
 		// 添加并发优化参数：WAL 模式、busy_timeout、cache
-		dsnWithParams := buildSQLiteDSN(dsn)
+		dsnWithParams := buildSQLiteDSN(dsn, cfg)
 		db, err = gorm.Open(sqlite.Dialector{
 			DriverName: "sqlite",
 			DSN:        dsnWithParams,
@@ -75,7 +75,8 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		sqlDB.SetMaxIdleConns(cfg.MaxIdle)
 		sqlDB.SetMaxOpenConns(cfg.MaxOpen)
 	}
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	connMaxLifetime := config.DurationFromSeconds(cfg.ConnMaxLifetimeSeconds, time.Hour)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
 
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
@@ -84,15 +85,20 @@ func NewDatabase(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
-func buildSQLiteDSN(dsn string) string {
+func buildSQLiteDSN(dsn string, cfg config.DatabaseConfig) string {
 	base := dsn
 	if !strings.HasPrefix(base, "file:") {
 		base = "file:" + base
 	}
 
+	busyTimeout := cfg.SQLiteBusyTimeoutMs
+	if busyTimeout <= 0 {
+		busyTimeout = 5000
+	}
+
 	params := []string{
 		"_pragma=journal_mode(WAL)",
-		"_pragma=busy_timeout(5000)",
+		fmt.Sprintf("_pragma=busy_timeout(%d)", busyTimeout),
 		"_pragma=synchronous(NORMAL)",
 		"cache=shared",
 	}

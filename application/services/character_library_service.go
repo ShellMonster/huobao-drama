@@ -6,6 +6,7 @@ import (
 	"time"
 
 	models "github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"gorm.io/gorm"
 )
@@ -327,15 +328,33 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 	// 调用图片生成服务
 	dramaIDStr := fmt.Sprintf("%d", character.DramaID)
 	imageType := "character"
+	tuning := config.GetTuning()
+	defaults := tuning.Defaults.CharacterImage
+	provider := defaults.Provider
+	if provider == "" {
+		provider = config.GetAIConfig().DefaultImageProvider
+		if provider == "" {
+			provider = "openai"
+		}
+	}
+	size := defaults.Size
+	if size == "" {
+		size = "2560x1440"
+	}
+	quality := defaults.Quality
+	if quality == "" {
+		quality = "standard"
+	}
+
 	req := &GenerateImageRequest{
 		DramaID:     dramaIDStr,
 		CharacterID: &character.ID,
 		ImageType:   imageType,
 		Prompt:      prompt,
-		Provider:    "openai",    // 或从配置读取
-		Model:       modelName,   // 使用用户指定的模型
-		Size:        "2560x1440", // 3,686,400像素，满足API最低要求（16:9比例）
-		Quality:     "standard",
+		Provider:    provider,
+		Model:       modelName,
+		Size:        size,
+		Quality:     quality,
 	}
 
 	imageGen, err := imageService.GenerateImage(req)
@@ -354,8 +373,12 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 
 // waitAndUpdateCharacterImage 后台异步等待图片生成完成并更新角色image_url
 func (s *CharacterLibraryService) waitAndUpdateCharacterImage(characterID uint, imageGenID uint) {
-	maxAttempts := 60
-	pollInterval := 5 * time.Second
+	tuning := config.GetTuning()
+	maxAttempts := tuning.Polling.CharacterImage.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 60
+	}
+	pollInterval := config.DurationFromSeconds(tuning.Polling.CharacterImage.IntervalSeconds, 5*time.Second)
 
 	for i := 0; i < maxAttempts; i++ {
 		time.Sleep(pollInterval)

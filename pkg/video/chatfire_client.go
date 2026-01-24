@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 // ChatfireClient Chatfire 视频生成客户端
@@ -110,6 +112,7 @@ func NewChatfireClient(baseURL, apiKey, model, endpoint, queryEndpoint string) *
 	if queryEndpoint == "" {
 		queryEndpoint = "/video/task/{taskId}"
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.VideoSeconds, 300*time.Second)
 	return &ChatfireClient{
 		BaseURL:       baseURL,
 		APIKey:        apiKey,
@@ -117,15 +120,15 @@ func NewChatfireClient(baseURL, apiKey, model, endpoint, queryEndpoint string) *
 		Endpoint:      endpoint,
 		QueryEndpoint: queryEndpoint,
 		HTTPClient: &http.Client{
-			Timeout: 300 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *ChatfireClient) GenerateVideo(imageURL, prompt string, opts ...VideoOption) (*VideoResult, error) {
 	options := &VideoOptions{
-		Duration:    5,
-		AspectRatio: "16:9",
+		Duration:    defaultVideoDuration(5),
+		AspectRatio: defaultVideoAspectRatio("16:9"),
 	}
 
 	for _, opt := range opts {

@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type VolcEngineImageClient struct {
@@ -49,6 +51,7 @@ func NewVolcEngineImageClient(baseURL, apiKey, model, endpoint, queryEndpoint st
 	if queryEndpoint == "" {
 		queryEndpoint = endpoint
 	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
 	return &VolcEngineImageClient{
 		BaseURL:       baseURL,
 		APIKey:        apiKey,
@@ -56,15 +59,15 @@ func NewVolcEngineImageClient(baseURL, apiKey, model, endpoint, queryEndpoint st
 		Endpoint:      endpoint,
 		QueryEndpoint: queryEndpoint,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *VolcEngineImageClient) GenerateImage(prompt string, opts ...ImageOption) (*ImageResult, error) {
 	options := &ImageOptions{
-		Size:    "1024x1024",
-		Quality: "standard",
+		Size:    defaultImageSize(""),
+		Quality: defaultImageQuality("standard"),
 	}
 
 	for _, opt := range opts {

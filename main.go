@@ -78,11 +78,14 @@ func main() {
 
 	router := routes.SetupRouter(cfg, db, logr, storageService)
 
+	readTimeout := config.DurationFromSeconds(cfg.Server.ReadTimeout, 10*time.Minute)
+	writeTimeout := config.DurationFromSeconds(cfg.Server.WriteTimeout, 10*time.Minute)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      router,
-		ReadTimeout:  10 * time.Minute,
-		WriteTimeout: 10 * time.Minute,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
 	}
 
 	go func() {

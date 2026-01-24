@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/drama-generator/backend/pkg/config"
 )
 
 type OpenAIImageClient struct {
@@ -38,21 +41,25 @@ func NewOpenAIImageClient(baseURL, apiKey, model, endpoint string) *OpenAIImageC
 	if endpoint == "" {
 		endpoint = "/v1/images/generations"
 	}
+	if model == "" {
+		model = strings.TrimSpace(config.GetTuning().Defaults.Models.OpenAIImage)
+	}
+	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
 	return &OpenAIImageClient{
 		BaseURL:  baseURL,
 		APIKey:   apiKey,
 		Model:    model,
 		Endpoint: endpoint,
 		HTTPClient: &http.Client{
-			Timeout: 10 * time.Minute,
+			Timeout: timeout,
 		},
 	}
 }
 
 func (c *OpenAIImageClient) GenerateImage(prompt string, opts ...ImageOption) (*ImageResult, error) {
 	options := &ImageOptions{
-		Size:    "1920x1920",
-		Quality: "standard",
+		Size:    defaultImageSize("1920x1920"),
+		Quality: defaultImageQuality("standard"),
 	}
 
 	for _, opt := range opts {
