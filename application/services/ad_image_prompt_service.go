@@ -1,9 +1,11 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/drama-generator/backend/domain/models"
@@ -50,7 +52,7 @@ func (s *AdImagePromptService) GenerateTextPrompts(req *GenerateAdTextPromptRequ
 	if req.Count <= 0 {
 		req.Count = 10
 	}
-	context, err := s.buildAdPromptContext(req.DramaID, req.BrandID, req.SpecID)
+	context, resolvedBrandID, resolvedSpecID, err := s.buildAdPromptContext(req.DramaID, req.BrandID, req.SpecID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,14 +64,21 @@ func (s *AdImagePromptService) GenerateTextPrompts(req *GenerateAdTextPromptRequ
 	if err != nil {
 		return nil, err
 	}
-	return parsePromptList(text)
+	prompts, err := parsePromptList(text)
+	if err != nil {
+		return nil, err
+	}
+	if len(prompts) > 0 {
+		_ = s.savePromptRecord(models.AdPromptTypeText, req.DramaID, resolvedBrandID, resolvedSpecID, &req.Prompt, nil, prompts)
+	}
+	return prompts, nil
 }
 
 func (s *AdImagePromptService) GeneratePromptsFromImage(req *GenerateAdImagePromptRequest) ([]string, error) {
 	if req.Count <= 0 {
 		req.Count = 10
 	}
-	context, err := s.buildAdPromptContext(req.DramaID, req.BrandID, req.SpecID)
+	context, resolvedBrandID, resolvedSpecID, err := s.buildAdPromptContext(req.DramaID, req.BrandID, req.SpecID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,16 +95,55 @@ func (s *AdImagePromptService) GeneratePromptsFromImage(req *GenerateAdImageProm
 	if err != nil {
 		return nil, err
 	}
-	return parsePromptList(text)
+	prompts, err := parsePromptList(text)
+	if err != nil {
+		return nil, err
+	}
+	if len(prompts) > 0 {
+		_ = s.savePromptRecord(models.AdPromptTypeImage, req.DramaID, resolvedBrandID, resolvedSpecID, nil, &req.ImageURL, prompts)
+	}
+	return prompts, nil
 }
 
-func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uint, specID *uint) (string, error) {
+type GetAdPromptRequest struct {
+	DramaID string `form:"drama_id" binding:"required"`
+	BrandID *uint  `form:"brand_id"`
+	SpecID  *uint  `form:"spec_id"`
+}
+
+type LatestAdPromptResult struct {
+	TextPrompts  []string `json:"text_prompts"`
+	ImagePrompts []string `json:"image_prompts"`
+}
+
+func (s *AdImagePromptService) GetLatestPrompts(req *GetAdPromptRequest) (*LatestAdPromptResult, error) {
+	_, resolvedBrandID, resolvedSpecID, err := s.buildAdPromptContext(req.DramaID, req.BrandID, req.SpecID)
+	if err != nil {
+		return nil, err
+	}
+
+	textPrompts, err := s.loadLatestPromptList(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeText)
+	if err != nil {
+		return nil, err
+	}
+	imagePrompts, err := s.loadLatestPromptList(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeImage)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LatestAdPromptResult{
+		TextPrompts:  textPrompts,
+		ImagePrompts: imagePrompts,
+	}, nil
+}
+
+func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uint, specID *uint) (string, *uint, *uint, error) {
 	var drama models.Drama
 	if err := s.db.Where("id = ?", dramaID).First(&drama).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return "", fmt.Errorf("drama not found")
+			return "", nil, nil, fmt.Errorf("drama not found")
 		}
-		return "", err
+		return "", nil, nil, err
 	}
 
 	resolvedBrandID := brandID
@@ -112,9 +160,9 @@ func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uin
 		var brandModel models.Brand
 		if err := s.db.Where("id = ?", *resolvedBrandID).First(&brandModel).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return "", fmt.Errorf("brand not found")
+				return "", nil, nil, fmt.Errorf("brand not found")
 			}
-			return "", err
+			return "", nil, nil, err
 		}
 		brand = &brandModel
 	}
@@ -122,19 +170,69 @@ func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uin
 	var spec *models.BrandSpec
 	if resolvedSpecID != nil {
 		if resolvedBrandID == nil {
-			return "", fmt.Errorf("brand_id is required when spec_id is provided")
+			return "", nil, nil, fmt.Errorf("brand_id is required when spec_id is provided")
 		}
 		var specModel models.BrandSpec
 		if err := s.db.Where("id = ? AND brand_id = ?", *resolvedSpecID, *resolvedBrandID).First(&specModel).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return "", fmt.Errorf("brand spec not found")
+				return "", nil, nil, fmt.Errorf("brand spec not found")
 			}
-			return "", err
+			return "", nil, nil, err
 		}
 		spec = &specModel
 	}
 
-	return buildAdContextText(brand, spec), nil
+	return buildAdContextText(brand, spec), resolvedBrandID, resolvedSpecID, nil
+}
+
+func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID string, brandID *uint, specID *uint, sourceText *string, sourceImageURL *string, prompts []string) error {
+	data, err := json.Marshal(prompts)
+	if err != nil {
+		return err
+	}
+	dramaIDParsed, err := strconv.ParseUint(dramaID, 10, 32)
+	if err != nil {
+		return err
+	}
+	record := models.AdImagePrompt{
+		DramaID:        uint(dramaIDParsed),
+		BrandID:        brandID,
+		SpecID:         specID,
+		PromptType:     promptType,
+		SourceText:     sourceText,
+		SourceImageURL: sourceImageURL,
+		Prompts:        data,
+	}
+	return s.db.Create(&record).Error
+}
+
+func (s *AdImagePromptService) loadLatestPromptList(dramaID string, brandID *uint, specID *uint, promptType string) ([]string, error) {
+	query := s.db.Model(&models.AdImagePrompt{}).
+		Where("drama_id = ? AND prompt_type = ?", dramaID, promptType)
+	if brandID == nil {
+		query = query.Where("brand_id IS NULL")
+	} else {
+		query = query.Where("brand_id = ?", *brandID)
+	}
+	if specID == nil {
+		query = query.Where("spec_id IS NULL")
+	} else {
+		query = query.Where("spec_id = ?", *specID)
+	}
+
+	var record models.AdImagePrompt
+	if err := query.Order("created_at DESC").First(&record).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+
+	var prompts []string
+	if err := json.Unmarshal(record.Prompts, &prompts); err != nil {
+		return nil, err
+	}
+	return prompts, nil
 }
 
 func buildAdContextText(brand *models.Brand, spec *models.BrandSpec) string {

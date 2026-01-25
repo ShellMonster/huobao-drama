@@ -89,7 +89,7 @@
             </video>
 
             <div v-else-if="video.status === 'processing'" class="video-placeholder processing">
-              <el-icon class="loading-icon"><Loading /></el-icon>
+              <LoadingIcon :size="48" />
               <span>{{ $t('video.messages.processing') }}</span>
               <div class="progress-text">{{ $t('video.messages.processingEta') }}</div>
             </div>
@@ -196,7 +196,7 @@ import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  VideoPlay, VideoCamera, Loading, CircleClose,
+  VideoPlay, VideoCamera, CircleClose,
   View, Download, Delete
 } from '@element-plus/icons-vue'
 import { videoAPI } from '@/api/video'
@@ -206,7 +206,7 @@ import type { Drama } from '@/types/drama'
 import GenerateVideoDialog from './components/GenerateVideoDialog.vue'
 import VideoDetailDialog from './components/VideoDetailDialog.vue'
 import { createListStream } from '@/utils/generationManager'
-import { LoadingSection } from '@/components/common'
+import { LoadingIcon, LoadingSection } from '@/components/common'
 import { formatDateTime } from '@/utils/date'
 import { useI18n } from 'vue-i18n'
 
@@ -539,15 +539,6 @@ onUnmounted(() => {
   margin-top: 8px;
   font-size: 12px;
   color: #999;
-}
-
-.loading-icon {
-  animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .video-overlay {

@@ -132,7 +132,7 @@
                   :preview-src-list="[image.image_url]"
                 />
                 <div v-else class="image-placeholder">
-                  <el-icon class="loading-icon" v-if="image.status === 'processing'"><Loading /></el-icon>
+                  <LoadingIcon v-if="image.status === 'processing'" />
                   <el-icon v-else><Picture /></el-icon>
                   <span>
                     {{ image.status === 'processing' ? '生成中' : image.status === 'failed' ? '生成失败' : '等待生成' }}
@@ -152,15 +152,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Loading, Picture } from '@element-plus/icons-vue'
+import { Picture } from '@element-plus/icons-vue'
 import { adPromptAPI } from '@/api/ad-image-prompt'
 import { imageAPI } from '@/api/image'
 import { dramaAPI } from '@/api/drama'
 import type { Drama } from '@/types/drama'
 import type { ImageGeneration } from '@/types/image'
-import { LoadingSection } from '@/components/common'
+import { LoadingIcon, LoadingSection } from '@/components/common'
 
 const props = defineProps<{
   dramaId: string
@@ -210,6 +210,26 @@ const loadImages = async () => {
     adImages.value = []
   } finally {
     imageListLoading.value = false
+  }
+}
+
+const loadLatestPrompts = async () => {
+  try {
+    const res = await adPromptAPI.getLatest({
+      drama_id: props.dramaId,
+      brand_id: brandId.value,
+      spec_id: specId.value
+    })
+    if (res.text_prompts?.length) {
+      textPrompts.value = res.text_prompts
+      selectedTextPrompts.value = [...textPrompts.value]
+    }
+    if (res.image_prompts?.length) {
+      imagePrompts.value = res.image_prompts
+      selectedImagePrompts.value = [...imagePrompts.value]
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '加载提示词失败')
   }
 }
 
@@ -302,6 +322,12 @@ const truncateText = (text: string, max = 80) => {
   if (text.length <= max) return text
   return text.slice(0, max) + '...'
 }
+
+onMounted(() => {
+  void loadDrama()
+  void loadImages()
+  void loadLatestPrompts()
+})
 
 loadDrama()
 loadImages()

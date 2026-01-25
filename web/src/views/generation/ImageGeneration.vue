@@ -70,7 +70,7 @@
             </el-image>
 
             <div v-else-if="image.status === 'processing'" class="image-placeholder processing">
-              <el-icon class="loading-icon"><Loading /></el-icon>
+              <LoadingIcon :size="48" />
               <span>{{ $t('image.generating') }}</span>
             </div>
 
@@ -166,7 +166,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Plus, Picture, PictureFilled, Loading, CircleClose,
+  Plus, Picture, PictureFilled, CircleClose,
   View, Download, Delete
 } from '@element-plus/icons-vue'
 import { imageAPI } from '@/api/image'
@@ -176,7 +176,7 @@ import type { Drama } from '@/types/drama'
 import GenerateImageDialog from './components/GenerateImageDialog.vue'
 import ImageDetailDialog from './components/ImageDetailDialog.vue'
 import { createListStream } from '@/utils/generationManager'
-import { LoadingSection } from '@/components/common'
+import { LoadingIcon, LoadingSection } from '@/components/common'
 
 const route = useRoute()
 const router = useRouter()
@@ -443,15 +443,6 @@ onUnmounted(() => {
 
 .image-placeholder.failed {
   color: #f56c6c;
-}
-
-.loading-icon {
-  animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .image-overlay {

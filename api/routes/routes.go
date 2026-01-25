@@ -99,6 +99,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, storageSer
 
 		adPrompts := api.Group("/ad-image-prompts")
 		{
+			adPrompts.GET("/latest", adPromptHandler.GetLatestPrompts)
 			adPrompts.POST("/text", adPromptHandler.GenerateTextPrompts)
 			adPrompts.POST("/image", adPromptHandler.GenerateImagePrompts)
 		}

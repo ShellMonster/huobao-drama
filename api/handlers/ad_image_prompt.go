@@ -71,3 +71,32 @@ func (h *AdImagePromptHandler) GenerateImagePrompts(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"prompts": prompts})
 }
+
+func (h *AdImagePromptHandler) GetLatestPrompts(c *gin.Context) {
+	var req services.GetAdPromptRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.service.GetLatestPrompts(&req)
+	if err != nil {
+		switch err.Error() {
+		case "drama not found":
+			response.NotFound(c, "项目不存在")
+			return
+		case "brand not found":
+			response.NotFound(c, "品牌不存在")
+			return
+		case "brand spec not found":
+			response.NotFound(c, "规范不存在")
+			return
+		case "brand_id is required when spec_id is provided":
+			response.BadRequest(c, "选择规范时需要同时选择品牌")
+			return
+		}
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Success(c, result)
+}

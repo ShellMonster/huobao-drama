@@ -128,6 +128,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.ImageGeneration{},
 		&models.VideoGeneration{},
 		&models.VideoMerge{},
+		&models.AdImagePrompt{},
 
 		// 风格配置
 		&models.Style{},

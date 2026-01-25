@@ -25,7 +25,7 @@
             </el-image>
 
             <div v-else-if="image.status === 'processing'" class="image-status">
-              <el-icon class="loading-icon"><Loading /></el-icon>
+              <LoadingIcon :size="64" />
               <span>{{ $t('image.detail.processing') }}</span>
             </div>
 
@@ -132,13 +132,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  PictureFilled, Loading, CircleClose,
+  PictureFilled, CircleClose,
   Download, Refresh
 } from '@element-plus/icons-vue'
 import { imageAPI } from '@/api/image'
 import type { ImageGeneration, ImageStatus } from '@/types/image'
 import { formatDateTime } from '@/utils/date'
 import { useI18n } from 'vue-i18n'
+import { LoadingIcon } from '@/components/common'
 
 interface Props {
   modelValue: boolean
@@ -229,15 +230,6 @@ const handleClose = () => {
 
 .image-status.error {
   color: #f56c6c;
-}
-
-.loading-icon {
-  animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .error-message {

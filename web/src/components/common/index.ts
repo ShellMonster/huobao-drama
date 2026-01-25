@@ -9,6 +9,7 @@ export { default as BaseCard } from './BaseCard.vue'
 export { default as StatCard } from './StatCard.vue'
 export { default as EmptyState } from './EmptyState.vue'
 export { default as LoadingSection } from './LoadingSection.vue'
+export { default as LoadingIcon } from './LoadingIcon.vue'
 
 // Interactive Components / 交互组件
 export { default as ProjectCard } from './ProjectCard.vue'

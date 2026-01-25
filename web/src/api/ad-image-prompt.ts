@@ -16,7 +16,19 @@ export interface GenerateAdImagePromptRequest {
   count?: number
 }
 
+export interface GetLatestAdPromptRequest {
+  drama_id: string
+  brand_id?: number
+  spec_id?: number
+}
+
 export const adPromptAPI = {
+  getLatest(params: GetLatestAdPromptRequest) {
+    return request.get<{ text_prompts: string[]; image_prompts: string[] }>(
+      '/ad-image-prompts/latest',
+      { params }
+    )
+  },
   generateText(data: GenerateAdTextPromptRequest) {
     return request.post<{ prompts: string[] }>('/ad-image-prompts/text', data)
   },

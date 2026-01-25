@@ -22,7 +22,7 @@
             </video>
 
             <div v-else-if="video.status === 'processing'" class="video-status">
-              <el-icon class="loading-icon"><Loading /></el-icon>
+              <LoadingIcon :size="64" />
               <span>{{ $t('video.detail.processing') }}</span>
               <div class="status-message">{{ $t('video.messages.processingEta') }}</div>
             </div>
@@ -144,13 +144,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  VideoCamera, Loading, CircleClose,
+  VideoCamera, CircleClose,
   Download, Refresh
 } from '@element-plus/icons-vue'
 import type { VideoGeneration, VideoStatus } from '@/types/video'
 import { CAMERA_MOTIONS } from '@/types/video'
 import { formatDateTime } from '@/utils/date'
 import { useI18n } from 'vue-i18n'
+import { LoadingIcon } from '@/components/common'
 
 interface Props {
   modelValue: boolean
@@ -251,15 +252,6 @@ const handleClose = () => {
 
 .video-status.error {
   color: #f56c6c;
-}
-
-.loading-icon {
-  animation: rotate 1s linear infinite;
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .status-message {

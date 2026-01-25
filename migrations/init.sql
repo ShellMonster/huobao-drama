@@ -181,6 +181,25 @@ CREATE INDEX IF NOT EXISTS idx_image_generations_status ON image_generations(sta
 CREATE INDEX IF NOT EXISTS idx_image_generations_task_id ON image_generations(task_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_deleted_at ON image_generations(deleted_at);
 
+-- 广告图提示词记录表
+CREATE TABLE IF NOT EXISTS ad_image_prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    drama_id INTEGER NOT NULL,
+    brand_id INTEGER,
+    spec_id INTEGER,
+    prompt_type TEXT NOT NULL, -- text, image
+    source_text TEXT,
+    source_image_url TEXT,
+    prompts TEXT NOT NULL, -- JSON存储
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_drama_id ON ad_image_prompts(drama_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_brand_id ON ad_image_prompts(brand_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_spec_id ON ad_image_prompts(spec_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_type ON ad_image_prompts(prompt_type);
+
 -- 视频生成记录表
 CREATE TABLE IF NOT EXISTS video_generations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
