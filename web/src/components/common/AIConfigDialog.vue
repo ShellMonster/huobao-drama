@@ -14,7 +14,7 @@
         <div class="header-actions">
           <el-button type="success" size="small" @click="showQuickSetupDialog">
             <el-icon><MagicStick /></el-icon>
-            <span>一键配置火宝</span>
+            <span>{{ $t('aiConfig.quickSetupAction') }}</span>
           </el-button>
           <el-button type="primary" size="small" @click="showCreateDialog">
             <el-icon><Plus /></el-icon>
@@ -64,27 +64,27 @@
     <!-- Quick Setup Dialog -->
     <el-dialog
       v-model="quickSetupVisible"
-      title="一键配置"
+      :title="$t('aiConfig.quickSetupTitle')"
       width="500px"
       :close-on-click-modal="false"
       append-to-body
     >
       <div class="quick-setup-info">
-        <p>将自动创建以下配置：</p>
+        <p>{{ $t('aiConfig.quickSetupIntro') }}</p>
         <ul>
-          <li><strong>文本服务</strong>: {{ providerConfigs.text[1].models[0] }}</li>
-          <li><strong>图片服务</strong>: {{ providerConfigs.image[1].models[0] }}</li>
-          <li><strong>视频服务</strong>: {{ providerConfigs.video[1].models[0] }}</li>
+          <li><strong>{{ $t('aiConfig.serviceTypes.text') }}</strong>: {{ providerConfigs.text[1].models[0] }}</li>
+          <li><strong>{{ $t('aiConfig.serviceTypes.image') }}</strong>: {{ providerConfigs.image[1].models[0] }}</li>
+          <li><strong>{{ $t('aiConfig.serviceTypes.video') }}</strong>: {{ providerConfigs.video[1].models[0] }}</li>
         </ul>
-        <p class="quick-setup-tip">Base URL: https://api.chatfire.site/v1</p>
+        <p class="quick-setup-tip">{{ $t('aiConfig.quickSetupBaseUrl', { url: 'https://api.chatfire.site/v1' }) }}</p>
       </div>
       <el-form label-width="80px">
-        <el-form-item label="API Key" required>
+        <el-form-item :label="$t('aiConfig.form.apiKey')" required>
           <el-input 
             v-model="quickSetupApiKey" 
             type="password" 
             show-password
-            placeholder="请输入 ChatFire API Key"
+            :placeholder="$t('aiConfig.quickSetupApiKeyPlaceholder')"
           />
         </el-form-item>
       </el-form>
@@ -95,12 +95,12 @@
             target="_blank"
             class="register-link"
           >
-            没有 API Key？点击注册
+            {{ $t('aiConfig.quickSetupRegister') }}
           </a>
           <div class="footer-buttons">
-            <el-button @click="quickSetupVisible = false">取消</el-button>
+            <el-button @click="quickSetupVisible = false">{{ $t('common.cancel') }}</el-button>
             <el-button type="primary" @click="handleQuickSetup" :loading="quickSetupLoading">
-              确认配置
+              {{ $t('aiConfig.quickSetupConfirm') }}
             </el-button>
           </div>
         </div>
@@ -135,7 +135,7 @@
             <el-option
               v-for="provider in availableProviders"
               :key="provider.id"
-              :label="provider.name"
+              :label="getProviderLabel(provider.id, provider.name)"
               :value="provider.id"
               :disabled="provider.disabled"
             />
@@ -185,7 +185,7 @@
           </div>
         </el-form-item>
 
-        <el-form-item :label="isJimengProvider ? 'Access Key' : $t('aiConfig.form.apiKey')" prop="api_key">
+        <el-form-item :label="isJimengProvider ? $t('aiConfig.form.accessKey') : $t('aiConfig.form.apiKey')" prop="api_key">
           <el-input 
             v-model="form.api_key" 
             type="password" 
@@ -195,14 +195,14 @@
           <div class="form-tip">{{ $t('aiConfig.form.apiKeyTip') }}</div>
         </el-form-item>
 
-        <el-form-item v-if="isJimengProvider" label="Secret Key" prop="secret_key">
+        <el-form-item v-if="isJimengProvider" :label="$t('aiConfig.form.secretKey')" prop="secret_key">
           <el-input
             v-model="form.secret_key"
             type="password"
             show-password
-            placeholder="请输入 Secret Key"
+            :placeholder="$t('aiConfig.form.secretKeyPlaceholder')"
           />
-          <div class="form-tip">即梦视频需要 Access Key + Secret Key 才能调用</div>
+          <div class="form-tip">{{ $t('aiConfig.form.secretKeyTip') }}</div>
         </el-form-item>
 
         <el-form-item v-if="isEdit" :label="$t('aiConfig.form.isActive')">
@@ -217,7 +217,7 @@
             target="_blank"
             class="register-link"
           >
-            没有 API Key？点击注册
+            {{ $t('aiConfig.quickSetupRegister') }}
           </a>
           <div class="footer-buttons">
             <el-button @click="editDialogVisible = false">{{ $t('common.cancel') }}</el-button>
@@ -234,6 +234,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, MagicStick } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
@@ -249,6 +250,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'config-updated': []
 }>()
+
+const { t: $t } = useI18n()
 
 const visible = computed({
   get: () => props.modelValue,
@@ -397,6 +400,31 @@ const isJimengProvider = computed(() => {
   return form.service_type === 'video' && form.provider === 'jimeng'
 })
 
+const providerLabelMap = computed<Record<string, string>>(() => ({
+  openai: $t('aiConfig.providers.openai'),
+  chatfire: $t('aiConfig.providers.chatfire'),
+  gemini: $t('aiConfig.providers.gemini'),
+  google: $t('aiConfig.providers.google'),
+  volcengine: $t('aiConfig.providers.volcengine'),
+  volces: $t('aiConfig.providers.volcengine'),
+  jimeng: $t('aiConfig.providers.jimeng'),
+  kling: $t('aiConfig.providers.kling'),
+  minimax: $t('aiConfig.providers.minimax')
+}))
+
+const getProviderLabel = (providerId: string, fallback?: string) => {
+  return providerLabelMap.value[providerId] || fallback || providerId
+}
+
+const getServiceTypeLabel = (serviceType: AIServiceType) => {
+  const labels: Record<AIServiceType, string> = {
+    text: $t('aiConfig.serviceTypes.text'),
+    image: $t('aiConfig.serviceTypes.image'),
+    video: $t('aiConfig.serviceTypes.video')
+  }
+  return labels[serviceType] || serviceType
+}
+
 // 当前可用的厂商列表（显示所有配置的厂商）
 const availableProviders = computed(() => {
   // 返回当前service_type下的所有厂商
@@ -456,17 +484,17 @@ const fullEndpointExample = computed(() => {
 })
 
 const rules: FormRules = {
-  name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
-  provider: [{ required: true, message: '请选择厂商', trigger: 'change' }],
+  name: [{ required: true, message: $t('aiConfig.validation.nameRequired'), trigger: 'blur' }],
+  provider: [{ required: true, message: $t('aiConfig.validation.providerRequired'), trigger: 'change' }],
   base_url: [
-    { required: true, message: '请输入 Base URL', trigger: 'blur' },
-    { type: 'url', message: '请输入正确的 URL 格式', trigger: 'blur' }
+    { required: true, message: $t('aiConfig.validation.baseUrlRequired'), trigger: 'blur' },
+    { type: 'url', message: $t('aiConfig.validation.baseUrlInvalid'), trigger: 'blur' }
   ],
-  api_key: [{ required: true, message: '请输入 API Key', trigger: 'blur' }],
+  api_key: [{ required: true, message: $t('aiConfig.validation.apiKeyRequired'), trigger: 'blur' }],
   secret_key: [{
     validator: (rule: any, value: any, callback: any) => {
       if (isJimengProvider.value && !value) {
-        callback(new Error('请输入 Secret Key'))
+        callback(new Error($t('aiConfig.validation.secretKeyRequired')))
         return
       }
       callback()
@@ -475,7 +503,7 @@ const rules: FormRules = {
   }],
   model: [{
     required: true,
-    message: '请至少选择一个模型',
+    message: $t('aiConfig.validation.modelRequired'),
     trigger: 'change',
     validator: (rule: any, value: any, callback: any) => {
       if (Array.isArray(value) && value.length > 0) {
@@ -483,7 +511,7 @@ const rules: FormRules = {
       } else if (typeof value === 'string' && value.length > 0) {
         callback()
       } else {
-        callback(new Error('请至少选择一个模型'))
+        callback(new Error($t('aiConfig.validation.modelRequired')))
       }
     }
   }]
@@ -533,32 +561,16 @@ const loadConfigs = async (options: { useCache?: boolean; showLoading?: boolean;
     configs.value = data
     setAIConfigCache(serviceType, data)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || $t('common.loadFailed'))
   } finally {
     stopLoading()
   }
 }
 
 const generateConfigName = (provider: string, serviceType: AIServiceType): string => {
-  const providerNames: Record<string, string> = {
-    'chatfire': 'ChatFire',
-    'openai': 'OpenAI',
-    'gemini': 'Gemini',
-    'google': 'Google',
-    'jimeng': '即梦',
-    'kling': '可灵',
-    'minimax': 'MiniMax'
-  }
-  
-  const serviceNames: Record<AIServiceType, string> = {
-    'text': '文本',
-    'image': '图片',
-    'video': '视频'
-  }
-  
   const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-  const providerName = providerNames[provider] || provider
-  const serviceName = serviceNames[serviceType] || serviceType
+  const providerName = getProviderLabel(provider, provider)
+  const serviceName = getServiceTypeLabel(serviceType)
   
   return `${providerName}-${serviceName}-${randomNum}`
 }
@@ -607,18 +619,18 @@ const handleEdit = (config: AIServiceConfig) => {
 
 const handleDelete = async (config: AIServiceConfig) => {
   try {
-    await ElMessageBox.confirm('确定要删除该配置吗？', '警告', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm($t('aiConfig.messages.deleteConfirm'), $t('aiConfig.messages.deleteConfirmTitle'), {
+      confirmButtonText: $t('common.confirm'),
+      cancelButtonText: $t('common.cancel'),
       type: 'warning'
     })
     
     await aiAPI.delete(config.id)
-    ElMessage.success('删除成功')
+    ElMessage.success($t('common.deleteSuccess'))
     loadConfigs({ useCache: false })
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || $t('common.deleteFailed'))
     }
   }
 }
@@ -627,10 +639,10 @@ const handleToggleActive = async (config: AIServiceConfig) => {
   try {
     const newActiveState = !config.is_active
     await aiAPI.update(config.id, { is_active: newActiveState })
-    ElMessage.success(newActiveState ? '已启用配置' : '已禁用配置')
+    ElMessage.success(newActiveState ? $t('aiConfig.messages.enabled') : $t('aiConfig.messages.disabled'))
     await loadConfigs({ useCache: false })
   } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+    ElMessage.error(error.message || $t('message.operationFailed'))
   }
 }
 
@@ -648,9 +660,9 @@ const testConnection = async () => {
       model: form.model,
       provider: form.provider
     })
-    ElMessage.success('连接测试成功！')
+    ElMessage.success($t('aiConfig.messages.testSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '连接测试失败')
+    ElMessage.error(error.message || $t('aiConfig.messages.testFailed'))
   } finally {
     testing.value = false
   }
@@ -665,9 +677,9 @@ const handleTest = async (config: AIServiceConfig) => {
       model: config.model,
       provider: config.provider
     })
-    ElMessage.success('连接测试成功！')
+    ElMessage.success($t('aiConfig.messages.testSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '连接测试失败')
+    ElMessage.error(error.message || $t('aiConfig.messages.testFailed'))
   } finally {
     testing.value = false
   }
@@ -701,7 +713,7 @@ const handleSubmit = async () => {
           updateData.settings = settings
         }
         await aiAPI.update(editingId.value, updateData)
-        ElMessage.success('更新成功')
+        ElMessage.success($t('aiConfig.messages.updateSuccess'))
       } else {
         const createData: CreateAIConfigRequest = {
           service_type: form.service_type,
@@ -714,14 +726,14 @@ const handleSubmit = async () => {
           settings: settings || undefined
         }
         await aiAPI.create(createData)
-        ElMessage.success('创建成功')
+        ElMessage.success($t('aiConfig.messages.createSuccess'))
       }
       
       editDialogVisible.value = false
       loadConfigs({ useCache: false })
       emit('config-updated')
     } catch (error: any) {
-      ElMessage.error(error.message || '操作失败')
+      ElMessage.error(error.message || $t('message.operationFailed'))
     } finally {
       submitting.value = false
     }
@@ -787,7 +799,7 @@ const showQuickSetupDialog = () => {
 
 const handleQuickSetup = async () => {
   if (!quickSetupApiKey.value.trim()) {
-    ElMessage.warning('请输入 API Key')
+    ElMessage.warning($t('aiConfig.validation.apiKeyRequired'))
     return
   }
 
@@ -819,9 +831,9 @@ const handleQuickSetup = async () => {
         model: [textProvider.models[0]],
         priority: 0
       })
-      createdServices.push('文本')
+      createdServices.push(getServiceTypeLabel('text'))
     } else {
-      skippedServices.push('文本')
+      skippedServices.push(getServiceTypeLabel('text'))
     }
 
     // 创建图片配置（如果不存在）
@@ -837,9 +849,9 @@ const handleQuickSetup = async () => {
         model: [imageProvider.models[0]],
         priority: 0
       })
-      createdServices.push('图片')
+      createdServices.push(getServiceTypeLabel('image'))
     } else {
-      skippedServices.push('图片')
+      skippedServices.push(getServiceTypeLabel('image'))
     }
 
     // 创建视频配置（如果不存在）
@@ -855,18 +867,23 @@ const handleQuickSetup = async () => {
         model: [videoProvider.models[0]],
         priority: 0
       })
-      createdServices.push('视频')
+      createdServices.push(getServiceTypeLabel('video'))
     } else {
-      skippedServices.push('视频')
+      skippedServices.push(getServiceTypeLabel('video'))
     }
 
     // 显示结果消息
     if (createdServices.length > 0 && skippedServices.length > 0) {
-      ElMessage.success(`已创建 ${createdServices.join('、')} 配置，${skippedServices.join('、')} 配置已存在`)
+      ElMessage.success($t('aiConfig.quickSetupResultPartial', {
+        created: createdServices.join($t('common.listSeparator')),
+        skipped: skippedServices.join($t('common.listSeparator'))
+      }))
     } else if (createdServices.length > 0) {
-      ElMessage.success(`一键配置成功！已创建 ${createdServices.join('、')} 服务配置`)
+      ElMessage.success($t('aiConfig.quickSetupResultCreated', {
+        created: createdServices.join($t('common.listSeparator'))
+      }))
     } else {
-      ElMessage.info('所有配置已存在，无需重复创建')
+      ElMessage.info($t('aiConfig.quickSetupResultExists'))
     }
 
     quickSetupVisible.value = false
@@ -875,7 +892,7 @@ const handleQuickSetup = async () => {
       emit('config-updated')
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '配置失败')
+    ElMessage.error(error.message || $t('aiConfig.quickSetupFailed'))
   } finally {
     quickSetupLoading.value = false
   }

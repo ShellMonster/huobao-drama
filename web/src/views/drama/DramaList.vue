@@ -111,6 +111,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   Film,
@@ -123,6 +124,7 @@ import { AppHeader, ProjectCard, ActionButton, CreateDramaDialog, EmptyState, Lo
 import { getCache, setCache } from '@/utils/cache'
 
 const router = useRouter()
+const { t } = useI18n()
 const loading = ref(false)
 const dramas = ref<Drama[]>([])
 const total = ref(0)
@@ -171,7 +173,7 @@ const loadDramas = async () => {
     total.value = res.pagination?.total || 0
     setCache(cacheKey, { items: dramas.value, total: total.value })
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || t('common.loadFailed'))
   } finally {
     if (!cached) {
       stopLoading()
@@ -210,7 +212,7 @@ const editDrama = async (id: string) => {
       description: drama.description || ''
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || t('common.loadFailed'))
     editDialogVisible.value = false
   } finally {
     editLoading.value = false
@@ -220,7 +222,7 @@ const editDrama = async (id: string) => {
 // Save edit changes / 保存编辑更改
 const saveEdit = async () => {
   if (!editForm.value.title) {
-    ElMessage.warning('请输入项目名称')
+    ElMessage.warning(t('drama.projectNameRequired'))
     return
   }
 
@@ -230,11 +232,11 @@ const saveEdit = async () => {
       title: editForm.value.title,
       description: editForm.value.description
     })
-    ElMessage.success('保存成功')
+    ElMessage.success(t('common.saveSuccess'))
     editDialogVisible.value = false
     loadDramas()
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+    ElMessage.error(error.message || t('common.saveFailed'))
   } finally {
     editLoading.value = false
   }
@@ -244,10 +246,10 @@ const saveEdit = async () => {
 const deleteDrama = async (id: string) => {
   try {
     await dramaAPI.delete(id)
-    ElMessage.success('删除成功')
+    ElMessage.success(t('common.deleteSuccess'))
     loadDramas()
   } catch (error: any) {
-    ElMessage.error(error.message || '删除失败')
+    ElMessage.error(error.message || t('common.deleteFailed'))
   }
 }
 

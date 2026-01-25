@@ -12,7 +12,7 @@
       <div class="toolbar-right">
         <div class="toolbar-settings">
           <div class="setting-item">
-            <span class="setting-label">全局转场</span>
+            <span class="setting-label">{{ $t('video.timeline.globalTransition') }}</span>
             <el-input-number
               v-model="globalTransitionDuration"
               :min="0"
@@ -23,11 +23,11 @@
               controls-position="right"
             />
             <span class="setting-unit">s</span>
-            <el-button size="small" @click="applyGlobalTransitionDuration">应用</el-button>
+            <el-button size="small" @click="applyGlobalTransitionDuration">{{ $t('video.timeline.apply') }}</el-button>
           </div>
           <div class="setting-item">
-            <el-tooltip content="即时调整时间线预览与合成效果，仅改变播放起止时间" placement="top">
-              <span class="setting-label">重叠裁剪</span>
+            <el-tooltip :content="$t('video.timeline.overlapTrimTip')" placement="top">
+              <span class="setting-label">{{ $t('video.timeline.overlapTrim') }}</span>
             </el-tooltip>
             <el-input-number
               v-model="globalOverlapTrim"
@@ -123,7 +123,7 @@
             :disabled="props.importingAssets || props.scenes.length === 0"
             @click="handleImportAssets"
           >
-            一键导入素材
+            {{ $t('video.timeline.importAssets') }}
           </el-button>
           <el-button 
             type="primary" 
@@ -323,38 +323,38 @@
     <!-- 转场设置对话框 -->
     <el-dialog
       v-model="transitionDialogVisible"
-      title="设置转场效果"
+      :title="$t('video.timeline.transitionDialog.title')"
       width="500px"
     >
       <el-form label-width="100px">
         <el-form-item :label="$t('video.transitionType')">
           <el-select v-model="editingTransition.type" :placeholder="$t('video.selectTransition')">
-            <el-option label="无转场" value="none" />
+            <el-option :label="$t('video.timeline.transitionOptions.none')" value="none" />
             <!-- 淡入淡出类 -->
-            <el-option label="淡入淡出" value="fade" />
-            <el-option label="黑场过渡" value="fadeblack" />
-            <el-option label="白场过渡" value="fadewhite" />
-            <el-option label="灰场过渡" value="fadegrays" />
+            <el-option :label="$t('video.timeline.transitionOptions.fade')" value="fade" />
+            <el-option :label="$t('video.timeline.transitionOptions.fadeblack')" value="fadeblack" />
+            <el-option :label="$t('video.timeline.transitionOptions.fadewhite')" value="fadewhite" />
+            <el-option :label="$t('video.timeline.transitionOptions.fadegrays')" value="fadegrays" />
             <!-- 滑动类 -->
-            <el-option label="左滑" value="slideleft" />
-            <el-option label="右滑" value="slideright" />
-            <el-option label="上滑" value="slideup" />
-            <el-option label="下滑" value="slidedown" />
+            <el-option :label="$t('video.timeline.transitionOptions.slideleft')" value="slideleft" />
+            <el-option :label="$t('video.timeline.transitionOptions.slideright')" value="slideright" />
+            <el-option :label="$t('video.timeline.transitionOptions.slideup')" value="slideup" />
+            <el-option :label="$t('video.timeline.transitionOptions.slidedown')" value="slidedown" />
             <!-- 擦除类 -->
-            <el-option label="左擦除" value="wipeleft" />
-            <el-option label="右擦除" value="wiperight" />
-            <el-option label="上擦除" value="wipeup" />
-            <el-option label="下擦除" value="wipedown" />
+            <el-option :label="$t('video.timeline.transitionOptions.wipeleft')" value="wipeleft" />
+            <el-option :label="$t('video.timeline.transitionOptions.wiperight')" value="wiperight" />
+            <el-option :label="$t('video.timeline.transitionOptions.wipeup')" value="wipeup" />
+            <el-option :label="$t('video.timeline.transitionOptions.wipedown')" value="wipedown" />
             <!-- 圆形类 -->
-            <el-option label="圆形展开" value="circleopen" />
-            <el-option label="圆形收缩" value="circleclose" />
+            <el-option :label="$t('video.timeline.transitionOptions.circleopen')" value="circleopen" />
+            <el-option :label="$t('video.timeline.transitionOptions.circleclose')" value="circleclose" />
             <!-- 其他特效 -->
-            <el-option label="溶解" value="dissolve" />
-            <el-option label="距离" value="distance" />
-            <el-option label="水平打开" value="horzopen" />
-            <el-option label="水平关闭" value="horzclose" />
-            <el-option label="垂直打开" value="vertopen" />
-            <el-option label="垂直关闭" value="vertclose" />
+            <el-option :label="$t('video.timeline.transitionOptions.dissolve')" value="dissolve" />
+            <el-option :label="$t('video.timeline.transitionOptions.distance')" value="distance" />
+            <el-option :label="$t('video.timeline.transitionOptions.horzopen')" value="horzopen" />
+            <el-option :label="$t('video.timeline.transitionOptions.horzclose')" value="horzclose" />
+            <el-option :label="$t('video.timeline.transitionOptions.vertopen')" value="vertopen" />
+            <el-option :label="$t('video.timeline.transitionOptions.vertclose')" value="vertclose" />
           </el-select>
         </el-form-item>
         <el-form-item :label="$t('video.transitionDuration')" v-if="editingTransition.type !== 'none'">
@@ -369,22 +369,22 @@
         </el-form-item>
         <el-alert
           v-if="editingTransition.type !== 'none'"
-          title="注意：添加转场效果需要重新编码视频，处理时间会更长"
+          :title="$t('video.timeline.transitionDialog.alert')"
           type="warning"
           :closable="false"
           show-icon
         />
       </el-form>
       <template #footer>
-        <el-button @click="transitionDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyTransition">确定</el-button>
+        <el-button @click="transitionDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="applyTransition">{{ $t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 合并进度对话框 -->
     <el-dialog 
       v-model="mergeDialogVisible" 
-      title="视频合并中" 
+      :title="$t('video.timeline.mergeDialog.title')" 
       width="500px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
@@ -409,25 +409,25 @@
         <div class="progress-tips">
           <p v-if="mergeProgressDetail.phase === 'loading'">
             <el-icon><Loading /></el-icon>
-            正在加载FFmpeg引擎（首次需要下载约30MB）...
+            {{ $t('video.timeline.mergeDialog.tips.loading') }}
           </p>
           <p v-else-if="mergeProgressDetail.phase === 'processing'">
             <el-icon><Download /></el-icon>
-            正在处理视频文件，请稍候...
+            {{ $t('video.timeline.mergeDialog.tips.processing') }}
           </p>
           <p v-else-if="mergeProgressDetail.phase === 'encoding'">
             <el-icon><VideoCamera /></el-icon>
-            正在编码合并视频，可能需要几分钟...
+            {{ $t('video.timeline.mergeDialog.tips.encoding') }}
           </p>
           <p v-else-if="mergeProgressDetail.phase === 'completed'">
             <el-icon><Check /></el-icon>
-            合并完成！视频已自动下载。
+            {{ $t('video.timeline.mergeDialog.tips.completed') }}
           </p>
         </div>
       </div>
       
       <template #footer v-if="!merging">
-        <el-button @click="mergeDialogVisible = false">关闭</el-button>
+        <el-button @click="mergeDialogVisible = false">{{ $t('common.close') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -443,6 +443,7 @@ import {
 } from '@element-plus/icons-vue'
 import { videoMerger, type MergeProgress } from '@/utils/videoMerger'
 import { trimAndMergeVideos } from '@/utils/ffmpeg'
+import { useI18n } from 'vue-i18n'
 
 interface Scene {
   id: string
@@ -499,6 +500,8 @@ const emit = defineEmits<{
   (e: 'asset-deleted'): void
   (e: 'import-assets'): void
 }>()
+
+const { t } = useI18n()
 
 // 基础状态
 const availableStoryboards = computed(() => {
@@ -598,7 +601,7 @@ const getSceneDesc = (scene: Scene) => {
   const parts = []
   if (scene.location) parts.push(scene.location)
   if (scene.time) parts.push(scene.time)
-  return parts.join(' · ') || (scene.description?.slice(0, 15) + '...' || '无描述')
+  return parts.join(' · ') || (scene.description?.slice(0, 15) + '...' || t('common.noDescription'))
 }
 
 // 预览相关
@@ -1110,14 +1113,14 @@ const addClipToTimeline = async (scene: Scene, insertAtPosition?: number) => {
     syncAudioToCurrent(isPlaying.value)
   }
   
-  const insertInfo = insertAfterIndex !== null ? '（已插入到选中片段后）' : ''
-  ElMessage.success(`已添加到时间线${insertInfo}`)
+  const insertInfo = insertAfterIndex !== null ? t('video.timeline.messages.insertAfterSelected') : ''
+  ElMessage.success(t('video.timeline.messages.addedToTimeline', { suffix: insertInfo }))
 }
 
 // 一键添加全部场景
 const addAllScenesInOrder = async () => {
   if (availableStoryboards.value.length === 0) {
-    ElMessage.warning('没有可用的场景')
+    ElMessage.warning(t('video.timeline.messages.noAvailableScenes'))
     return
   }
 
@@ -1134,7 +1137,7 @@ const addAllScenesInOrder = async () => {
     await addClipToTimeline(scene)
   }
 
-  ElMessage.success(`已批量添加 ${sortedScenes.length} 个场景到时间线`)
+  ElMessage.success(t('video.timeline.messages.batchAdded', { count: sortedScenes.length }))
 }
 
 const handleImportAssets = () => {
@@ -1144,7 +1147,7 @@ const handleImportAssets = () => {
 // 删除素材
 const deleteAsset = async (scene: any) => {
   if (!scene.isAsset) {
-    ElMessage.warning('只能删除素材库中的视频')
+    ElMessage.warning(t('video.timeline.messages.deleteAssetOnly'))
     return
   }
 
@@ -1153,13 +1156,13 @@ const deleteAsset = async (scene: any) => {
     const { assetAPI } = await import('@/api/asset')
     await assetAPI.deleteAsset(scene.assetId)
     
-    ElMessage.success('删除成功')
+    ElMessage.success(t('common.deleteSuccess'))
     
     // 通知父组件刷新素材列表
     emit('asset-deleted')
   } catch (error: any) {
     console.error('删除素材失败:', error)
-    ElMessage.error(error.message || '删除失败')
+    ElMessage.error(error.message || t('common.deleteFailed'))
   }
 }
 
@@ -1173,31 +1176,31 @@ const getTransitionStyle = (clip: TimelineClip) => {
 
 const getTransitionLabel = (clip: TimelineClip) => {
   if (!clip.transition || clip.transition.type === 'none') {
-    return '无'
+    return t('video.timeline.transitionLabels.none')
   }
   const labels: Record<string, string> = {
-    'fade': '淡入',
-    'fadeblack': '黑场',
-    'fadewhite': '白场',
-    'fadegrays': '灰场',
-    'slideleft': '左滑',
-    'slideright': '右滑',
-    'slideup': '上滑',
-    'slidedown': '下滑',
-    'wipeleft': '左擦',
-    'wiperight': '右擦',
-    'wipeup': '上擦',
-    'wipedown': '下擦',
-    'circleopen': '圆开',
-    'circleclose': '圆关',
-    'dissolve': '溶解',
-    'distance': '距离',
-    'horzopen': '水平开',
-    'horzclose': '水平关',
-    'vertopen': '垂直开',
-    'vertclose': '垂直关'
+    fade: t('video.timeline.transitionLabels.fade'),
+    fadeblack: t('video.timeline.transitionLabels.fadeblack'),
+    fadewhite: t('video.timeline.transitionLabels.fadewhite'),
+    fadegrays: t('video.timeline.transitionLabels.fadegrays'),
+    slideleft: t('video.timeline.transitionLabels.slideleft'),
+    slideright: t('video.timeline.transitionLabels.slideright'),
+    slideup: t('video.timeline.transitionLabels.slideup'),
+    slidedown: t('video.timeline.transitionLabels.slidedown'),
+    wipeleft: t('video.timeline.transitionLabels.wipeleft'),
+    wiperight: t('video.timeline.transitionLabels.wiperight'),
+    wipeup: t('video.timeline.transitionLabels.wipeup'),
+    wipedown: t('video.timeline.transitionLabels.wipedown'),
+    circleopen: t('video.timeline.transitionLabels.circleopen'),
+    circleclose: t('video.timeline.transitionLabels.circleclose'),
+    dissolve: t('video.timeline.transitionLabels.dissolve'),
+    distance: t('video.timeline.transitionLabels.distance'),
+    horzopen: t('video.timeline.transitionLabels.horzopen'),
+    horzclose: t('video.timeline.transitionLabels.horzclose'),
+    vertopen: t('video.timeline.transitionLabels.vertopen'),
+    vertclose: t('video.timeline.transitionLabels.vertclose')
   }
-  return labels[clip.transition.type] || '转场'
+  return labels[clip.transition.type] || t('video.timeline.transitionLabels.default')
 }
 
 const openTransitionDialog = (clip: TimelineClip) => {
@@ -1228,7 +1231,7 @@ const applyTransition = () => {
       order: clip.order,
       transition: clip.transition
     })
-    ElMessage.success('转场效果已设置')
+    ElMessage.success(t('video.timeline.messages.transitionApplied'))
   } else {
     console.error('❌ 未找到目标片段:', editingTransitionClipId.value)
   }
@@ -1237,7 +1240,7 @@ const applyTransition = () => {
 
 const applyGlobalTransitionDuration = () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('时间线上没有视频片段')
+    ElMessage.warning(t('video.timeline.messages.noTimelineClips'))
     return
   }
   const duration = Number(globalTransitionDuration.value) || 0
@@ -1249,9 +1252,9 @@ const applyGlobalTransitionDuration = () => {
     updated += 1
   })
   if (updated > 0) {
-    ElMessage.success(`已应用到 ${updated} 个转场`)
+    ElMessage.success(t('video.timeline.messages.transitionAppliedCount', { count: updated }))
   } else {
-    ElMessage.info('没有可应用的转场')
+    ElMessage.info(t('video.timeline.messages.noTransitionsToApply'))
   }
 }
 
@@ -1383,7 +1386,7 @@ const clearAllClips = () => {
   currentTime.value = 0
   currentClipIndex.value = 0
   currentClipOffset.value = 0
-  ElMessage.success('已清空轨道')
+  ElMessage.success(t('video.timeline.messages.trackCleared'))
 }
 
 const updateClipOrders = () => {
@@ -1395,12 +1398,12 @@ const updateClipOrders = () => {
 // 音频片段管理
 const extractAllAudio = async () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('时间线上没有视频片段')
+    ElMessage.warning(t('video.timeline.messages.noTimelineClips'))
     return
   }
 
   const loadingMessage = ElMessage.info({
-    message: '正在从视频中提取音频轨道，请稍候...',
+    message: t('video.timeline.messages.extractingAudio'),
     duration: 0
   })
   
@@ -1417,7 +1420,7 @@ const extractAllAudio = async () => {
     const response = await audioAPI.batchExtractAudio(videoUrls)
     
     if (!response.results || response.results.length === 0) {
-      throw new Error('音频提取失败，未返回结果')
+      throw new Error(t('video.timeline.messages.audioExtractNoResult'))
     }
     
     // 为每个视频片段创建对应的音频片段
@@ -1432,7 +1435,7 @@ const extractAllAudio = async () => {
       const audioDuration = extractedAudio.duration
       if (!audioDuration || audioDuration <= 0) {
         console.error(`音频片段 ${index} 时长无效:`, audioDuration)
-        throw new Error(`音频片段 ${index + 1} 时长无效`)
+        throw new Error(t('video.timeline.messages.audioDurationInvalid', { index: index + 1 }))
       }
       
       console.log(`音频片段 ${index}:`, {
@@ -1461,14 +1464,14 @@ const extractAllAudio = async () => {
     
     updateAudioClipOrders()
     loadingMessage.close()
-    ElMessage.success(`已成功提取 ${audioClips.value.length} 个音频片段`)
+    ElMessage.success(t('video.timeline.messages.audioExtracted', { count: audioClips.value.length }))
     if (globalOverlapTrim.value > 0) {
       applyOverlapTrim()
     }
   } catch (error: any) {
     console.error('提取音频失败:', error)
     loadingMessage.close()
-    ElMessage.error(error.message || '音频提取失败，请重试')
+    ElMessage.error(error.message || t('video.timeline.messages.audioExtractFailed'))
     // 清空部分提取的音频
     audioClips.value = []
     audioBaseMap.clear()
@@ -1844,7 +1847,7 @@ const seekToTime = (time: number) => {
 // 播放控制
 const playTimeline = () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('时间线中没有视频片段')
+    ElMessage.warning(t('video.timeline.messages.noTimelineClips'))
     return
   }
   
@@ -1944,18 +1947,18 @@ const getPhaseType = (phase: string) => {
 
 const getPhaseText = (phase: string) => {
   switch (phase) {
-    case 'loading': return '初始化'
-    case 'processing': return '处理中'
-    case 'encoding': return '编码中'
-    case 'completed': return '完成'
-    default: return '准备中'
+    case 'loading': return t('video.timeline.mergePhase.loading')
+    case 'processing': return t('video.timeline.mergePhase.processing')
+    case 'encoding': return t('video.timeline.mergePhase.encoding')
+    case 'completed': return t('video.timeline.mergePhase.completed')
+    default: return t('video.timeline.mergePhase.pending')
   }
 }
 
 // 导出功能
 const handleExport = async () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('请至少添加一个视频片段')
+    ElMessage.warning(t('video.timeline.messages.needClips'))
     return
   }
 
@@ -1965,14 +1968,16 @@ const handleExport = async () => {
     const estimatedTime = Math.ceil(totalSize / 50) // 每50MB约1分钟
     
     await ElMessageBox.confirm(
-      `即将在浏览器中合并 ${timelineClips.value.length} 个视频片段。\n\n` +
-      `预计处理时间：${estimatedTime}-${estimatedTime + 1} 分钟\n` +
-      `预计内存占用：约 ${Math.round(totalSize * 1.5)}MB\n\n` +
-      `处理期间请勿关闭页面。`,
-      '确认导出',
+      t('video.timeline.export.confirm', {
+        count: timelineClips.value.length,
+        min: estimatedTime,
+        max: estimatedTime + 1,
+        memory: Math.round(totalSize * 1.5)
+      }),
+      t('video.timeline.export.title'),
       {
-        confirmButtonText: '开始合并',
-        cancelButtonText: '取消',
+        confirmButtonText: t('video.timeline.export.confirmButton'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning',
         dangerouslyUseHTMLString: true
       }
@@ -2008,12 +2013,12 @@ const handleExport = async () => {
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
 
-    ElMessage.success('视频合并完成，已开始下载！')
+    ElMessage.success(t('video.timeline.messages.mergeDownloaded'))
     mergeDialogVisible.value = false
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('视频合并失败:', error)
-      ElMessage.error(error.message || '视频合并失败')
+      ElMessage.error(error.message || t('video.timeline.messages.mergeFailed'))
     }
   } finally {
     merging.value = false
@@ -2024,18 +2029,18 @@ const handleExport = async () => {
 // 浏览器端FFmpeg合成
 const mergeVideoInBrowser = async () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('时间线上没有视频片段')
+    ElMessage.warning(t('video.timeline.messages.noTimelineClips'))
     return
   }
 
 
   try {
     await ElMessageBox.confirm(
-      '将在浏览器中使用FFmpeg合成视频。\n注意：处理时间较长，且会占用浏览器资源，请勿关闭页面。\n适合少量视频场景（1-5个）。\n是否继续？',
-      '浏览器合成视频',
+      t('video.timeline.browserMerge.confirm'),
+      t('video.timeline.browserMerge.title'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
@@ -2043,7 +2048,7 @@ const mergeVideoInBrowser = async () => {
     merging.value = true
     mergeProgress.value = 0
 
-    ElMessage.info('开始加载FFmpeg引擎...')
+    ElMessage.info(t('video.timeline.messages.loadingEngine'))
 
     // 准备剪辑数据
     const clips = buildMergeClips().map(clip => ({
@@ -2053,7 +2058,7 @@ const mergeVideoInBrowser = async () => {
     }))
 
     // 使用FFmpeg合成
-    ElMessage.info('正在合成视频，请稍候...')
+    ElMessage.info(t('video.timeline.messages.mergingInBrowser'))
     const mergedBlob = await trimAndMergeVideos(clips, (progress) => {
       mergeProgress.value = Math.round(progress)
     })
@@ -2068,12 +2073,14 @@ const mergeVideoInBrowser = async () => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
 
-    ElMessage.success('视频合成完成并已下载！')
+    ElMessage.success(t('video.mergeComplete'))
     emit('merge-completed', 0)
   } catch (error: any) {
     if (error !== 'cancel') {
       ElMessage.error({
-        message: `合成失败: ${error.message || '未知错误'}。请检查控制台或尝试服务器合成`,
+        message: t('video.timeline.messages.mergeFailedWithReason', {
+          error: error.message || t('common.unknownError')
+        }),
         duration: 5000
       })
     }
@@ -2086,17 +2093,17 @@ const mergeVideoInBrowser = async () => {
 // 服务器端合成
 const submitTimelineForMerge = async () => {
   if (timelineClips.value.length === 0) {
-    ElMessage.warning('时间线上没有视频片段')
+    ElMessage.warning(t('video.timeline.messages.noTimelineClips'))
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      '将根据时间线编排的顺序和转场效果合成最终视频。\n注意：未生成视频的场景将被跳过，只合成已有视频的场景。\n适合大量场景合成。\n是否继续？',
-      '服务器合成视频',
+      t('video.timeline.serverMerge.confirm'),
+      t('video.timeline.serverMerge.title'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning',
         dangerouslyUseHTMLString: false
       }
@@ -2136,14 +2143,14 @@ const submitTimelineForMerge = async () => {
         duration: 5000
       })
     } else {
-      ElMessage.success('视频合成任务已提交，正在后台处理...')
+      ElMessage.success(t('video.mergeTaskSubmitted'))
     }
     
     emit('merge-completed', result.merge_id || 0)
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('提交合成任务失败:', error)
-      ElMessage.error(error.response?.data?.message || '提交失败')
+      ElMessage.error(error.response?.data?.message || t('video.timeline.messages.submitFailed'))
     }
   } finally {
     serverMerging.value = false
@@ -2173,7 +2180,7 @@ const updateClipsByStoryboardId = (storyboardId: string | number, newVideoUrl: s
   
   if (updated) {
     console.log('✅ 时间线视频已更新')
-    ElMessage.success('时间线中的视频已自动更新')
+    ElMessage.success(t('video.timeline.messages.timelineUpdated'))
   } else {
     console.log('⚠️ 没有找到匹配的时间线片段')
   }

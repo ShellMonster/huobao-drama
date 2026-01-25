@@ -65,19 +65,19 @@ export interface VideoGenerationListParams {
 }
 
 export const VIDEO_ASPECT_RATIOS = [
-  { label: '16:9 (横屏)', value: '16:9' },
-  { label: '9:16 (竖屏)', value: '9:16' },
-  { label: '1:1 (正方形)', value: '1:1' },
-  { label: '4:3 (传统)', value: '4:3' }
+  { label: '16:9 (Landscape)', labelKey: 'video.dialog.aspectRatioOptions.wide', value: '16:9' },
+  { label: '9:16 (Portrait)', labelKey: 'video.dialog.aspectRatioOptions.tall', value: '9:16' },
+  { label: '1:1 (Square)', labelKey: 'video.dialog.aspectRatioOptions.square', value: '1:1' },
+  { label: '4:3 (Classic)', labelKey: 'video.dialog.aspectRatioOptions.classic', value: '4:3' }
 ]
 
 export const CAMERA_MOTIONS = [
-  { label: '静止', value: 'static' },
-  { label: '推进', value: 'zoom_in' },
-  { label: '拉远', value: 'zoom_out' },
-  { label: '左移', value: 'pan_left' },
-  { label: '右移', value: 'pan_right' },
-  { label: '上移', value: 'tilt_up' },
-  { label: '下移', value: 'tilt_down' },
-  { label: '环绕', value: 'orbit' }
+  { label: 'Static', labelKey: 'video.dialog.cameraMotionOptions.static', value: 'static' },
+  { label: 'Zoom In', labelKey: 'video.dialog.cameraMotionOptions.zoomIn', value: 'zoom_in' },
+  { label: 'Zoom Out', labelKey: 'video.dialog.cameraMotionOptions.zoomOut', value: 'zoom_out' },
+  { label: 'Pan Left', labelKey: 'video.dialog.cameraMotionOptions.panLeft', value: 'pan_left' },
+  { label: 'Pan Right', labelKey: 'video.dialog.cameraMotionOptions.panRight', value: 'pan_right' },
+  { label: 'Tilt Up', labelKey: 'video.dialog.cameraMotionOptions.tiltUp', value: 'tilt_up' },
+  { label: 'Tilt Down', labelKey: 'video.dialog.cameraMotionOptions.tiltDown', value: 'tilt_down' },
+  { label: 'Orbit', labelKey: 'video.dialog.cameraMotionOptions.orbit', value: 'orbit' }
 ]

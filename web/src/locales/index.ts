@@ -1,6 +1,26 @@
 import { createI18n } from 'vue-i18n'
 import zhCN from './zh-CN'
 import enUS from './en-US'
+import jaJP from './ja-JP'
+import koKR from './ko-KR'
+
+const isPlainObject = (value: unknown): value is Record<string, any> => {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+const deepMerge = <T extends Record<string, any>>(base: T, override: Record<string, any>) => {
+  const result: Record<string, any> = { ...base }
+  Object.keys(override).forEach(key => {
+    const baseValue = result[key]
+    const overrideValue = override[key]
+    if (isPlainObject(baseValue) && isPlainObject(overrideValue)) {
+      result[key] = deepMerge(baseValue, overrideValue)
+      return
+    }
+    result[key] = overrideValue
+  })
+  return result as T
+}
 
 // 从 localStorage 获取保存的语言，默认为中文
 const getStoredLanguage = (): string => {
@@ -10,6 +30,8 @@ const getStoredLanguage = (): string => {
   // 自动检测浏览器语言
   const browserLang = navigator.language.toLowerCase()
   if (browserLang.startsWith('zh')) return 'zh-CN'
+  if (browserLang.startsWith('ja')) return 'ja-JP'
+  if (browserLang.startsWith('ko')) return 'ko-KR'
   return 'en-US'
 }
 
@@ -19,7 +41,9 @@ const i18n = createI18n({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': zhCN,
-    'en-US': enUS
+    'en-US': enUS,
+    'ja-JP': deepMerge(enUS, jaJP),
+    'ko-KR': deepMerge(enUS, koKR)
   }
 })
 

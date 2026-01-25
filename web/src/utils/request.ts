@@ -1,6 +1,6 @@
 import type { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import i18n, { getCurrentLanguage } from '@/locales'
 
 interface CustomAxiosInstance extends Omit<AxiosInstance, 'get' | 'post' | 'put' | 'patch' | 'delete'> {
   get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T>
@@ -21,6 +21,8 @@ const request = axios.create({
 // 开源版本 - 无需认证token
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    config.headers = config.headers || {}
+    config.headers['Accept-Language'] = getCurrentLanguage() as string
     return config
   },
   (error: AxiosError) => {
@@ -35,7 +37,8 @@ request.interceptors.response.use(
       return res.data
     } else {
       // 不在这里显示错误提示，让业务代码自行处理
-      return Promise.reject(new Error(res.error?.message || '请求失败'))
+      const fallback = i18n.global.t('common.requestFailed')
+      return Promise.reject(new Error(res.error?.message || fallback))
     }
   },
   (error: AxiosError<any>) => {

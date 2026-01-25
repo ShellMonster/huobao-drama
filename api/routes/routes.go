@@ -17,6 +17,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, storageSer
 
 	r.Use(gin.Recovery())
 	r.Use(middlewares2.LoggerMiddleware(log))
+	r.Use(middlewares2.LocaleMiddleware(cfg.App.Language))
 	middlewares2.ApplyRateLimitConfig()
 	handlers2.ApplyCacheConfig()
 	handlers2.ApplySSEConfig()

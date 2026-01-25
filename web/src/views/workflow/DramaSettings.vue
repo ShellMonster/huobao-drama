@@ -1,28 +1,28 @@
 <template>
   <div class="drama-settings-container">
-    <el-page-header @back="goBack" title="返回项目">
+    <el-page-header @back="goBack" :title="$t('workflow.backToProject')">
       <template #content>
-        <h2>项目设置</h2>
+        <h2>{{ $t('projectSettings.title') }}</h2>
       </template>
     </el-page-header>
 
-    <LoadingSection class="main-card" :loading="pageLoading" text="加载中...">
+    <LoadingSection class="main-card" :loading="pageLoading" :text="$t('common.loading')">
       <el-card shadow="never">
         <el-tabs v-model="activeTab">
-        <el-tab-pane label="基本信息" name="basic">
+        <el-tab-pane :label="$t('projectSettings.tabs.basic')" name="basic">
           <el-form :model="form" label-width="100px" style="max-width: 600px">
-            <el-form-item label="项目标题">
+            <el-form-item :label="$t('projectSettings.form.title')">
               <el-input v-model="form.title" />
             </el-form-item>
-            <el-form-item label="项目描述">
+            <el-form-item :label="$t('projectSettings.form.description')">
               <el-input v-model="form.description" type="textarea" :rows="4" />
             </el-form-item>
-            <el-form-item label="广告主">
+            <el-form-item :label="$t('projectSettings.form.brand')">
               <el-skeleton v-if="brandsLoading" :rows="1" animated />
               <template v-else>
                 <el-select
                   v-model="form.brand_id"
-                  placeholder="请选择广告主（可选）"
+                  :placeholder="$t('projectSettings.form.brandPlaceholder')"
                   clearable
                   @change="handleBrandChange"
                 >
@@ -35,10 +35,10 @@
                 </el-select>
               </template>
             </el-form-item>
-            <el-form-item label="素材规范">
+            <el-form-item :label="$t('projectSettings.form.spec')">
               <el-select
                 v-model="form.spec_id"
-                placeholder="请选择规范模板（可选）"
+                :placeholder="$t('projectSettings.form.specPlaceholder')"
                 clearable
                 :disabled="specs.length === 0"
               >
@@ -50,40 +50,44 @@
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="类型">
+            <el-form-item :label="$t('projectSettings.form.genre')">
               <el-select v-model="form.genre">
-                <el-option label="都市" value="都市" />
-                <el-option label="古装" value="古装" />
-                <el-option label="悬疑" value="悬疑" />
-                <el-option label="爱情" value="爱情" />
-                <el-option label="喜剧" value="喜剧" />
+                <el-option :label="$t('genres.urban')" value="都市" />
+                <el-option :label="$t('genres.costume')" value="古装" />
+                <el-option :label="$t('genres.mystery')" value="悬疑" />
+                <el-option :label="$t('genres.romance')" value="爱情" />
+                <el-option :label="$t('genres.comedy')" value="喜剧" />
               </el-select>
             </el-form-item>
-            <el-form-item label="状态">
+            <el-form-item :label="$t('projectSettings.form.status')">
               <el-select v-model="form.status">
-                <el-option label="草稿" value="draft" />
-                <el-option label="策划中" value="planning" />
-                <el-option label="制作中" value="production" />
-                <el-option label="已完成" value="completed" />
-                <el-option label="已归档" value="archived" />
+                <el-option :label="$t('projectSettings.status.draft')" value="draft" />
+                <el-option :label="$t('projectSettings.status.planning')" value="planning" />
+                <el-option :label="$t('projectSettings.status.production')" value="production" />
+                <el-option :label="$t('projectSettings.status.completed')" value="completed" />
+                <el-option :label="$t('projectSettings.status.archived')" value="archived" />
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="saving" @click="saveSettings">保存设置</el-button>
+              <el-button type="primary" :loading="saving" @click="saveSettings">
+                {{ $t('projectSettings.form.save') }}
+              </el-button>
             </el-form-item>
           </el-form>
         </el-tab-pane>
 
-        <el-tab-pane label="危险操作" name="danger">
+        <el-tab-pane :label="$t('projectSettings.tabs.danger')" name="danger">
           <el-alert
-            title="警告"
+            :title="$t('projectSettings.danger.title')"
             type="warning"
-            description="以下操作不可恢复，请谨慎操作"
+            :description="$t('projectSettings.danger.description')"
             :closable="false"
             show-icon
           />
           <div class="danger-zone">
-            <el-button type="danger" :loading="deleting" @click="deleteProject">删除项目</el-button>
+            <el-button type="danger" :loading="deleting" @click="deleteProject">
+              {{ $t('projectSettings.danger.delete') }}
+            </el-button>
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -101,10 +105,12 @@ import { brandAPI } from '@/api/brand'
 import type { Brand, BrandSpec } from '@/types/brand'
 import { LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
+import { useI18n } from 'vue-i18n'
 
 const route = useRoute()
 const router = useRouter()
 const dramaId = route.params.id as string
+const { t } = useI18n()
 
 const activeTab = ref('basic')
 const pageLoading = ref(false)
@@ -167,7 +173,7 @@ const loadDrama = async (showLoading = true) => {
     applyDramaToForm(drama)
     setCache(getDramaCacheKey(), drama)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || t('common.loadFailed'))
   } finally {
     if (showLoading) {
       stopPageLoading()
@@ -215,10 +221,10 @@ const saveSettings = async () => {
   saving.value = true
   try {
     await dramaAPI.update(dramaId, form)
-    ElMessage.success('设置保存成功')
+    ElMessage.success(t('projectSettings.messages.saveSuccess'))
     setCache(getDramaCacheKey(), { ...form, id: dramaId })
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+    ElMessage.error(error.message || t('common.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -227,22 +233,22 @@ const saveSettings = async () => {
 const deleteProject = async () => {
   try {
     await ElMessageBox.confirm(
-      '确定要删除此项目吗？此操作不可恢复！',
-      '警告',
+      t('projectSettings.messages.deleteConfirm'),
+      t('projectSettings.danger.title'),
       {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
+        confirmButtonText: t('projectSettings.messages.deleteConfirmButton'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning',
       }
     )
     
     deleting.value = true
     await dramaAPI.delete(dramaId)
-    ElMessage.success('项目已删除')
+    ElMessage.success(t('projectSettings.messages.deleteSuccess'))
     router.push('/dramas')
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || t('common.deleteFailed'))
     }
   } finally {
     deleting.value = false

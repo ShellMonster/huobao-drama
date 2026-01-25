@@ -4,7 +4,7 @@
       <!-- Page Header / 页面头部 -->
       <PageHeader
         :title="$t('aiConfig.title')"
-        :subtitle="$t('aiConfig.subtitle') || '管理 AI 服务配置'"
+        :subtitle="$t('aiConfig.subtitle')"
         :show-back="true"
         :back-text="$t('common.back')"
       >
@@ -132,7 +132,7 @@
           </div>
         </el-form-item>
 
-        <el-form-item :label="isJimengProvider ? 'Access Key' : $t('aiConfig.form.apiKey')" prop="api_key">
+        <el-form-item :label="isJimengProvider ? $t('aiConfig.form.accessKey') : $t('aiConfig.form.apiKey')" prop="api_key">
           <el-input 
             v-model="form.api_key" 
             type="password" 
@@ -142,14 +142,14 @@
           <div class="form-tip">{{ $t('aiConfig.form.apiKeyTip') }}</div>
         </el-form-item>
 
-        <el-form-item v-if="isJimengProvider" label="Secret Key" prop="secret_key">
+        <el-form-item v-if="isJimengProvider" :label="$t('aiConfig.form.secretKey')" prop="secret_key">
           <el-input
             v-model="form.secret_key"
             type="password"
             show-password
-            placeholder="请输入 Secret Key"
+            :placeholder="$t('aiConfig.form.secretKeyPlaceholder')"
           />
-          <div class="form-tip">即梦视频需要 Access Key + Secret Key 才能调用</div>
+          <div class="form-tip">{{ $t('aiConfig.form.secretKeyTip') }}</div>
         </el-form-item>
 
         <el-form-item v-if="isEdit" :label="$t('aiConfig.form.isActive')">
@@ -179,8 +179,10 @@ import { PageHeader } from '@/components/common'
 import type { AIServiceConfig, AIServiceType, CreateAIConfigRequest, UpdateAIConfigRequest } from '@/types/ai'
 import ConfigList from './components/ConfigList.vue'
 import { getAIConfigCache, setAIConfigCache } from '@/utils/aiConfigCache'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const activeTab = ref<AIServiceType>('text')
 const loading = ref(false)
@@ -239,7 +241,7 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
   image: [
     { 
       id: 'volcengine', 
-      name: '火山引擎', 
+      name: 'Volcengine', 
       models: [
         'doubao-seedream-4-5-251128',
         'doubao-seedream-4-0-250828',
@@ -265,7 +267,7 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
   video: [
     { 
       id: 'volces', 
-      name: '火山引擎', 
+      name: 'Volcengine', 
       models: [
         'doubao-seedance-1-5-pro-251215',
         'doubao-seedance-1-0-lite-i2v-250428',
@@ -276,7 +278,7 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
     },
     {
       id: 'jimeng',
-      name: '即梦',
+      name: 'Jimeng',
       models: [
         'jimeng_ti2v_v30_pro',
         'jimeng_i2v_first_v30',
@@ -286,7 +288,7 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
     },
     {
       id: 'kling',
-      name: '可灵',
+      name: 'Kling',
       models: [
         'kling-video-o1',
         'kling-v1',
@@ -399,23 +401,23 @@ const fullEndpointExample = computed(() => {
 
 const rules: FormRules = {
   name: [
-    { required: true, message: '请输入配置名称', trigger: 'blur' }
+    { required: true, message: t('aiConfig.validation.nameRequired'), trigger: 'blur' }
   ],
   provider: [
-    { required: true, message: '请选择厂商', trigger: 'change' }
+    { required: true, message: t('aiConfig.validation.providerRequired'), trigger: 'change' }
   ],
   base_url: [
-    { required: true, message: '请输入 Base URL', trigger: 'blur' },
-    { type: 'url', message: '请输入正确的 URL 格式', trigger: 'blur' }
+    { required: true, message: t('aiConfig.validation.baseUrlRequired'), trigger: 'blur' },
+    { type: 'url', message: t('aiConfig.validation.baseUrlInvalid'), trigger: 'blur' }
   ],
   api_key: [
-    { required: true, message: '请输入 API Key', trigger: 'blur' }
+    { required: true, message: t('aiConfig.validation.apiKeyRequired'), trigger: 'blur' }
   ],
   secret_key: [
     {
       validator: (rule: any, value: any, callback: any) => {
         if (isJimengProvider.value && !value) {
-          callback(new Error('请输入 Secret Key'))
+          callback(new Error(t('aiConfig.validation.secretKeyRequired')))
           return
         }
         callback()
@@ -426,7 +428,7 @@ const rules: FormRules = {
   model: [
     { 
       required: true, 
-      message: '请至少选择一个模型', 
+      message: t('aiConfig.validation.modelRequired'), 
       trigger: 'change',
       validator: (rule: any, value: any, callback: any) => {
         if (Array.isArray(value) && value.length > 0) {
@@ -434,7 +436,7 @@ const rules: FormRules = {
         } else if (typeof value === 'string' && value.length > 0) {
           callback()
         } else {
-          callback(new Error('请至少选择一个模型'))
+          callback(new Error(t('aiConfig.validation.modelRequired')))
         }
       }
     }
@@ -485,7 +487,7 @@ const loadConfigs = async (options: { useCache?: boolean; showLoading?: boolean;
     configs.value = data
     setAIConfigCache(serviceType, data)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElMessage.error(error.message || t('common.loadFailed'))
   } finally {
     stopLoading()
   }
@@ -498,15 +500,15 @@ const generateConfigName = (provider: string, serviceType: AIServiceType): strin
     'openai': 'OpenAI',
     'gemini': 'Gemini',
     'google': 'Google',
-    'jimeng': '即梦',
-    'kling': '可灵',
+    'jimeng': t('aiConfig.providers.jimeng'),
+    'kling': t('aiConfig.providers.kling'),
     'minimax': 'MiniMax'
   }
   
   const serviceNames: Record<AIServiceType, string> = {
-    'text': '文本',
-    'image': '图片',
-    'video': '视频'
+    'text': t('aiConfig.serviceTypes.text'),
+    'image': t('aiConfig.serviceTypes.image'),
+    'video': t('aiConfig.serviceTypes.video')
   }
   
   const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
@@ -563,18 +565,18 @@ const handleEdit = (config: AIServiceConfig) => {
 
 const handleDelete = async (config: AIServiceConfig) => {
   try {
-    await ElMessageBox.confirm('确定要删除该配置吗？', '警告', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('aiConfig.messages.deleteConfirm'), t('aiConfig.messages.deleteConfirmTitle'), {
+      confirmButtonText: t('common.confirm'),
+      cancelButtonText: t('common.cancel'),
       type: 'warning'
     })
     
     await aiAPI.delete(config.id)
-    ElMessage.success('删除成功')
+    ElMessage.success(t('common.deleteSuccess'))
     loadConfigs({ useCache: false })
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || t('common.deleteFailed'))
     }
   }
 }
@@ -583,10 +585,10 @@ const handleToggleActive = async (config: AIServiceConfig) => {
   try {
     const newActiveState = !config.is_active
     await aiAPI.update(config.id, { is_active: newActiveState })
-    ElMessage.success(newActiveState ? '已启用配置' : '已禁用配置')
+    ElMessage.success(newActiveState ? t('aiConfig.messages.enabled') : t('aiConfig.messages.disabled'))
     await loadConfigs({ useCache: false })
   } catch (error: any) {
-    ElMessage.error(error.message || '操作失败')
+    ElMessage.error(error.message || t('message.operationFailed'))
   }
 }
 
@@ -604,9 +606,9 @@ const testConnection = async () => {
       model: form.model,
       provider: form.provider
     })
-    ElMessage.success('连接测试成功！')
+    ElMessage.success(t('aiConfig.messages.testSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '连接测试失败')
+    ElMessage.error(error.message || t('aiConfig.messages.testFailed'))
   } finally {
     testing.value = false
   }
@@ -621,9 +623,9 @@ const handleTest = async (config: AIServiceConfig) => {
       model: config.model,
       provider: config.provider
     })
-    ElMessage.success('连接测试成功！')
+    ElMessage.success(t('aiConfig.messages.testSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '连接测试失败')
+    ElMessage.error(error.message || t('aiConfig.messages.testFailed'))
   } finally {
     testing.value = false
   }
@@ -657,7 +659,7 @@ const handleSubmit = async () => {
           updateData.settings = settings
         }
         await aiAPI.update(editingId.value, updateData)
-        ElMessage.success('更新成功')
+        ElMessage.success(t('message.updateSuccess'))
       } else {
         const createData: CreateAIConfigRequest = {
           service_type: form.service_type,
@@ -670,13 +672,13 @@ const handleSubmit = async () => {
           settings: settings || undefined
         }
         await aiAPI.create(createData)
-        ElMessage.success('创建成功')
+        ElMessage.success(t('message.createSuccess'))
       }
       
       dialogVisible.value = false
       loadConfigs({ useCache: false })
     } catch (error: any) {
-      ElMessage.error(error.message || '操作失败')
+      ElMessage.error(error.message || t('message.operationFailed'))
     } finally {
       submitting.value = false
     }

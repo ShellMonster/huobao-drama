@@ -1,17 +1,17 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="AI 视频生成"
+    :title="$t('video.title')"
     width="700px"
     :close-on-click-modal="false"
     @close="handleClose"
   >
-    <LoadingSection :loading="dataLoading" text="加载中...">
+    <LoadingSection :loading="dataLoading" :text="$t('common.loading')">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
-        <el-form-item label="选择剧本" prop="drama_id">
+        <el-form-item :label="$t('video.dialog.form.drama')" prop="drama_id">
           <el-select
             v-model="form.drama_id"
-            placeholder="选择剧本"
+            :placeholder="$t('video.dialog.form.dramaPlaceholder')"
             :disabled="isDramaLocked"
             @change="onDramaChange"
           >
@@ -24,10 +24,10 @@
           </el-select>
         </el-form-item>
 
-      <el-form-item label="选择图片" prop="image_gen_id">
+      <el-form-item :label="$t('video.dialog.form.image')" prop="image_gen_id">
         <el-select
           v-model="form.image_gen_id"
-          placeholder="选择已生成的图片"
+          :placeholder="$t('video.dialog.form.imagePlaceholder')"
           clearable
           @change="onImageChange"
         >
@@ -43,37 +43,37 @@
             </div>
           </el-option>
         </el-select>
-        <div class="form-tip">或直接输入图片 URL</div>
+        <div class="form-tip">{{ $t('video.dialog.form.imageUrlTip') }}</div>
       </el-form-item>
 
-      <el-form-item label="图片 URL" prop="image_url">
+      <el-form-item :label="$t('video.dialog.form.imageUrl')" prop="image_url">
         <el-input
           v-model="form.image_url"
-          placeholder="https://example.com/image.jpg"
+          :placeholder="$t('video.dialog.form.imageUrlPlaceholder')"
           :disabled="!!form.image_gen_id"
         />
       </el-form-item>
 
-      <el-form-item label="视频提示词" prop="prompt">
+      <el-form-item :label="$t('video.dialog.form.prompt')" prop="prompt">
         <el-input
           v-model="form.prompt"
           type="textarea"
           :rows="5"
-          placeholder="描述视频中的动作和运镜&#10;例如：Camera slowly zooms in, wind blowing through hair, cinematic lighting"
+          :placeholder="$t('video.dialog.form.promptPlaceholder')"
           maxlength="2000"
           show-word-limit
         />
       </el-form-item>
 
-      <el-form-item label="AI 服务">
-        <el-select v-model="form.provider" placeholder="选择服务">
-          <el-option label="豆包视频" value="doubao" />
-          <el-option label="Runway" value="runway" />
-          <el-option label="Pika" value="pika" />
+      <el-form-item :label="$t('video.dialog.form.service')">
+        <el-select v-model="form.provider" :placeholder="$t('video.dialog.form.servicePlaceholder')">
+          <el-option :label="$t('video.dialog.providers.doubao')" value="doubao" />
+          <el-option :label="$t('video.dialog.providers.runway')" value="runway" />
+          <el-option :label="$t('video.dialog.providers.pika')" value="pika" />
         </el-select>
       </el-form-item>
 
-      <el-form-item label="视频时长">
+      <el-form-item :label="$t('video.dialog.form.duration')">
         <el-slider
           v-model="form.duration"
           :min="3"
@@ -81,20 +81,20 @@
           :marks="durationMarks"
           show-stops
         />
-        <span class="slider-value">{{ form.duration }} 秒</span>
+        <span class="slider-value">{{ $t('common.seconds', { value: form.duration }) }}</span>
       </el-form-item>
 
-      <el-form-item label="宽高比">
+      <el-form-item :label="$t('video.dialog.form.aspectRatio')">
         <el-radio-group v-model="form.aspect_ratio">
-          <el-radio label="16:9">16:9 (横屏)</el-radio>
-          <el-radio label="9:16">9:16 (竖屏)</el-radio>
-          <el-radio label="1:1">1:1 (方形)</el-radio>
+          <el-radio label="16:9">{{ $t('video.dialog.aspectRatioOptions.wide') }}</el-radio>
+          <el-radio label="9:16">{{ $t('video.dialog.aspectRatioOptions.tall') }}</el-radio>
+          <el-radio label="1:1">{{ $t('video.dialog.aspectRatioOptions.square') }}</el-radio>
         </el-radio-group>
       </el-form-item>
 
       <el-collapse>
-        <el-collapse-item title="高级设置" name="advanced">
-          <el-form-item label="运动强度">
+        <el-collapse-item :title="$t('video.dialog.form.advanced')" name="advanced">
+          <el-form-item :label="$t('video.dialog.form.motionIntensity')">
             <el-slider
               v-model="form.motion_level"
               :min="0"
@@ -104,26 +104,26 @@
             <span class="slider-value">{{ form.motion_level }}</span>
           </el-form-item>
 
-          <el-form-item label="镜头运动">
-            <el-select v-model="form.camera_motion" placeholder="选择镜头运动" clearable>
-              <el-option label="静止" value="static" />
-              <el-option label="推进 (Zoom In)" value="zoom_in" />
-              <el-option label="拉远 (Zoom Out)" value="zoom_out" />
-              <el-option label="左移 (Pan Left)" value="pan_left" />
-              <el-option label="右移 (Pan Right)" value="pan_right" />
-              <el-option label="上移 (Tilt Up)" value="tilt_up" />
-              <el-option label="下移 (Tilt Down)" value="tilt_down" />
-              <el-option label="环绕 (Orbit)" value="orbit" />
+          <el-form-item :label="$t('video.dialog.form.cameraMotion')">
+            <el-select v-model="form.camera_motion" :placeholder="$t('video.dialog.form.cameraMotionPlaceholder')" clearable>
+              <el-option :label="$t('video.dialog.cameraMotionOptions.static')" value="static" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.zoomIn')" value="zoom_in" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.zoomOut')" value="zoom_out" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.panLeft')" value="pan_left" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.panRight')" value="pan_right" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.tiltUp')" value="tilt_up" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.tiltDown')" value="tilt_down" />
+              <el-option :label="$t('video.dialog.cameraMotionOptions.orbit')" value="orbit" />
             </el-select>
           </el-form-item>
 
-          <el-form-item label="风格" v-if="form.provider === 'doubao'">
-            <el-input v-model="form.style" placeholder="例如：电影级、动画风格" />
+          <el-form-item :label="$t('video.dialog.form.style')" v-if="form.provider === 'doubao'">
+            <el-input v-model="form.style" :placeholder="$t('video.dialog.form.stylePlaceholder')" />
           </el-form-item>
 
-          <el-form-item label="随机种子">
-            <el-input-number v-model="form.seed" :min="-1" placeholder="留空随机" />
-            <span class="form-tip">设置相同种子可复现视频</span>
+          <el-form-item :label="$t('video.dialog.form.seed')">
+            <el-input-number v-model="form.seed" :min="-1" :placeholder="$t('video.dialog.form.seedPlaceholder')" />
+            <span class="form-tip">{{ $t('video.dialog.form.seedTip') }}</span>
           </el-form-item>
         </el-collapse-item>
         </el-collapse>
@@ -131,9 +131,9 @@
     </LoadingSection>
 
     <template #footer>
-      <el-button @click="handleClose">取消</el-button>
+      <el-button @click="handleClose">{{ $t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="generating" @click="handleGenerate">
-        生成视频
+        {{ $t('video.generate') }}
       </el-button>
     </template>
   </el-dialog>
@@ -142,6 +142,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { videoAPI } from '@/api/video'
 import { imageAPI } from '@/api/image'
 import { dramaAPI } from '@/api/drama'
@@ -160,6 +161,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   success: []
 }>()
+
+const { t } = useI18n()
 
 const visible = computed({
   get: () => props.modelValue,
@@ -189,15 +192,15 @@ const form = reactive<GenerateVideoRequest & { image_gen_id?: number }>({
   seed: undefined
 })
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   drama_id: [
-    { required: true, message: '请选择剧本', trigger: 'change' }
+    { required: true, message: t('video.dialog.validation.dramaRequired'), trigger: 'change' }
   ],
   prompt: [
-    { required: true, message: '请输入视频提示词', trigger: 'blur' },
-    { min: 5, message: '提示词至少5个字符', trigger: 'blur' }
+    { required: true, message: t('video.dialog.validation.promptRequired'), trigger: 'blur' },
+    { min: 5, message: t('video.dialog.validation.promptMin'), trigger: 'blur' }
   ]
-}
+}))
 
 const durationMarks = {
   3: '3s',
@@ -206,11 +209,11 @@ const durationMarks = {
   10: '10s'
 }
 
-const motionMarks = {
-  0: '静态',
-  50: '适中',
-  100: '剧烈'
-}
+const motionMarks = computed(() => ({
+  0: t('video.dialog.motionMarks.static'),
+  50: t('video.dialog.motionMarks.medium'),
+  100: t('video.dialog.motionMarks.intense')
+}))
 
 watch(() => props.modelValue, (val) => {
   if (val) {
@@ -283,7 +286,7 @@ const handleGenerate = async () => {
   
   if (!formRef.value) {
     console.error('formRef is null')
-    ElMessage.error('表单初始化失败，请刷新页面重试')
+    ElMessage.error(t('video.dialog.messages.formInitFailed'))
     return
   }
 
@@ -330,18 +333,18 @@ const handleGenerate = async () => {
         await videoAPI.generateVideo(params)
       }
       
-      ElMessage.success('视频生成任务已提交，请稍后查看结果')
+      ElMessage.success(t('video.dialog.messages.generateSubmitted'))
       emit('success')
       handleClose()
     } catch (error: any) {
       console.error('Video generation failed:', error)
-      ElMessage.error(error.response?.data?.message || error.message || '生成失败')
+      ElMessage.error(error.response?.data?.message || error.message || t('common.generateFailed'))
     } finally {
       generating.value = false
     }
   } catch (error: any) {
     console.error('Form validation error:', error)
-    ElMessage.warning('请检查表单填写是否完整')
+    ElMessage.warning(t('video.dialog.messages.formIncomplete'))
   }
 }
 

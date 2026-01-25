@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="视频详情"
+    :title="$t('video.detail.title')"
     width="1000px"
     @close="handleClose"
   >
@@ -18,24 +18,24 @@
               loop
               :poster="video.first_frame_url"
             >
-              您的浏览器不支持视频播放
+              {{ $t('video.messages.browserNotSupported') }}
             </video>
 
             <div v-else-if="video.status === 'processing'" class="video-status">
               <el-icon class="loading-icon"><Loading /></el-icon>
-              <span>生成中，请稍候...</span>
-              <div class="status-message">预计需要 1-3 分钟</div>
+              <span>{{ $t('video.detail.processing') }}</span>
+              <div class="status-message">{{ $t('video.messages.processingEta') }}</div>
             </div>
 
             <div v-else-if="video.status === 'failed'" class="video-status error">
               <el-icon><CircleClose /></el-icon>
-              <span>生成失败</span>
+              <span>{{ $t('common.generateFailed') }}</span>
               <div class="error-message">{{ video.error_msg }}</div>
             </div>
 
             <div v-else class="video-status">
               <el-icon><VideoCamera /></el-icon>
-              <span>等待生成</span>
+              <span>{{ $t('video.messages.waiting') }}</span>
             </div>
           </div>
         </el-col>
@@ -43,57 +43,57 @@
         <el-col :span="8">
           <div class="video-info">
             <el-descriptions :column="1" border>
-              <el-descriptions-item label="状态">
+              <el-descriptions-item :label="$t('video.detail.labels.status')">
                 <el-tag :type="getStatusType(video.status)">
                   {{ getStatusText(video.status) }}
                 </el-tag>
               </el-descriptions-item>
 
-              <el-descriptions-item label="AI 服务">
+              <el-descriptions-item :label="$t('video.detail.labels.aiService')">
                 {{ video.provider }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="模型" v-if="video.model">
+              <el-descriptions-item :label="$t('video.detail.labels.model')" v-if="video.model">
                 {{ video.model }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="时长" v-if="video.duration">
-                {{ video.duration }} 秒
+              <el-descriptions-item :label="$t('video.detail.labels.duration')" v-if="video.duration">
+                {{ $t('common.seconds', { value: video.duration }) }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="宽高比" v-if="video.aspect_ratio">
+              <el-descriptions-item :label="$t('video.detail.labels.aspectRatio')" v-if="video.aspect_ratio">
                 {{ video.aspect_ratio }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="分辨率" v-if="video.width && video.height">
+              <el-descriptions-item :label="$t('video.detail.labels.resolution')" v-if="video.width && video.height">
                 {{ video.width }} × {{ video.height }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="FPS" v-if="video.fps">
+              <el-descriptions-item :label="$t('video.detail.labels.fps')" v-if="video.fps">
                 {{ video.fps }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="运动强度" v-if="video.motion_level !== undefined">
+              <el-descriptions-item :label="$t('video.detail.labels.motionLevel')" v-if="video.motion_level !== undefined">
                 {{ video.motion_level }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="镜头运动" v-if="video.camera_motion">
+              <el-descriptions-item :label="$t('video.detail.labels.cameraMotion')" v-if="video.camera_motion">
                 {{ getCameraMotionText(video.camera_motion) }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="风格" v-if="video.style">
+              <el-descriptions-item :label="$t('video.detail.labels.style')" v-if="video.style">
                 {{ video.style }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="随机种子" v-if="video.seed">
+              <el-descriptions-item :label="$t('video.detail.labels.seed')" v-if="video.seed">
                 {{ video.seed }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="创建时间">
+              <el-descriptions-item :label="$t('video.detail.labels.createdAt')">
                 {{ formatDateTime(video.created_at) }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="完成时间" v-if="video.completed_at">
+              <el-descriptions-item :label="$t('video.detail.labels.completedAt')" v-if="video.completed_at">
                 {{ formatDateTime(video.completed_at) }}
               </el-descriptions-item>
             </el-descriptions>
@@ -101,12 +101,12 @@
             <el-divider />
 
             <div class="prompt-section">
-              <h4>视频提示词</h4>
+              <h4>{{ $t('video.detail.prompt') }}</h4>
               <div class="prompt-text">{{ video.prompt }}</div>
             </div>
 
             <div v-if="video.image_url" class="image-section">
-              <h4>源图片</h4>
+              <h4>{{ $t('video.detail.sourceImage') }}</h4>
               <el-image
                 :src="video.image_url"
                 fit="contain"
@@ -120,14 +120,14 @@
     </div>
 
     <template #footer>
-      <el-button @click="handleClose">关闭</el-button>
+      <el-button @click="handleClose">{{ $t('common.close') }}</el-button>
       <el-button
         v-if="video?.status === 'completed' && video?.video_url"
         type="primary"
         @click="downloadVideo"
       >
         <el-icon><Download /></el-icon>
-        下载视频
+        {{ $t('video.detail.download') }}
       </el-button>
       <el-button
         v-if="video?.status === 'completed'"
@@ -135,7 +135,7 @@
         @click="regenerate"
       >
         <el-icon><Refresh /></el-icon>
-        重新生成
+        {{ $t('common.regenerate') }}
       </el-button>
     </template>
   </el-dialog>
@@ -143,13 +143,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElMessage } from 'element-plus'
 import {
   VideoCamera, Loading, CircleClose,
   Download, Refresh
 } from '@element-plus/icons-vue'
 import type { VideoGeneration, VideoStatus } from '@/types/video'
 import { CAMERA_MOTIONS } from '@/types/video'
+import { formatDateTime } from '@/utils/date'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   modelValue: boolean
@@ -167,6 +168,8 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+const { t } = useI18n()
+
 const getStatusType = (status: VideoStatus) => {
   const types: Record<VideoStatus, any> = {
     pending: 'info',
@@ -179,21 +182,21 @@ const getStatusType = (status: VideoStatus) => {
 
 const getStatusText = (status: VideoStatus) => {
   const texts: Record<VideoStatus, string> = {
-    pending: '等待中',
-    processing: '生成中',
-    completed: '已完成',
-    failed: '失败'
+    pending: t('common.statusText.pending'),
+    processing: t('common.statusText.processing'),
+    completed: t('common.statusText.completed'),
+    failed: t('common.statusText.failed')
   }
   return texts[status]
 }
 
 const getCameraMotionText = (motion: string) => {
   const item = CAMERA_MOTIONS.find(m => m.value === motion)
-  return item ? item.label : motion
-}
-
-const formatDateTime = (dateString: string) => {
-  return new Date(dateString).toLocaleString('zh-CN')
+  if (!item) return motion
+  if ('labelKey' in item && item.labelKey) {
+    return t(item.labelKey)
+  }
+  return item.label
 }
 
 const downloadVideo = () => {

@@ -1,18 +1,20 @@
 <template>
   <div class="script-edit-container">
-    <el-page-header @back="goBack" title="返回">
+    <el-page-header @back="goBack" :title="$t('script.back')">
       <template #content>
-        <h2>剧本编辑</h2>
+        <h2>{{ $t('script.title') }}</h2>
       </template>
     </el-page-header>
-    <p>功能开发中...</p>
+    <p>{{ $t('script.inDevelopment') }}</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { t } = useI18n()
 
 const goBack = () => {
   router.back()

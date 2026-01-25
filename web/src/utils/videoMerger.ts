@@ -1,5 +1,6 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
+import i18n from '@/locales'
 
 export interface VideoClip {
   url: string
@@ -22,6 +23,8 @@ export interface MergeProgress {
   message: string
 }
 
+const t = (key: string, params?: Record<string, any>) => i18n.global.t(key, params)
+
 class VideoMerger {
   private ffmpeg: FFmpeg
   private loaded: boolean = false
@@ -39,7 +42,7 @@ class VideoMerger {
     this.onProgress?.({
       phase: 'loading',
       progress: 0,
-      message: '正在加载FFmpeg引擎（首次需要下载约30MB）...'
+      message: t('video.mergeProgress.loadingEngine')
     })
 
     // CDN列表（优先使用国内CDN）
@@ -54,11 +57,11 @@ class VideoMerger {
       console.log('[FFmpeg]', message)
     })
 
-    this.ffmpeg.on('progress', ({ progress, time }) => {
+    this.ffmpeg.on('progress', ({ progress }) => {
       this.onProgress?.({
         phase: 'encoding',
         progress: Math.round(progress * 100),
-        message: `正在合并视频... ${Math.round(progress * 100)}%`
+        message: t('video.mergeProgress.mergingProgress', { progress: Math.round(progress * 100) })
       })
     })
 
@@ -71,7 +74,7 @@ class VideoMerger {
         this.onProgress?.({
           phase: 'loading',
           progress: (i / cdnList.length) * 50,
-          message: `正在从CDN ${i + 1}/${cdnList.length} 加载FFmpeg...`
+          message: t('video.mergeProgress.loadingFromCdn', { current: i + 1, total: cdnList.length })
         })
 
         // 添加超时控制
@@ -81,7 +84,7 @@ class VideoMerger {
         })
 
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('加载超时')), 60000) // 60秒超时
+          setTimeout(() => reject(new Error(t('video.mergeErrors.loadTimeout'))), 60000) // 60秒超时
         })
 
         await Promise.race([loadPromise, timeoutPromise])
@@ -92,7 +95,7 @@ class VideoMerger {
         this.onProgress?.({
           phase: 'loading',
           progress: 100,
-          message: 'FFmpeg加载完成'
+          message: t('video.mergeProgress.loadingComplete')
         })
         
         return
@@ -104,14 +107,14 @@ class VideoMerger {
           this.onProgress?.({
             phase: 'loading',
             progress: ((i + 1) / cdnList.length) * 50,
-            message: `CDN ${i + 1} 失败，尝试备用源...`
+            message: t('video.mergeProgress.fallbackCdn', { current: i + 1, total: cdnList.length })
           })
         }
       }
     }
 
     // 所有CDN都失败
-    throw new Error(`FFmpeg加载失败: ${lastError?.message || '未知错误'}。请检查网络连接或稍后重试。`)
+    throw new Error(t('video.mergeErrors.loadFailed', { error: lastError?.message || t('video.mergeErrors.unknown') }))
   }
 
   async mergeVideos(clips: VideoClip[]): Promise<Blob> {
@@ -120,20 +123,20 @@ class VideoMerger {
     }
 
     if (clips.length === 0) {
-      throw new Error('没有视频片段')
+      throw new Error(t('video.mergeErrors.noClips'))
     }
 
     this.onProgress?.({
       phase: 'processing',
       progress: 0,
-      message: '正在下载视频片段...'
+      message: t('video.mergeProgress.downloading')
     })
 
     // 并行下载所有视频文件
     this.onProgress?.({
       phase: 'processing',
       progress: 0,
-      message: `正在下载 ${clips.length} 个视频片段...`
+      message: t('video.mergeProgress.downloadingCount', { count: clips.length })
     })
 
     const downloadPromises = clips.map((clip, i) => 
@@ -145,7 +148,7 @@ class VideoMerger {
     this.onProgress?.({
       phase: 'processing',
       progress: 30,
-      message: '下载完成，正在处理视频...'
+      message: t('video.mergeProgress.downloaded')
     })
 
     // 写入文件系统并处理
@@ -164,7 +167,7 @@ class VideoMerger {
         this.onProgress?.({
           phase: 'processing',
           progress: Math.round(30 + (i / clips.length) * 20),
-          message: `正在裁剪视频片段 ${i + 1}/${clips.length}...`
+          message: t('video.mergeProgress.trimming', { current: i + 1, total: clips.length })
         })
 
         await this.ffmpeg.exec([
@@ -185,7 +188,7 @@ class VideoMerger {
     this.onProgress?.({
       phase: 'processing',
       progress: 50,
-      message: '正在准备合并...'
+      message: t('video.mergeProgress.preparing')
     })
 
     // 检查是否有转场效果
@@ -199,7 +202,7 @@ class VideoMerger {
       this.onProgress?.({
         phase: 'encoding',
         progress: 0,
-        message: '正在合并视频...'
+        message: t('video.mergeProgress.merging')
       })
 
       await this.ffmpeg.exec([
@@ -215,7 +218,7 @@ class VideoMerger {
       this.onProgress?.({
         phase: 'encoding',
         progress: 0,
-        message: '正在添加转场效果并合并视频（这需要较长时间）...'
+        message: t('video.mergeProgress.mergingWithTransitions')
       })
 
       await this.mergeWithTransitions(inputFiles, clips)
@@ -224,7 +227,7 @@ class VideoMerger {
     this.onProgress?.({
       phase: 'completed',
       progress: 90,
-      message: '正在生成最终文件...'
+      message: t('video.mergeProgress.finalizing')
     })
 
     // 读取输出文件
@@ -241,7 +244,7 @@ class VideoMerger {
     this.onProgress?.({
       phase: 'completed',
       progress: 100,
-      message: '合并完成！'
+      message: t('video.mergeProgress.completed')
     })
 
     return blob

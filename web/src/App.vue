@@ -1,18 +1,24 @@
 <template>
-  <SideNavLayout v-if="showSideNav">
-    <router-view />
-  </SideNavLayout>
-  <router-view v-else />
+  <el-config-provider :locale="elementLocale">
+    <SideNavLayout v-if="showSideNav">
+      <router-view />
+    </SideNavLayout>
+    <router-view v-else />
+  </el-config-provider>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { SideNavLayout } from '@/components/common'
 import { disableWorkspace, getWorkspaceDramaId, isWorkspaceActive } from '@/utils/workspace'
+import { getElementLocale } from '@/locales/element'
 
 const route = useRoute()
 const workspaceActive = ref(isWorkspaceActive())
+const { locale } = useI18n()
+const elementLocale = computed(() => getElementLocale(locale.value))
 
 watch(
   () => route.fullPath,

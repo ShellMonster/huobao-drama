@@ -30,12 +30,12 @@
             />
           </el-form-item>
 
-          <el-form-item label="广告主" prop="brand_id">
+          <el-form-item :label="$t('drama.form.brandLabel')" prop="brand_id">
             <el-skeleton v-if="brandsLoading" :rows="1" animated />
             <template v-else>
               <el-select
                 v-model="form.brand_id"
-                placeholder="请选择广告主（可选）"
+                :placeholder="$t('drama.form.brandPlaceholder')"
                 size="large"
                 clearable
                 @change="handleBrandChange"
@@ -50,10 +50,10 @@
             </template>
           </el-form-item>
 
-          <el-form-item label="素材规范" prop="spec_id">
+          <el-form-item :label="$t('drama.form.specLabel')" prop="spec_id">
             <el-select
               v-model="form.spec_id"
-              placeholder="请选择规范模板（可选）"
+              :placeholder="$t('drama.form.specPlaceholder')"
               size="large"
               clearable
               :disabled="specs.length === 0"
@@ -81,11 +81,11 @@
         </div>
 
         <div class="form-right">
-          <el-form-item label="项目风格" prop="style" class="style-form-item">
+          <el-form-item :label="$t('drama.form.styleLabel')" prop="style" class="style-form-item">
             <el-skeleton v-if="stylesLoading" :rows="3" animated />
             <template v-else>
               <StylePicker v-if="styles.length > 0" v-model="form.style" :styles="styles" :columns="6" />
-              <div v-else class="style-empty">暂无可用风格</div>
+              <div v-else class="style-empty">{{ $t('drama.form.styleEmpty') }}</div>
             </template>
           </el-form-item>
         </div>
@@ -117,6 +117,7 @@ import { ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { dramaAPI } from '@/api/drama'
 import { brandAPI } from '@/api/brand'
 import type { CreateDramaRequest } from '@/types/drama'
@@ -139,6 +140,7 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const { t } = useI18n()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const stylesLoading = ref(false)
@@ -168,8 +170,8 @@ const form = reactive<CreateDramaRequest>({
 // Validation rules / 验证规则
 const rules: FormRules = {
   title: [
-    { required: true, message: '请输入项目标题', trigger: 'blur' },
-    { min: 1, max: 100, message: '标题长度在 1 到 100 个字符', trigger: 'blur' }
+    { required: true, message: t('drama.form.titleRequired'), trigger: 'blur' },
+    { min: 1, max: 100, message: t('drama.form.titleLength'), trigger: 'blur' }
   ]
 }
 
@@ -250,13 +252,13 @@ const handleSubmit = async () => {
       loading.value = true
       try {
         const drama = await dramaAPI.create(form)
-        ElMessage.success('创建成功')
+        ElMessage.success(t('drama.createSuccess'))
         visible.value = false
         emit('created', drama.id)
         // Navigate to drama detail page / 跳转到短剧详情页
         router.push(`/dramas/${drama.id}`)
       } catch (error: any) {
-        ElMessage.error(error.message || '创建失败')
+        ElMessage.error(error.message || t('drama.createFailed'))
       } finally {
         loading.value = false
       }

@@ -6,7 +6,10 @@ export default {
     videos: '视频管理',
     assets: '资源库',
     settings: '设置',
-    dramas: '短剧项目'
+    dramas: '短剧项目',
+    projectManagement: '项目管理',
+    styleManagement: '风格管理',
+    brandManagement: '品牌管理'
   },
   dashboard: {
     title: '🎬 Drama Generator',
@@ -50,9 +53,11 @@ export default {
     pleaseSelect: '请选择',
     add: '添加',
     view: '查看',
+    notAvailable: '暂无',
     upload: '上传',
     download: '下载',
     generating: '生成中...',
+    generateImage: '生成图片',
     notGenerated: '未生成',
     generateFailed: '生成失败',
     clickToRegenerate: '点击重新生成',
@@ -69,9 +74,36 @@ export default {
     tip: '提示',
     status: '状态',
     description: '描述',
+    noDescription: '暂无描述',
     createdAt: '创建时间',
     updatedAt: '更新时间',
-    perPage: '每页'
+    completedAt: '完成时间',
+    perPage: '每页',
+    listSeparator: '、',
+    seconds: '{value} 秒',
+    regenerate: '重新生成',
+    unknownError: '未知错误',
+    unselected: '未选择',
+    requestFailed: '请求失败',
+    saveFailed: '保存失败',
+    deleteFailed: '删除失败',
+    loadFailed: '加载失败',
+    saveSuccess: '保存成功',
+    deleteSuccess: '删除成功',
+    switchToLight: '切换到浅色模式',
+    switchToDark: '切换到深色模式',
+    time: {
+      justNow: '刚刚',
+      minutesAgo: '{count}分钟前',
+      hoursAgo: '{count}小时前',
+      daysAgo: '{count}天前'
+    },
+    statusText: {
+      pending: '等待中',
+      processing: '处理中',
+      completed: '已完成',
+      failed: '失败'
+    }
   },
   settings: {
     title: '设置',
@@ -79,13 +111,25 @@ export default {
     general: '通用设置',
     systemLanguage: '系统语言',
     currentLanguage: '当前语言',
+    languages: {
+      zh: '简体中文',
+      en: 'English',
+      ja: '日本語',
+      ko: '한국어'
+    },
     languageSwitchNotice: '语言切换提醒',
     languageSwitchDesc: '切换系统语言后，以下内容将受到影响：',
     languageSwitchItem1: '后端生成的所有提示词（分镜描述、角色描述、场景描述等）将使用所选语言',
     languageSwitchItem2: '与AI模型的对话将使用所选语言',
     languageSwitchItem3: '已生成的内容不会自动更新，需要重新生成',
     language: '语言',
-    theme: '主题'
+    theme: '主题',
+    switching: '正在切换语言...',
+    loadFailed: '获取语言设置失败',
+    switchConfirmTitle: '切换语言',
+    switchConfirmMessage: '切换为{language}后，后端生成的所有提示词、角色描述、场景描述等都将使用{language}。是否继续？',
+    switchSuccess: '语言已切换为{language}',
+    switchFailed: '切换语言失败: {error}'
   },
   aiConfig: {
     title: 'AI 服务配置',
@@ -94,6 +138,17 @@ export default {
     editConfig: '编辑配置',
     back: '返回',
     empty: '暂无配置，点击添加配置开始使用',
+    quickSetupAction: '一键配置火宝',
+    quickSetupTitle: '一键配置',
+    quickSetupIntro: '将自动创建以下配置：',
+    quickSetupBaseUrl: 'Base URL: {url}',
+    quickSetupApiKeyPlaceholder: '请输入 ChatFire API Key',
+    quickSetupRegister: '没有 API Key？点击注册',
+    quickSetupConfirm: '确认配置',
+    quickSetupResultPartial: '已创建 {created} 配置，{skipped} 配置已存在',
+    quickSetupResultCreated: '一键配置成功！已创建 {created} 服务配置',
+    quickSetupResultExists: '所有配置已存在，无需重复创建',
+    quickSetupFailed: '配置失败',
     enabled: '已启用',
     disabled: '已禁用',
     enable: '启用',
@@ -104,6 +159,21 @@ export default {
       text: '文本生成',
       image: '图片生成',
       video: '视频生成'
+    },
+    providers: {
+      openai: 'OpenAI',
+      chatfire: 'ChatFire',
+      gemini: 'Gemini',
+      google: 'Google',
+      volcengine: '火山引擎',
+      jimeng: '即梦',
+      kling: '可灵',
+      minimax: 'MiniMax 海螺'
+    },
+    serviceTypes: {
+      text: '文本服务',
+      image: '图片服务',
+      video: '视频服务'
     },
     form: {
       name: '配置名称',
@@ -123,7 +193,20 @@ export default {
       apiKey: 'API Key',
       apiKeyPlaceholder: 'sk-...',
       apiKeyTip: '您的 API 密钥',
+      accessKey: 'Access Key',
+      secretKey: 'Secret Key',
+      secretKeyPlaceholder: '请输入 Secret Key',
+      secretKeyTip: '即梦视频需要 Access Key + Secret Key 才能调用',
       isActive: '启用状态'
+    },
+    validation: {
+      nameRequired: '请输入配置名称',
+      providerRequired: '请选择厂商',
+      baseUrlRequired: '请输入 Base URL',
+      baseUrlInvalid: '请输入正确的 URL 格式',
+      apiKeyRequired: '请输入 API Key',
+      secretKeyRequired: '请输入 Secret Key',
+      modelRequired: '请至少选择一个模型'
     },
     actions: {
       test: '测试连接',
@@ -132,8 +215,168 @@ export default {
     },
     messages: {
       deleteConfirm: '确定要删除此配置吗？',
+      deleteConfirmTitle: '删除确认',
+      enabled: '已启用配置',
+      disabled: '已禁用配置',
+      updateSuccess: '更新成功',
+      createSuccess: '创建成功',
       testSuccess: '连接测试成功！',
       testFailed: '连接测试失败'
+    }
+  },
+  style: {
+    previewPlaceholder: '预览图'
+  },
+  styleManagement: {
+    title: '风格管理',
+    subtitle: '管理风格模板',
+    create: '新建风格',
+    noPreview: '暂无预览',
+    tags: {
+      system: '系统',
+      custom: '自定义',
+      default: '默认',
+      inactive: '停用'
+    },
+    actions: {
+      setDefault: '设为默认',
+      enable: '启用',
+      disable: '停用'
+    },
+    dialog: {
+      createTitle: '新建风格',
+      editTitle: '编辑风格'
+    },
+    form: {
+      name: '风格名称',
+      namePlaceholder: '请输入风格名称',
+      preview: '预览图',
+      previewPlaceholder: '请输入预览图 URL',
+      promptZh: '中文提示词',
+      promptEn: '英文提示词',
+      promptPlaceholder: '请输入风格提示词',
+      sortOrder: '排序权重',
+      active: '启用状态',
+      isDefault: '设为默认'
+    },
+    empty: {
+      title: '暂无风格',
+      description: '还没有风格，点击“新建风格”开始添加'
+    },
+    validation: {
+      nameRequired: '请输入风格名称'
+    },
+    messages: {
+      loadFailed: '加载风格失败',
+      createSuccess: '创建成功',
+      updateSuccess: '更新成功',
+      deleteConfirm: '确定要删除该风格吗？',
+      deleteSuccess: '删除成功',
+      enableConfirm: '确定要启用该风格吗？',
+      disableConfirm: '确定要停用该风格吗？',
+      enabled: '已启用',
+      disabled: '已停用',
+      toggleFailed: '操作失败',
+      setDefaultSuccess: '已设为默认',
+      setDefaultFailed: '设置默认失败',
+      uploadFailed: '上传失败'
+    }
+  },
+  brandManagement: {
+    title: '品牌管理',
+    subtitle: '管理广告主与素材规范',
+    create: '新建品牌',
+    empty: {
+      title: '暂无品牌',
+      description: '还没有品牌，点击“新建品牌”开始添加'
+    },
+    table: {
+      name: '品牌名称',
+      displayName: '展示名称',
+      status: '状态',
+      specCount: '规范数',
+      actions: '操作'
+    },
+    status: {
+      active: '启用',
+      inactive: '停用'
+    },
+    actions: {
+      manageSpecs: '管理规范'
+    },
+    dialog: {
+      createTitle: '新建品牌',
+      editTitle: '编辑品牌'
+    },
+    form: {
+      name: '品牌名称',
+      namePlaceholder: '请输入品牌名称',
+      displayName: '展示名称',
+      displayNamePlaceholder: '请输入展示名称',
+      description: '品牌描述',
+      descriptionPlaceholder: '请输入品牌描述',
+      logoUrl: 'Logo URL',
+      logoUrlPlaceholder: '请输入 Logo URL',
+      logoDarkUrl: '深色 Logo URL',
+      logoDarkUrlPlaceholder: '请输入深色 Logo URL',
+      logoLightUrl: '浅色 Logo URL',
+      logoLightUrlPlaceholder: '请输入浅色 Logo URL',
+      active: '启用状态'
+    },
+    validation: {
+      nameRequired: '请输入品牌名称'
+    },
+    messages: {
+      deleteConfirm: '确定要删除该品牌吗？',
+      loadFailed: '加载品牌失败'
+    },
+    specDialog: {
+      title: '素材规范',
+      titleWithName: '{name} · 素材规范',
+      formTitle: '规范配置',
+      default: '默认',
+      table: {
+        name: '规范名称',
+        default: '默认',
+        status: '状态',
+        actions: '操作'
+      },
+      actions: {
+        create: '新建规范',
+        save: '保存规范'
+      },
+      form: {
+        name: '规范名称',
+        namePlaceholder: '请输入规范名称',
+        description: '规范描述',
+        descriptionPlaceholder: '请输入规范描述',
+        allowedSizes: '允许尺寸',
+        allowedSizesPlaceholder: '例如：1080x1080, 1080x1920',
+        aspectRatios: '允许比例',
+        aspectRatiosPlaceholder: '例如：1:1, 9:16',
+        safeArea: '安全区规则',
+        safeAreaPlaceholder: 'JSON 格式，如 {"top":0.1,"bottom":0.1}',
+        logoRules: 'Logo 规则',
+        logoRulesPlaceholder: 'JSON 格式，如 {"minSize":80}',
+        textRules: '文案规则',
+        textRulesPlaceholder: 'JSON 格式，如 {"maxChars":20}',
+        sortOrder: '排序权重',
+        active: '启用状态',
+        isDefault: '设为默认'
+      },
+      messages: {
+        loadFailed: '加载规范失败',
+        createSuccess: '创建成功',
+        updateSuccess: '更新成功',
+        saveFailed: '保存失败',
+        deleteConfirm: '确定删除该规范吗？',
+        deleteSuccess: '删除成功',
+        deleteFailed: '删除失败',
+        jsonInvalid: 'JSON 格式错误'
+      },
+      validation: {
+        nameRequired: '请输入规范名称'
+      }
     }
   },
   drama: {
@@ -149,13 +392,28 @@ export default {
     editProject: '编辑项目',
     projectName: '项目名称',
     projectNamePlaceholder: '请输入项目名称',
+    projectNameRequired: '请输入项目名称',
     projectDesc: '项目描述',
     projectDescPlaceholder: '请输入项目描述（可选）',
+    form: {
+      brandLabel: '广告主',
+      brandPlaceholder: '请选择广告主（可选）',
+      specLabel: '素材规范',
+      specPlaceholder: '请选择规范模板（可选）',
+      styleLabel: '项目风格',
+      styleEmpty: '暂无可用风格',
+      titleRequired: '请输入项目标题',
+      titleLength: '标题长度在 1 到 100 个字符'
+    },
     deleteConfirm: '确定要删除这个项目吗？',
     noCover: '暂无封面',
     noDescription: '暂无描述',
+    episodeCount: '共 {count} 集',
+    createSuccess: '创建成功',
+    createFailed: '创建失败',
     status: {
       draft: '草稿',
+      in_progress: '制作中',
       production: '制作中',
       completed: '已完成'
     },
@@ -169,10 +427,17 @@ export default {
       episodes: '章节管理',
       characters: '角色管理',
       scenes: '场景管理',
+      tabs: {
+        images: '生图',
+        videos: '生视频',
+        advanced: '高级生视频'
+      },
       projectInfo: '项目信息',
       projectName: '项目名称',
       projectDesc: '项目描述',
       noDescription: '暂无描述',
+      brandLabel: '广告主',
+      specLabel: '素材规范',
       episodeStats: '章节统计',
       characterStats: '角色统计',
       sceneStats: '场景统计',
@@ -188,12 +453,34 @@ export default {
       clickToCreate: '点击上方按钮创建第一个章节',
       episodeNumber: '第 {number} 章',
       goToEdit: '进入编辑',
+      loadFailed: '加载项目数据失败',
+      deleteConfirmTitle: '删除确认',
+      deleteEpisodeConfirm: '确定要删除第{number}章吗？此操作将同时删除该章节的所有相关数据（角色、场景、分镜等）。',
+      deleteEpisodeSuccess: '第{number}章删除成功',
+      episodeStatus: {
+        split: '已拆分',
+        created: '已创建',
+        draft: '草稿'
+      },
       characterList: '角色列表',
       noCharacters: '还没有角色',
       charactersTip: '角色将在剧本生成阶段自动创建',
+      characterNameRequired: '请输入角色名称',
+      characterUpdated: '角色更新成功',
+      characterAdded: '角色添加成功',
+      characterDeleteFromLibrary: '该角色来自角色库，请前往角色库进行删除',
+      characterIdMissing: '角色ID不存在，无法删除',
+      deleteCharacterConfirm: '确定要删除角色"{name}"吗？此操作不可恢复。',
+      characterDeleted: '角色已删除',
       sceneList: '场景列表',
       noScenes: '还没有场景',
-      scenesTip: '场景将在分镜生成阶段自动创建'
+      scenesTip: '场景将在分镜生成阶段自动创建',
+      sceneLocationTimeRequired: '请输入场景地点和时间',
+      sceneUpdated: '场景更新成功',
+      sceneAdded: '场景添加成功',
+      sceneIdMissing: '场景ID不存在，无法删除',
+      deleteSceneConfirm: '确定要删除场景"{name}"吗？此操作不可恢复。',
+      sceneDeleted: '场景已删除'
     }
   },
   character: {
@@ -203,6 +490,7 @@ export default {
     add: '添加角色',
     list: '角色列表',
     name: '角色名称',
+    nameRequired: '请输入角色名称',
     role: '角色',
     roles: {
       main: '主角',
@@ -260,6 +548,10 @@ export default {
     regenerateOutline: '重新生成大纲',
     outlinePreview: '大纲预览（可编辑）'
   },
+  episode: {
+    notFound: '未找到章节数据',
+    loadFailed: '加载章节数据失败'
+  },
   imageDialog: {
     title: 'AI 图片生成',
     selectDrama: '选择剧本',
@@ -305,7 +597,29 @@ export default {
     generate: '生成图片',
     loadFailed: '加载失败',
     generating: '生成中...',
-    generateFailed: '生成失败'
+    generateFailed: '生成失败',
+    detail: {
+      title: '图片详情',
+      loadFailed: '加载失败',
+      processing: '生成中，请稍候...',
+      labels: {
+        status: '状态',
+        aiService: 'AI 服务',
+        model: '模型',
+        size: '尺寸',
+        resolution: '分辨率',
+        quality: '质量',
+        style: '风格',
+        steps: '采样步数',
+        cfgScale: 'CFG Scale',
+        seed: '随机种子',
+        createdAt: '创建时间',
+        completedAt: '完成时间'
+      },
+      prompt: '提示词',
+      negativePrompt: '反向提示词',
+      download: '下载图片'
+    }
   },
   dramaWorkflow: {
     returnToList: '返回',
@@ -349,7 +663,23 @@ export default {
     nextStepGenerateImages: '下一步：生成图片',
     extractWarning: '请先点击“提取角色和场景”按钮，完成提取后才能生成图片',
     characterImages: '角色图片',
+    characterImagesTitle: '角色形象生成',
+    manageCharacters: '管理角色',
+    selectedCharacters: '已选择 {selected} / {total} 个角色',
+    completeAndReturn: '完成并返回项目',
+    charactersNotFound: '未找到角色信息，请先完成剧本生成',
+    loadCharactersFailed: '加载角色失败',
+    characterImageGenerated: '{name}的形象生成成功',
+    characterImageFailed: '{name}生成失败',
+    selectCharactersWarning: '请选择要生成的角色',
+    batchGenerateLimit: '单次最多生成10个角色',
+    batchCharacterSubmitted: '批量生成任务已提交，正在后台生成 {count} 个角色形象',
+    batchSubmitSummary: '批量生成提交完成：{success} 个成功，{fail} 个失败',
+    batchGenerateComplete: '批量生成完成',
     sceneImages: '场景图片',
+    sceneImagesTitle: '场景图片生成',
+    episodeLabel: '第{number}集',
+    sceneNumber: '场景 {number}',
     characterCount: '共 {count} 个角色需要生成图片',
     sceneCount: '共 {count} 个场景需要生成图片',
     selectAll: '全选',
@@ -364,6 +694,7 @@ export default {
     clickToUpload: '点击上传',
     prevStep: '上一步',
     nextStepSplitShots: '下一步：拆分分镜',
+    nextStepVideo: '下一步：视频生成',
     reExtractConfirmTitle: '重新提取确认',
     reExtractConfirmMessage: '重新提取将覆盖已提取的角色和场景（包括已生成的图片），确定继续吗？',
     startReExtracting: '开始重新提取，请稍候...',
@@ -371,6 +702,7 @@ export default {
     batchGenerateSelected: '批量生成选中场景',
     generateAllImagesFirst: '请先生成所有角色和场景图片后再进行分镜拆分',
     sceneImageGenerating: '场景图片生成中，请稍候...',
+    sceneImageSubmitted: '场景图片生成任务已提交',
     sceneImageComplete: '场景图片生成完成！',
     sceneImageStarted: '场景图片生成已启动',
     reSplitShots: '重新拆分',
@@ -548,10 +880,382 @@ export default {
     generating: '生成中...',
     generateImage: '生成图片',
     uploadImage: '上传图片',
-    generationResult: '生成结果'
+    generationResult: '生成结果',
+    loadingStoryboards: '正在加载镜头...',
+    loadingPrompts: '正在加载提示词...',
+    loadingImages: '正在加载图片...',
+    loadingVideos: '正在加载视频...',
+    noImage: '暂无图片',
+    prevLastFrameNotReady: '上个镜头尾帧还未生成',
+    noFirstFrame: '暂无首帧',
+    noLastFrame: '暂无尾帧',
+    noPanelFrame: '暂无分镜板',
+    noActionFrame: '暂无动作序列',
+    noKeyFrame: '暂无关键帧',
+    noVideoPrompt: '暂无视频提示词',
+    videoGenerating: '视频生成中...',
+    referenceImage: '参考图模式',
+    referenceImagePlaceholder: '选择参考图模式',
+    singleImageMode: '单图模式',
+    firstLastMode: '首尾帧模式',
+    selectImageHint: '选择图片',
+    selectFirstFrame: '选择首帧',
+    selectLastFrame: '选择尾帧',
+    multiImageReference: '多图参考 ({selected}/{max})',
+    addingToAssets: '添加中...',
+    addToAssets: '添加到素材库',
+    sceneImageAlt: '场景',
+    scenePreviewTitle: '场景预览',
+    addCharacterToShot: '添加角色到镜头',
+    selectSceneBackground: '选择场景背景',
+    noCharactersInEpisode: '当前章节暂无可选角色',
+    noScenesAvailable: '暂无可选场景',
+    reuseLastFrame: '复用尾帧',
+    reuseBadgeActive: '已启用',
+    reuseFailed: '复用失败',
+    reuseTooltipActive: '已开启复用尾帧',
+    reuseTooltipInactive: '复用上个镜头尾帧作为首帧',
+    reuseDataMissing: '未获取到复用数据',
+    panel: {
+      expand: '展开面板',
+      collapse: '收起面板',
+      expandTitle: '展开右侧面板',
+      collapseTitle: '收起右侧面板'
+    },
+    frameTypes: {
+      first: '首帧',
+      last: '尾帧',
+      panel: '分镜板',
+      action: '动作序列',
+      key: '关键帧'
+    },
+    referenceModes: {
+      single: '单图参考',
+      singleDesc: '使用一张参考图生成视频',
+      firstLast: '首尾帧参考',
+      firstLastDesc: '使用首帧与尾帧作为参考',
+      multiple: '多图参考',
+      multipleDesc: '使用多张参考图约束一致性（最多 {count} 张）',
+      textOnly: '仅文本',
+      textOnlyDesc: '仅使用文本提示词生成'
+    },
+    shotTypes: {
+      extremeLong: '大远景',
+      long: '远景',
+      full: '全景',
+      mediumLong: '中全景',
+      medium: '中景',
+      mediumClose: '中近景',
+      close: '近景',
+      closeUp: '特写',
+      extremeClose: '大特写'
+    },
+    movements: {
+      static: '固定镜头',
+      dollyIn: '推镜',
+      dollyOut: '拉镜',
+      pan: '摇镜',
+      track: '移镜',
+      follow: '跟镜',
+      crane: '升降镜头',
+      orbit: '环绕',
+      whip: '甩镜',
+      zoom: '变焦',
+      handheld: '手持晃动',
+      gimbal: '稳定器运动',
+      dollyTrack: '轨道推拉',
+      aerial: '航拍'
+    },
+    angles: {
+      eyeLevel: '平视',
+      high: '俯视',
+      low: '仰视',
+      birdEye: '大俯视（鸟瞰）',
+      extremeLow: '大仰视',
+      profile: '正侧面',
+      threeQuarter: '斜侧面',
+      back: '背面',
+      dutch: '倾斜（荷兰角）',
+      pov: '主观视角',
+      overShoulder: '过肩'
+    },
+    messages: {
+      promptGenerated: '{storyboard} {label}提示词已生成',
+      promptGenerateFailed: '{storyboard} {label}提示词生成失败: {error}',
+      promptGenerating: '{storyboard} {label}提示词生成中...',
+      promptSubmitted: '{storyboard} {label}提示词任务已提交',
+      promptExtractFailed: '{storyboard} {label}提示词提取失败: {error}',
+      imageGenerating: '{storyboard} {label}图片生成中...',
+      imageSubmitted: '{storyboard} {label}图片生成任务已提交',
+      imageGenerateFailed: '{storyboard} {label}图片生成失败: {error}',
+      onlyCompletedVideos: '只能添加已完成的视频素材',
+      addedToAssets: '已添加到素材库',
+      addAssetFailed: '添加素材失败',
+      noImportableStoryboards: '暂无可导入的视频素材',
+      importSummary: '已导入 {success} 个素材，{failed} 个失败',
+      importFailedCount: '导入失败 {count} 个',
+      importAllSuccess: '已成功导入全部可用素材',
+      importAssetsFailed: '导入素材失败',
+      saveFailedWithError: '保存失败: {error}',
+      selectReferenceModeFirst: '请先选择参考图模式',
+      selectVideoModelFirst: '请先选择视频模型',
+      selectFirstLastFrameImage: '请先选择首尾帧图片',
+      maxImages: '最多选择 {count} 张参考图',
+      unknownReferenceMode: '未知的参考图模式',
+      noTaskReturned: '未返回任务，请稍后重试',
+      referenceImagesAdded: '已添加 {count} 张参考图',
+      selectStoryboardFirst: '请先选择分镜',
+      selectReferenceImage: '请选择参考图片',
+      invalidReferenceImage: '请选择有效的参考图片',
+      videoSubmitted: '{storyboard}视频生成任务已提交',
+      videoGenerateFailed: '{storyboard}视频生成失败: {error}',
+      characterAdded: '已添加角色: {name}',
+      characterRemoved: '已移除角色: {name}',
+      loadDataFailed: '加载数据失败: {error}',
+      sceneLinked: '场景关联成功',
+      sceneLinkFailed: '场景关联失败',
+      addStoryboardInDev: '添加分镜功能开发中',
+      timelineZoomInDev: '时间线缩放功能开发中',
+      imageGenerateInDev: '图片生成功能开发中',
+      uploadImageInDev: '上传图片功能开发中',
+      loadMergesFailed: '加载视频合成列表失败'
+    }
   },
   video: {
     title: 'AI 视频生成',
+    previewTitle: '视频预览',
+    previewOnline: '在线预览',
+    dialog: {
+      form: {
+        drama: '选择剧本',
+        dramaPlaceholder: '选择剧本',
+        image: '选择图片',
+        imagePlaceholder: '选择已生成的图片',
+        imageUrlTip: '或直接输入图片 URL',
+        imageUrl: '图片 URL',
+        imageUrlPlaceholder: 'https://example.com/image.jpg',
+        prompt: '视频提示词',
+        promptPlaceholder: '描述视频中的动作和运镜\n例如：Camera slowly zooms in, wind blowing through hair, cinematic lighting',
+        service: 'AI 服务',
+        servicePlaceholder: '选择服务',
+        duration: '视频时长',
+        aspectRatio: '宽高比',
+        advanced: '高级设置',
+        motionIntensity: '运动强度',
+        cameraMotion: '镜头运动',
+        cameraMotionPlaceholder: '选择镜头运动',
+        style: '风格',
+        stylePlaceholder: '例如：电影级、动画风格',
+        seed: '随机种子',
+        seedPlaceholder: '留空随机',
+        seedTip: '设置相同种子可复现视频'
+      },
+      providers: {
+        doubao: '豆包视频',
+        runway: 'Runway',
+        pika: 'Pika'
+      },
+      aspectRatioOptions: {
+        wide: '16:9 (横屏)',
+        tall: '9:16 (竖屏)',
+        square: '1:1 (方形)',
+        classic: '4:3 (传统)'
+      },
+      cameraMotionOptions: {
+        static: '静止',
+        zoomIn: '推进 (Zoom In)',
+        zoomOut: '拉远 (Zoom Out)',
+        panLeft: '左移 (Pan Left)',
+        panRight: '右移 (Pan Right)',
+        tiltUp: '上移 (Tilt Up)',
+        tiltDown: '下移 (Tilt Down)',
+        orbit: '环绕 (Orbit)'
+      },
+      motionMarks: {
+        static: '静态',
+        medium: '适中',
+        intense: '剧烈'
+      },
+      validation: {
+        dramaRequired: '请选择剧本',
+        promptRequired: '请输入视频提示词',
+        promptMin: '提示词至少5个字符'
+      },
+      messages: {
+        formInitFailed: '表单初始化失败，请刷新页面重试',
+        generateSubmitted: '视频生成任务已提交，请稍后查看结果',
+        formIncomplete: '请检查表单填写是否完整'
+      }
+    },
+    detail: {
+      title: '视频详情',
+      processing: '生成中，请稍候...',
+      labels: {
+        status: '状态',
+        aiService: 'AI 服务',
+        model: '模型',
+        duration: '时长',
+        aspectRatio: '宽高比',
+        resolution: '分辨率',
+        fps: 'FPS',
+        motionLevel: '运动强度',
+        cameraMotion: '镜头运动',
+        style: '风格',
+        seed: '随机种子',
+        createdAt: '创建时间',
+        completedAt: '完成时间'
+      },
+      prompt: '视频提示词',
+      sourceImage: '源图片',
+      download: '下载视频'
+    },
+    messages: {
+      browserNotSupported: '您的浏览器不支持视频播放',
+      processing: '生成中...',
+      processingEta: '预计需要 1-3 分钟',
+      waiting: '等待生成',
+      empty: '暂无视频，开始生成吧！',
+      deleteConfirm: '确定删除该视频吗？',
+      preparingDownload: '正在准备下载...',
+      downloadStarted: '视频下载已开始',
+      downloadFailed: '视频下载失败，请稍后重试',
+      deleteMergeConfirm: '确定要删除此合成记录吗？此操作不可恢复。',
+      deleteMergeTitle: '删除确认'
+    },
+    mergeProgress: {
+      loadingEngine: '正在加载FFmpeg引擎（首次需要下载约30MB）...',
+      loadingFromCdn: '正在从CDN {current}/{total} 加载FFmpeg...',
+      loadingComplete: 'FFmpeg加载完成',
+      fallbackCdn: 'CDN {current} 失败，尝试备用源...',
+      downloading: '正在下载视频片段...',
+      downloadingCount: '正在下载 {count} 个视频片段...',
+      downloaded: '下载完成，正在处理视频...',
+      trimming: '正在裁剪视频片段 {current}/{total}...',
+      preparing: '正在准备合并...',
+      merging: '正在合并视频...',
+      mergingProgress: '正在合并视频... {progress}%',
+      mergingWithTransitions: '正在添加转场效果并合并视频（这需要较长时间）...',
+      finalizing: '正在生成最终文件...',
+      completed: '合并完成！'
+    },
+    mergeErrors: {
+      loadTimeout: '加载超时',
+      loadFailed: 'FFmpeg加载失败: {error}。请检查网络连接或稍后重试。',
+      noClips: '没有视频片段',
+      unknown: '未知错误'
+    },
+    timeline: {
+      globalTransition: '全局转场',
+      apply: '应用',
+      overlapTrim: '重叠裁剪',
+      overlapTrimTip: '片段有重叠时，裁剪后续片段的起始时间',
+      importAssets: '一键导入素材',
+      transitionDialog: {
+        title: '转场设置',
+        alert: '转场越长，片段重叠越多'
+      },
+      transitionOptions: {
+        none: '无',
+        fade: '淡入淡出',
+        fadeblack: '淡入黑',
+        fadewhite: '淡入白',
+        fadegrays: '灰度淡入',
+        slideleft: '左滑',
+        slideright: '右滑',
+        slideup: '上滑',
+        slidedown: '下滑',
+        wipeleft: '左擦除',
+        wiperight: '右擦除',
+        wipeup: '上擦除',
+        wipedown: '下擦除',
+        circleopen: '圆形展开',
+        circleclose: '圆形收拢',
+        dissolve: '溶解',
+        distance: '距离',
+        horzopen: '水平展开',
+        horzclose: '水平收拢',
+        vertopen: '垂直展开',
+        vertclose: '垂直收拢'
+      },
+      transitionLabels: {
+        default: '转场',
+        none: '无',
+        fade: '淡入淡出',
+        fadeblack: '淡入黑',
+        fadewhite: '淡入白',
+        fadegrays: '灰度淡入',
+        slideleft: '左滑',
+        slideright: '右滑',
+        slideup: '上滑',
+        slidedown: '下滑',
+        wipeleft: '左擦除',
+        wiperight: '右擦除',
+        wipeup: '上擦除',
+        wipedown: '下擦除',
+        circleopen: '圆形展开',
+        circleclose: '圆形收拢',
+        dissolve: '溶解',
+        distance: '距离',
+        horzopen: '水平展开',
+        horzclose: '水平收拢',
+        vertopen: '垂直展开',
+        vertclose: '垂直收拢'
+      },
+      mergeDialog: {
+        title: '合成进度',
+        tips: {
+          loading: '加载中...',
+          processing: '处理中...',
+          encoding: '编码中...',
+          completed: '合成完成'
+        }
+      },
+      mergePhase: {
+        pending: '等待中',
+        loading: '加载中',
+        processing: '处理中',
+        encoding: '编码中',
+        completed: '已完成'
+      },
+      export: {
+        title: '导出视频',
+        confirm: '即将导出 {count} 个片段，预计 {min}-{max} 分钟，约占 {memory}MB 内存。<br/>确定继续吗？',
+        confirmButton: '开始导出'
+      },
+      browserMerge: {
+        title: '浏览器端合成',
+        confirm: '浏览器端合成耗时较长且占用内存，确定继续？'
+      },
+      serverMerge: {
+        title: '提交服务器合成',
+        confirm: '确认提交合成任务到服务器？'
+      },
+      messages: {
+        addedToTimeline: '已添加到时间线{suffix}',
+        insertAfterSelected: '（插入到选中片段之后）',
+        noAvailableScenes: '暂无可用场景',
+        batchAdded: '已批量添加 {count} 个片段',
+        deleteAssetOnly: '请在素材库中删除素材',
+        transitionApplied: '已应用转场',
+        noTimelineClips: '时间线暂无片段',
+        transitionAppliedCount: '已应用 {count} 处转场',
+        noTransitionsToApply: '没有可应用的转场',
+        trackCleared: '已清空轨道',
+        extractingAudio: '正在提取音频...',
+        audioExtractNoResult: '未获取到音频',
+        audioDurationInvalid: '音频片段 {index} 时长无效',
+        audioExtracted: '已提取 {count} 段音频',
+        audioExtractFailed: '音频提取失败',
+        needClips: '请先添加片段',
+        mergeDownloaded: '合成视频已下载',
+        mergeFailed: '视频合成失败',
+        mergeFailedWithReason: '合成失败：{error}',
+        loadingEngine: '正在加载 FFmpeg...',
+        mergingInBrowser: '正在浏览器端合成...',
+        submitFailed: '提交合成失败',
+        timelineUpdated: '时间线已更新'
+      }
+    },
     generate: '生成视频',
     merge: '合成视频',
     mediaLibrary: '视频素材库',
@@ -606,6 +1310,47 @@ export default {
     upload: '上传',
     import: '导入',
     export: '导出'
+  },
+  projectSettings: {
+    title: '项目设置',
+    tabs: {
+      basic: '基本信息',
+      danger: '危险操作'
+    },
+    form: {
+      title: '项目标题',
+      description: '项目描述',
+      brand: '广告主',
+      brandPlaceholder: '请选择广告主（可选）',
+      spec: '素材规范',
+      specPlaceholder: '请选择规范模板（可选）',
+      genre: '类型',
+      status: '状态',
+      save: '保存设置'
+    },
+    status: {
+      draft: '草稿',
+      planning: '策划中',
+      production: '制作中',
+      completed: '已完成',
+      archived: '已归档'
+    },
+    danger: {
+      title: '警告',
+      description: '以下操作不可恢复，请谨慎操作',
+      delete: '删除项目'
+    },
+    messages: {
+      saveSuccess: '设置保存成功',
+      deleteConfirm: '确定要删除此项目吗？此操作不可恢复！',
+      deleteConfirmButton: '确定删除',
+      deleteSuccess: '项目已删除'
+    }
+  },
+  script: {
+    title: '剧本编辑',
+    back: '返回',
+    inDevelopment: '功能开发中...'
   },
   genres: {
     urban: '都市',

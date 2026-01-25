@@ -12,15 +12,15 @@
       >
         <el-menu-item index="/">
           <el-icon><Document /></el-icon>
-          <span>项目管理</span>
+          <span>{{ t('nav.projectManagement') }}</span>
         </el-menu-item>
         <el-menu-item index="/settings/styles">
           <el-icon><Brush /></el-icon>
-          <span>风格管理</span>
+          <span>{{ t('nav.styleManagement') }}</span>
         </el-menu-item>
         <el-menu-item index="/settings/brands">
           <el-icon><Setting /></el-icon>
-          <span>品牌管理</span>
+          <span>{{ t('nav.brandManagement') }}</span>
         </el-menu-item>
       </el-menu>
     </aside>
@@ -34,8 +34,10 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Brush, Document, Setting } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 
 const route = useRoute()
+const { t } = useI18n()
 
 const activeMenu = computed(() => {
   const path = route.path

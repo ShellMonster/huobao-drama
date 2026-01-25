@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="图片详情"
+    :title="$t('image.detail.title')"
     width="900px"
     @close="handleClose"
   >
@@ -19,19 +19,19 @@
               <template #error>
                 <div class="image-error">
                   <el-icon><PictureFilled /></el-icon>
-                  <span>加载失败</span>
+                  <span>{{ $t('image.detail.loadFailed') }}</span>
                 </div>
               </template>
             </el-image>
 
             <div v-else-if="image.status === 'processing'" class="image-status">
               <el-icon class="loading-icon"><Loading /></el-icon>
-              <span>生成中，请稍候...</span>
+              <span>{{ $t('image.detail.processing') }}</span>
             </div>
 
             <div v-else-if="image.status === 'failed'" class="image-status error">
               <el-icon><CircleClose /></el-icon>
-              <span>生成失败</span>
+              <span>{{ $t('common.generateFailed') }}</span>
               <div class="error-message">{{ image.error_msg }}</div>
             </div>
           </div>
@@ -40,53 +40,53 @@
         <el-col :span="10">
           <div class="image-info">
             <el-descriptions :column="1" border>
-              <el-descriptions-item label="状态">
+              <el-descriptions-item :label="$t('image.detail.labels.status')">
                 <el-tag :type="getStatusType(image.status)">
                   {{ getStatusText(image.status) }}
                 </el-tag>
               </el-descriptions-item>
 
-              <el-descriptions-item label="AI 服务">
+              <el-descriptions-item :label="$t('image.detail.labels.aiService')">
                 {{ image.provider }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="模型" v-if="image.model">
+              <el-descriptions-item :label="$t('image.detail.labels.model')" v-if="image.model">
                 {{ image.model }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="尺寸" v-if="image.size">
+              <el-descriptions-item :label="$t('image.detail.labels.size')" v-if="image.size">
                 {{ image.size }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="分辨率" v-if="image.width && image.height">
+              <el-descriptions-item :label="$t('image.detail.labels.resolution')" v-if="image.width && image.height">
                 {{ image.width }} × {{ image.height }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="质量" v-if="image.quality">
+              <el-descriptions-item :label="$t('image.detail.labels.quality')" v-if="image.quality">
                 {{ image.quality }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="风格" v-if="image.style">
+              <el-descriptions-item :label="$t('image.detail.labels.style')" v-if="image.style">
                 {{ image.style }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="采样步数" v-if="image.steps">
+              <el-descriptions-item :label="$t('image.detail.labels.steps')" v-if="image.steps">
                 {{ image.steps }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="CFG Scale" v-if="image.cfg_scale">
+              <el-descriptions-item :label="$t('image.detail.labels.cfgScale')" v-if="image.cfg_scale">
                 {{ image.cfg_scale }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="随机种子" v-if="image.seed">
+              <el-descriptions-item :label="$t('image.detail.labels.seed')" v-if="image.seed">
                 {{ image.seed }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="创建时间">
+              <el-descriptions-item :label="$t('image.detail.labels.createdAt')">
                 {{ formatDateTime(image.created_at) }}
               </el-descriptions-item>
 
-              <el-descriptions-item label="完成时间" v-if="image.completed_at">
+              <el-descriptions-item :label="$t('image.detail.labels.completedAt')" v-if="image.completed_at">
                 {{ formatDateTime(image.completed_at) }}
               </el-descriptions-item>
             </el-descriptions>
@@ -94,12 +94,12 @@
             <el-divider />
 
             <div class="prompt-section">
-              <h4>提示词</h4>
+              <h4>{{ $t('image.detail.prompt') }}</h4>
               <div class="prompt-text">{{ image.prompt }}</div>
             </div>
 
             <div v-if="image.negative_prompt" class="prompt-section">
-              <h4>反向提示词</h4>
+              <h4>{{ $t('image.detail.negativePrompt') }}</h4>
               <div class="prompt-text">{{ image.negative_prompt }}</div>
             </div>
           </div>
@@ -108,14 +108,14 @@
     </div>
 
     <template #footer>
-      <el-button @click="handleClose">关闭</el-button>
+      <el-button @click="handleClose">{{ $t('common.close') }}</el-button>
       <el-button
         v-if="image?.status === 'completed' && image?.image_url"
         type="primary"
         @click="downloadImage"
       >
         <el-icon><Download /></el-icon>
-        下载图片
+        {{ $t('image.detail.download') }}
       </el-button>
       <el-button
         v-if="image?.status === 'completed'"
@@ -123,7 +123,7 @@
         @click="regenerate"
       >
         <el-icon><Refresh /></el-icon>
-        重新生成
+        {{ $t('common.regenerate') }}
       </el-button>
     </template>
   </el-dialog>
@@ -131,13 +131,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElMessage } from 'element-plus'
 import {
   PictureFilled, Loading, CircleClose,
   Download, Refresh
 } from '@element-plus/icons-vue'
 import { imageAPI } from '@/api/image'
 import type { ImageGeneration, ImageStatus } from '@/types/image'
+import { formatDateTime } from '@/utils/date'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   modelValue: boolean
@@ -155,6 +156,8 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+const { t } = useI18n()
+
 const getStatusType = (status: ImageStatus) => {
   const types: Record<ImageStatus, any> = {
     pending: 'info',
@@ -167,16 +170,12 @@ const getStatusType = (status: ImageStatus) => {
 
 const getStatusText = (status: ImageStatus) => {
   const texts: Record<ImageStatus, string> = {
-    pending: '等待中',
-    processing: '生成中',
-    completed: '已完成',
-    failed: '失败'
+    pending: t('common.statusText.pending'),
+    processing: t('common.statusText.processing'),
+    completed: t('common.statusText.completed'),
+    failed: t('common.statusText.failed')
   }
   return texts[status]
-}
-
-const formatDateTime = (dateString: string) => {
-  return new Date(dateString).toLocaleString('zh-CN')
 }
 
 const downloadImage = () => {

@@ -1,17 +1,17 @@
 <template>
   <div class="character-images-container">
-    <el-page-header @back="goBack" title="返回项目">
+    <el-page-header @back="goBack" :title="$t('workflow.backToProject')">
       <template #content>
-        <h2>角色形象生成</h2>
+        <h2>{{ $t('workflow.characterImagesTitle') }}</h2>
       </template>
       <template #extra>
         <el-button type="primary" @click="batchGenerate" :loading="batchGenerating" :disabled="selectedCharacters.length === 0">
           <el-icon><Picture /></el-icon>
-          批量生成 ({{ selectedCharacters.length }})
+          {{ $t('workflow.batchGenerate') }} ({{ selectedCharacters.length }})
         </el-button>
         <el-button @click="goToCharacterManagement">
           <el-icon><Edit /></el-icon>
-          管理角色
+          {{ $t('workflow.manageCharacters') }}
         </el-button>
       </template>
     </el-page-header>
@@ -20,9 +20,9 @@
       <el-card shadow="never">
         <div class="toolbar">
         <el-checkbox v-model="selectAll" @change="handleSelectAll" :indeterminate="isIndeterminate">
-          全选
+          {{ $t('common.selectAll') }}
         </el-checkbox>
-        <span class="selection-info">已选择 {{ selectedCharacters.length }} / {{ characters.length }} 个角色</span>
+        <span class="selection-info">{{ $t('workflow.selectedCharacters', { selected: selectedCharacters.length, total: characters.length }) }}</span>
       </div>
 
       <div class="character-list">
@@ -52,8 +52,8 @@
                 :disabled="batchGenerating || (generatingIds.length > 0 && !generatingIds.includes(character.id))"
                 style="width: 100%"
               >
-                <span v-if="generatingIds.includes(character.id)">生成中...</span>
-                <span v-else>{{ character.image_url ? '重新生成' : '生成形象' }}</span>
+                <span v-if="generatingIds.includes(character.id)">{{ $t('common.generating') }}</span>
+                <span v-else>{{ character.image_url ? $t('common.regenerate') : $t('character.generateImage') }}</span>
               </el-button>
             </el-card>
           </el-col>
@@ -62,7 +62,7 @@
 
       <div class="actions">
         <el-button type="success" size="large" @click="goToNextStep" :disabled="!allImagesGenerated">
-          完成并返回项目
+          {{ $t('workflow.completeAndReturn') }}
         </el-button>
       </div>
       </el-card>
@@ -73,6 +73,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Edit, Picture } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
@@ -85,6 +86,7 @@ import { getCache, setCache } from '@/utils/cache'
 
 const route = useRoute()
 const router = useRouter()
+const { t: $t } = useI18n()
 const dramaId = route.params.id as string
 
 const characters = ref<Character[]>([])
@@ -119,7 +121,7 @@ const applyDramaCharacters = (drama: any, redirectOnEmpty: boolean) => {
     return
   }
   if (redirectOnEmpty) {
-    ElMessage.warning('未找到角色信息，请先完成剧本生成')
+    ElMessage.warning($t('workflow.charactersNotFound'))
     router.push(`/dramas/${dramaId}`)
   }
 }
@@ -140,7 +142,7 @@ const loadDrama = async (showLoading = true) => {
     applyDramaCharacters(drama, true)
     setCache(getDramaCacheKey(), drama)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载角色失败')
+    ElMessage.error(error.message || $t('workflow.loadCharactersFailed'))
     router.push(`/dramas/${dramaId}`)
   } finally {
     if (showLoading) {
@@ -205,9 +207,9 @@ const generateImage = async (character: Character) => {
       characters.value[index].image_url = result.image_url
     }
     
-    ElMessage.success(`${character.name}的形象生成成功`)
+    ElMessage.success($t('workflow.characterImageGenerated', { name: character.name }))
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || `${character.name}生成失败`)
+    ElMessage.error(error.response?.data?.message || $t('workflow.characterImageFailed', { name: character.name }))
   } finally {
     const index = generatingIds.value.indexOf(character.id)
     if (index > -1) {
@@ -218,12 +220,12 @@ const generateImage = async (character: Character) => {
 
 const batchGenerate = async () => {
   if (selectedCharacters.value.length === 0) {
-    ElMessage.warning('请选择要生成的角色')
+    ElMessage.warning($t('workflow.selectCharactersWarning'))
     return
   }
 
   if (selectedCharacters.value.length > 10) {
-    ElMessage.warning('单次最多生成10个角色')
+    ElMessage.warning($t('workflow.batchGenerateLimit'))
     return
   }
 
@@ -235,7 +237,7 @@ const batchGenerate = async () => {
       selectedCharacters.value.map(id => String(id))
     )
     
-    ElMessage.success(`批量生成任务已提交，正在后台生成 ${selectedCharacters.value.length} 个角色形象`)
+    ElMessage.success($t('workflow.batchCharacterSubmitted', { count: selectedCharacters.value.length }))
     
     const items = response.items || []
     if (items.length > 0) {
@@ -257,13 +259,13 @@ const batchGenerate = async () => {
           characters.value[idx] = {
             ...characters.value[idx],
             image_generation_status: 'failed',
-            image_generation_error: item.error || '生成失败'
+            image_generation_error: item.error || $t('common.generateFailed')
           }
         }
       })
       generatingIds.value = successIds
       if (failedItems.length > 0) {
-        ElMessage.warning(`批量生成提交完成：${items.length - failedItems.length} 个成功，${failedItems.length} 个失败`)
+        ElMessage.warning($t('workflow.batchSubmitSummary', { success: items.length - failedItems.length, fail: failedItems.length }))
       }
       if (successIds.length > 0) {
         startPolling()
@@ -275,7 +277,7 @@ const batchGenerate = async () => {
       startPolling()
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '批量生成失败')
+    ElMessage.error(error.response?.data?.message || $t('workflow.batchGenerateFailed'))
     batchGenerating.value = false
     generatingIds.value = []
   }
@@ -314,7 +316,7 @@ const handleImageEvent = (imageGen: ImageGeneration) => {
 
   if (isAllSelectedGenerated()) {
     stopPolling()
-    ElMessage.success('批量生成完成')
+    ElMessage.success($t('workflow.batchGenerateComplete'))
   }
 }
 
@@ -331,7 +333,7 @@ const characterStream = createListStream<ImageGeneration>({
     await refreshCharacters()
     if (isAllSelectedGenerated()) {
       stopPolling()
-      ElMessage.success('批量生成完成')
+      ElMessage.success($t('workflow.batchGenerateComplete'))
     }
   },
   shouldPoll: hasPendingSelected,

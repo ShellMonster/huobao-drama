@@ -1,8 +1,8 @@
 <template>
   <div class="scene-images-container">
-    <el-page-header @back="goBack" title="返回项目">
+    <el-page-header @back="goBack" :title="$t('workflow.backToProject')">
       <template #content>
-        <h2>场景图片生成</h2>
+        <h2>{{ $t('workflow.sceneImagesTitle') }}</h2>
       </template>
     </el-page-header>
 
@@ -11,7 +11,7 @@
         <el-tab-pane 
           v-for="episode in episodes" 
           :key="episode.id"
-          :label="`第${episode.episode_number}集`"
+          :label="$t('workflow.episodeLabel', { number: episode.episode_number })"
           :name="episode.id"
         >
           <el-row :gutter="20">
@@ -19,7 +19,7 @@
               <el-card shadow="hover" class="scene-card" :class="{ 'has-image': scene.image_url }">
                 <template #header>
                   <div class="scene-header">
-                    <span class="scene-number">场景 {{ scene.storyboard_number }}</span>
+                    <span class="scene-number">{{ $t('workflow.sceneNumber', { number: scene.storyboard_number }) }}</span>
                     <el-tag size="small">{{ scene.location }}</el-tag>
                   </div>
                 </template>
@@ -28,7 +28,7 @@
                   <img v-if="scene.image_url" :src="scene.image_url" :alt="scene.title" />
                   <div v-else class="placeholder">
                     <el-icon :size="48"><Picture /></el-icon>
-                    <p>未生成</p>
+                    <p>{{ $t('common.notGenerated') }}</p>
                   </div>
                 </div>
 
@@ -44,7 +44,7 @@
                   :disabled="!!generatingId && generatingId !== scene.id"
                   style="width: 100%"
                 >
-                  {{ scene.image_url ? '重新生成' : '生成图片' }}
+                  {{ scene.image_url ? $t('common.regenerate') : $t('common.generateImage') }}
                 </el-button>
               </el-card>
             </el-col>
@@ -54,7 +54,7 @@
 
       <div class="actions">
         <el-button type="success" size="large" @click="goToNextStep" :disabled="!allImagesGenerated">
-          下一步：视频生成
+          {{ $t('workflow.nextStepVideo') }}
         </el-button>
       </div>
     </el-card>
@@ -64,12 +64,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
 import type { Episode, Scene } from '@/types/drama'
 
 const route = useRoute()
 const router = useRouter()
+const { t: $t } = useI18n()
 const dramaId = route.params.id as string
 
 const episodes = ref<Episode[]>([])
@@ -105,9 +107,9 @@ const generateImage = async (scene: Scene) => {
       prompt: prompt
     })
     
-    ElMessage.success('场景图片生成任务已提交')
+    ElMessage.success($t('workflow.sceneImageSubmitted'))
   } catch (error: any) {
-    ElMessage.error(error.message || '生成失败')
+    ElMessage.error(error.message || $t('common.generateFailed'))
   } finally {
     generatingId.value = undefined
   }

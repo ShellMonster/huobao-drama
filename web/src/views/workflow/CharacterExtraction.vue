@@ -81,8 +81,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dialogSaving" @click="saveCharacter">保存</el-button>
+        <el-button @click="editDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="dialogSaving" @click="saveCharacter">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -170,7 +170,7 @@ const loadCharacters = async () => {
     characters.value = result
     setCache(cacheKey, result)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载角色失败')
+    ElMessage.error(error.message || $t('common.loadFailed'))
   } finally {
     if (!cached) {
       stopPageLoading()
@@ -193,7 +193,7 @@ const editCharacter = (character: Character) => {
 const saveCharacter = async () => {
   const name = editForm.name.trim()
   if (!name) {
-    ElMessage.warning('请输入角色名称')
+    ElMessage.warning($t('character.nameRequired'))
     return
   }
 
@@ -221,9 +221,9 @@ const saveCharacter = async () => {
 
     await loadCharacters()
     editDialogVisible.value = false
-    ElMessage.success('保存成功')
+    ElMessage.success($t('common.saveSuccess'))
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+    ElMessage.error(error.message || $t('common.saveFailed'))
   } finally {
     dialogSaving.value = false
   }

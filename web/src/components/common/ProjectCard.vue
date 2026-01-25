@@ -24,7 +24,7 @@
       <!-- Footer section / 底部区域 -->
       <div class="card-footer">
         <span class="meta-time">{{ formattedDate }}</span>
-        <span class="episode-label">共 {{ episodeCount }} 集</span>
+        <span class="episode-label">{{ episodeLabel }}</span>
       </div>
     </div>
   </article>
@@ -33,6 +33,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Film } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
+import { formatDateTime } from '@/utils/date'
 
 /**
  * ProjectCard - Reusable project/drama card component
@@ -54,15 +56,11 @@ defineEmits<{
 
 // Format date / 格式化日期
 const formattedDate = computed(() => {
-  const date = new Date(props.updatedAt)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  const seconds = String(date.getSeconds()).padStart(2, '0')
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  return formatDateTime(props.updatedAt)
 })
+
+const { t } = useI18n()
+const episodeLabel = computed(() => t('drama.episodeCount', { count: props.episodeCount || 0 }))
 </script>
 
 <style scoped>

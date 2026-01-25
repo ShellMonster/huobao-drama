@@ -43,7 +43,7 @@
 
       <div class="config-info">
         <div class="info-item">
-          <label>Base URL：</label>
+          <label>{{ $t('aiConfig.form.baseUrl') }}：</label>
           <span class="url-text">{{ config.base_url }}</span>
         </div>
 
@@ -58,14 +58,14 @@
         </div>
 
         <div class="info-item">
-          <label>优先级：</label>
+          <label>{{ $t('aiConfig.form.priority') }}：</label>
           <el-tag size="small" :type="(config.priority || 0) >= 50 ? 'danger' : (config.priority || 0) >= 20 ? 'warning' : 'info'">
             {{ config.priority || 0 }}
           </el-tag>
         </div>
 
         <div class="info-item">
-          <label>模型：</label>
+          <label>{{ $t('aiConfig.form.model') }}：</label>
           <template v-if="Array.isArray(config.model)">
             <el-tag 
               v-for="(model, index) in config.model" 
@@ -81,12 +81,12 @@
         </div>
 
         <div class="info-item">
-          <label>API Key：</label>
+          <label>{{ $t('aiConfig.form.apiKey') }}：</label>
           <span class="api-key">{{ maskApiKey(config.api_key) }}</span>
         </div>
 
         <div class="info-item">
-          <label>创建时间：</label>
+          <label>{{ $t('common.createdAt') }}：</label>
           <span class="time-text">{{ formatDate(config.created_at) }}</span>
         </div>
       </div>
@@ -98,6 +98,7 @@
 import { Connection, Edit, Delete } from '@element-plus/icons-vue'
 import { LoadingSection } from '@/components/common'
 import type { AIServiceConfig } from '@/types/ai'
+import { formatDateTime } from '@/utils/date'
 
 defineProps<{
   configs: AIServiceConfig[]
@@ -118,9 +119,7 @@ const maskApiKey = (key: string) => {
   return key.substring(0, 4) + '***' + key.substring(key.length - 4)
 }
 
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleString('zh-CN')
-}
+const formatDate = (dateString: string) => formatDateTime(dateString)
 </script>
 
 <style scoped>

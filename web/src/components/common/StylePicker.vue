@@ -17,7 +17,7 @@
           @error="markFailed(style.key)"
         />
         <div v-else class="style-thumb-placeholder">
-          <span>预览图</span>
+          <span>{{ $t('style.previewPlaceholder') }}</span>
         </div>
         <div class="style-label">
           <span>{{ style.name }}</span>
@@ -29,6 +29,7 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { StyleOption } from '@/types/style'
 
 const props = defineProps<{ modelValue?: string; styles: StyleOption[]; columns?: number }>()
@@ -36,6 +37,8 @@ const props = defineProps<{ modelValue?: string; styles: StyleOption[]; columns?
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+const { t: $t } = useI18n()
 
 const failedImages = reactive<Record<string, boolean>>({})
 

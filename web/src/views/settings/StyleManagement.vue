@@ -4,14 +4,14 @@
       <AppHeader :fixed="false" :show-logo="false">
         <template #left>
           <div class="page-title">
-            <h1>风格管理</h1>
-            <span class="subtitle">管理系统风格与自定义风格</span>
+            <h1>{{ $t('styleManagement.title') }}</h1>
+            <span class="subtitle">{{ $t('styleManagement.subtitle') }}</span>
           </div>
         </template>
         <template #right>
           <el-button type="primary" class="header-btn primary" @click="openCreateDialog">
             <el-icon><Plus /></el-icon>
-            <span class="btn-text">新增风格</span>
+            <span class="btn-text">{{ $t('styleManagement.create') }}</span>
           </el-button>
         </template>
       </AppHeader>
@@ -19,13 +19,13 @@
       <LoadingSection :loading="loading">
         <EmptyState
           v-if="!loading && styles.length === 0"
-          title="暂无风格"
-          description="请先添加一个风格用于项目创作"
+          :title="$t('styleManagement.empty.title')"
+          :description="$t('styleManagement.empty.description')"
           :icon="Brush"
         >
           <el-button type="primary" @click="openCreateDialog">
             <el-icon><Plus /></el-icon>
-            新增风格
+            {{ $t('styleManagement.create') }}
           </el-button>
         </EmptyState>
 
@@ -39,7 +39,7 @@
                 @error="markFailed(style.key)"
               />
               <div v-else class="style-thumb-placeholder">
-                <span>暂无预览</span>
+                <span>{{ $t('styleManagement.noPreview') }}</span>
               </div>
               <div class="style-label">
                 <span>{{ style.name }}</span>
@@ -48,10 +48,10 @@
 
             <div class="style-meta">
               <el-tag size="small" type="info">
-                {{ style.is_system ? '系统' : '自定义' }}
+                {{ style.is_system ? $t('styleManagement.tags.system') : $t('styleManagement.tags.custom') }}
               </el-tag>
-              <el-tag v-if="style.is_default" size="small" type="success">默认</el-tag>
-              <el-tag v-if="style.is_active === false" size="small" type="warning">已停用</el-tag>
+              <el-tag v-if="style.is_default" size="small" type="success">{{ $t('styleManagement.tags.default') }}</el-tag>
+              <el-tag v-if="style.is_active === false" size="small" type="warning">{{ $t('styleManagement.tags.inactive') }}</el-tag>
             </div>
 
             <div class="style-actions">
@@ -62,30 +62,30 @@
                 :disabled="style.is_default"
                 @click="setDefault(style)"
               >
-                设为默认
+                {{ $t('styleManagement.actions.setDefault') }}
               </el-button>
-              <el-button size="small" link @click="openEditDialog(style)">编辑</el-button>
+              <el-button size="small" link @click="openEditDialog(style)">{{ $t('common.edit') }}</el-button>
               <el-popconfirm
                 v-if="!style.is_system"
-                title="确定删除该风格？"
-                confirm-button-text="删除"
-                cancel-button-text="取消"
+                :title="$t('styleManagement.messages.deleteConfirm')"
+                :confirm-button-text="$t('common.delete')"
+                :cancel-button-text="$t('common.cancel')"
                 @confirm="removeStyle(style)"
               >
                 <template #reference>
-                  <el-button size="small" type="danger" link>删除</el-button>
+                  <el-button size="small" type="danger" link>{{ $t('common.delete') }}</el-button>
                 </template>
               </el-popconfirm>
               <el-popconfirm
                 v-else
-                :title="style.is_active === false ? '确定启用该风格？' : '确定停用该风格？'"
-                confirm-button-text="确定"
-                cancel-button-text="取消"
+                :title="style.is_active === false ? $t('styleManagement.messages.enableConfirm') : $t('styleManagement.messages.disableConfirm')"
+                :confirm-button-text="$t('common.confirm')"
+                :cancel-button-text="$t('common.cancel')"
                 @confirm="toggleActive(style)"
               >
                 <template #reference>
                   <el-button size="small" type="warning" link>
-                    {{ style.is_active === false ? '启用' : '停用' }}
+                    {{ style.is_active === false ? $t('styleManagement.actions.enable') : $t('styleManagement.actions.disable') }}
                   </el-button>
                 </template>
               </el-popconfirm>
@@ -97,20 +97,20 @@
 
     <el-dialog
       v-model="dialogVisible"
-      :title="isEdit ? '编辑风格' : '新增风格'"
+      :title="isEdit ? $t('styleManagement.dialog.editTitle') : $t('styleManagement.dialog.createTitle')"
       width="720px"
       :close-on-click-modal="false"
       destroy-on-close
       class="style-dialog"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="风格名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入风格名称" />
+        <el-form-item :label="$t('styleManagement.form.name')" prop="name">
+          <el-input v-model="form.name" :placeholder="$t('styleManagement.form.namePlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="预览图" prop="preview_url">
+        <el-form-item :label="$t('styleManagement.form.preview')" prop="preview_url">
           <div class="preview-row">
-            <el-input v-model="form.preview_url" placeholder="请输入预览图URL或上传图片" />
+            <el-input v-model="form.preview_url" :placeholder="$t('styleManagement.form.previewPlaceholder')" />
             <el-upload
               class="upload-btn"
               :action="uploadAction"
@@ -119,40 +119,40 @@
               :on-error="handleUploadError"
               accept="image/jpeg,image/png,image/jpg,image/webp"
             >
-              <el-button>上传</el-button>
+              <el-button>{{ $t('common.upload') }}</el-button>
             </el-upload>
           </div>
           <div v-if="form.preview_url" class="preview-thumb">
-            <img :src="form.preview_url" alt="预览图" />
+            <img :src="form.preview_url" :alt="$t('styleManagement.form.preview')" />
           </div>
         </el-form-item>
 
-        <el-form-item label="中文风格提示" prop="prompt_zh">
-          <el-input v-model="form.prompt_zh" type="textarea" :rows="2" placeholder="可选，默认使用风格名称" />
+        <el-form-item :label="$t('styleManagement.form.promptZh')" prop="prompt_zh">
+          <el-input v-model="form.prompt_zh" type="textarea" :rows="2" :placeholder="$t('styleManagement.form.promptPlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="英文风格提示" prop="prompt_en">
-          <el-input v-model="form.prompt_en" type="textarea" :rows="2" placeholder="可选，默认使用风格名称" />
+        <el-form-item :label="$t('styleManagement.form.promptEn')" prop="prompt_en">
+          <el-input v-model="form.prompt_en" type="textarea" :rows="2" :placeholder="$t('styleManagement.form.promptPlaceholder')" />
         </el-form-item>
 
-        <el-form-item label="排序权重">
+        <el-form-item :label="$t('styleManagement.form.sortOrder')">
           <el-input-number v-model="form.sort_order" :min="0" :max="9999" />
         </el-form-item>
 
-        <el-form-item label="启用状态">
+        <el-form-item :label="$t('styleManagement.form.active')">
           <el-switch v-model="form.is_active" />
         </el-form-item>
 
-        <el-form-item label="设为默认">
+        <el-form-item :label="$t('styleManagement.form.isDefault')">
           <el-switch v-model="form.is_default" />
         </el-form-item>
       </el-form>
 
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button>
           <el-button type="primary" :loading="saving" @click="submitForm">
-            {{ isEdit ? '保存' : '创建' }}
+            {{ isEdit ? $t('common.save') : $t('common.create') }}
           </el-button>
         </div>
       </template>
@@ -167,6 +167,7 @@ import { Brush, Plus } from '@element-plus/icons-vue'
 import { AppHeader, EmptyState, LoadingSection } from '@/components/common'
 import { styleAPI } from '@/api/style'
 import type { StyleCreateRequest, StyleOption, StyleUpdateRequest } from '@/types/style'
+import { useI18n } from 'vue-i18n'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -174,6 +175,7 @@ const styles = ref<StyleOption[]>([])
 const dialogVisible = ref(false)
 const editingStyle = ref<StyleOption | null>(null)
 const failedImages = reactive<Record<string, boolean>>({})
+const { t } = useI18n()
 
 const formRef = ref()
 const form = reactive<StyleCreateRequest>({
@@ -187,7 +189,7 @@ const form = reactive<StyleCreateRequest>({
 })
 
 const rules = {
-  name: [{ required: true, message: '请输入风格名称', trigger: 'blur' }]
+  name: [{ required: true, message: t('styleManagement.validation.nameRequired'), trigger: 'blur' }]
 }
 
 const uploadAction = '/api/v1/upload/style'
@@ -204,7 +206,7 @@ const loadStyles = async () => {
   try {
     styles.value = await styleAPI.list({ include_inactive: true })
   } catch (error: any) {
-    ElMessage.error(error?.message || '加载风格失败')
+    ElMessage.error(error?.message || t('styleManagement.messages.loadFailed'))
     styles.value = []
   } finally {
     loading.value = false
@@ -255,15 +257,15 @@ const submitForm = async () => {
         is_default: form.is_default
       }
       await styleAPI.update(editingStyle.value.id, payload)
-      ElMessage.success('风格已更新')
+      ElMessage.success(t('styleManagement.messages.updateSuccess'))
     } else {
       await styleAPI.create(form)
-      ElMessage.success('风格已创建')
+      ElMessage.success(t('styleManagement.messages.createSuccess'))
     }
     dialogVisible.value = false
     await loadStyles()
   } catch (error: any) {
-    ElMessage.error(error?.message || '保存失败')
+    ElMessage.error(error?.message || t('common.saveFailed'))
   } finally {
     saving.value = false
   }
@@ -272,10 +274,10 @@ const submitForm = async () => {
 const setDefault = async (style: StyleOption) => {
   try {
     await styleAPI.update(style.id, { is_default: true, is_active: true })
-    ElMessage.success('已设为默认风格')
+    ElMessage.success(t('styleManagement.messages.setDefaultSuccess'))
     await loadStyles()
   } catch (error: any) {
-    ElMessage.error(error?.message || '设置默认失败')
+    ElMessage.error(error?.message || t('styleManagement.messages.setDefaultFailed'))
   }
 }
 
@@ -283,20 +285,20 @@ const toggleActive = async (style: StyleOption) => {
   const currentActive = style.is_active !== false
   try {
     await styleAPI.update(style.id, { is_active: !currentActive })
-    ElMessage.success(currentActive ? '风格已停用' : '风格已启用')
+    ElMessage.success(currentActive ? t('styleManagement.messages.disabled') : t('styleManagement.messages.enabled'))
     await loadStyles()
   } catch (error: any) {
-    ElMessage.error(error?.message || '更新状态失败')
+    ElMessage.error(error?.message || t('styleManagement.messages.toggleFailed'))
   }
 }
 
 const removeStyle = async (style: StyleOption) => {
   try {
     await styleAPI.remove(style.id)
-    ElMessage.success('风格已删除')
+    ElMessage.success(t('styleManagement.messages.deleteSuccess'))
     await loadStyles()
   } catch (error: any) {
-    ElMessage.error(error?.message || '删除失败')
+    ElMessage.error(error?.message || t('common.deleteFailed'))
   }
 }
 
@@ -309,7 +311,7 @@ const handleUploadSuccess = (response: any) => {
 }
 
 const handleUploadError = (error: any) => {
-  ElMessage.error(error?.message || '上传失败')
+  ElMessage.error(error?.message || t('styleManagement.messages.uploadFailed'))
 }
 
 onMounted(() => {

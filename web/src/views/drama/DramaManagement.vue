@@ -21,17 +21,17 @@
         </AppHeader>
 
         <el-tabs v-model="mainTab" class="primary-tabs">
-          <el-tab-pane label="生图" name="images">
+          <el-tab-pane :label="t('drama.management.tabs.images')" name="images">
             <LoadingSection class="module-wrapper" :loading="pageLoading" :text="$t('common.loading')">
               <AdImageStudio :drama-id="dramaId" />
             </LoadingSection>
           </el-tab-pane>
-          <el-tab-pane label="生视频" name="videos">
+          <el-tab-pane :label="t('drama.management.tabs.videos')" name="videos">
             <div class="module-wrapper">
               <VideoGeneration :embedded="true" :drama-id="dramaId" />
             </div>
           </el-tab-pane>
-          <el-tab-pane label="高级生视频" name="advanced">
+          <el-tab-pane :label="t('drama.management.tabs.advanced')" name="advanced">
             <!-- Tabs / 标签页 -->
             <LoadingSection
               class="tabs-wrapper"
@@ -101,14 +101,14 @@
             <el-descriptions-item :label="$t('common.createdAt')">
               <span class="info-value">{{ formatDate(drama?.created_at) }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="广告主">
+            <el-descriptions-item :label="t('drama.management.brandLabel')">
               <span class="info-value">
-                {{ drama?.brand?.display_name || drama?.brand?.name || '未选择' }}
+                {{ drama?.brand?.display_name || drama?.brand?.name || t('common.unselected') }}
               </span>
             </el-descriptions-item>
-            <el-descriptions-item label="素材规范">
+            <el-descriptions-item :label="t('drama.management.specLabel')">
               <span class="info-value">
-                {{ drama?.spec?.name || '未选择' }}
+                {{ drama?.spec?.name || t('common.unselected') }}
               </span>
             </el-descriptions-item>
             <el-descriptions-item :label="$t('drama.management.projectDesc')" :span="2">
@@ -309,6 +309,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, Document, User, Picture, Plus } from '@element-plus/icons-vue'
 import { dramaAPI } from '@/api/drama'
 import { sceneAPI } from '@/api/scene'
@@ -316,6 +317,7 @@ import { characterLibraryAPI } from '@/api/character-library'
 import type { Drama } from '@/types/drama'
 import { AppHeader, StatCard, EmptyState, LoadingSection } from '@/components/common'
 import { getCache, setCache } from '@/utils/cache'
+import { formatDateTime } from '@/utils/date'
 import AdImageStudio from './AdImageStudio.vue'
 import VideoGeneration from '../generation/VideoGeneration.vue'
 import { disableWorkspace, isWorkspaceActive } from '@/utils/workspace'
@@ -323,6 +325,7 @@ import { disableWorkspace, isWorkspaceActive } from '@/utils/workspace'
 const router = useRouter()
 const route = useRoute()
 const dramaId = route.params.id as string
+const { t } = useI18n()
 
 const workspaceActive = ref(isWorkspaceActive())
 
@@ -399,7 +402,7 @@ const loadDramaData = async (showLoading = !drama.value) => {
     loadScenes()
     setCache(getDramaCacheKey(), data)
   } catch (error: any) {
-    ElMessage.error(error.message || '加载项目数据失败')
+    ElMessage.error(error.message || t('drama.management.loadFailed'))
   } finally {
     if (showLoading) {
       stopPageLoading()
@@ -427,11 +430,11 @@ const getStatusType = (status?: string) => {
 
 const getStatusText = (status?: string) => {
   const map: Record<string, string> = {
-    draft: '草稿',
-    in_progress: '制作中',
-    completed: '已完成'
+    draft: t('drama.status.draft'),
+    in_progress: t('drama.status.in_progress'),
+    completed: t('drama.status.completed')
   }
-  return map[status || 'draft'] || '草稿'
+  return map[status || 'draft'] || t('drama.status.draft')
 }
 
 const getEpisodeStatusType = (episode: any) => {
@@ -441,14 +444,14 @@ const getEpisodeStatusType = (episode: any) => {
 }
 
 const getEpisodeStatusText = (episode: any) => {
-  if (episode.shots && episode.shots.length > 0) return '已拆分'
-  if (episode.script_content) return '已创建'
-  return '草稿'
+  if (episode.shots && episode.shots.length > 0) return t('drama.management.episodeStatus.split')
+  if (episode.script_content) return t('drama.management.episodeStatus.created')
+  return t('drama.management.episodeStatus.draft')
 }
 
 const formatDate = (date?: string) => {
   if (!date) return '-'
-  return new Date(date).toLocaleString('zh-CN')
+  return formatDateTime(date)
 }
 
 const fixImageUrl = (url: string) => {
@@ -524,11 +527,11 @@ const enterEpisodeWorkflow = (episode: any) => {
 const deleteEpisode = async (episode: any) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除第${episode.episode_number}章吗？此操作将同时删除该章节的所有相关数据（角色、场景、分镜等）。`,
-      '删除确认',
+      t('drama.management.deleteEpisodeConfirm', { number: episode.episode_number }),
+      t('drama.management.deleteConfirmTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
@@ -549,11 +552,11 @@ const deleteEpisode = async (episode: any) => {
     // 保存更新后的章节列表
     await dramaAPI.saveEpisodes(drama.value!.id, updatedEpisodes)
     
-    ElMessage.success(`第${episode.episode_number}章删除成功`)
+    ElMessage.success(t('drama.management.deleteEpisodeSuccess', { number: episode.episode_number }))
     await loadDramaData()
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || t('common.deleteFailed'))
     }
   }
 }
@@ -572,7 +575,7 @@ const openAddCharacterDialog = () => {
 
 const saveCharacter = async () => {
   if (!newCharacter.value.name.trim()) {
-    ElMessage.warning('请输入角色名称')
+    ElMessage.warning(t('drama.management.characterNameRequired'))
     return
   }
 
@@ -585,7 +588,7 @@ const saveCharacter = async () => {
         personality: newCharacter.value.personality,
         description: newCharacter.value.description
       })
-      ElMessage.success('角色更新成功')
+      ElMessage.success(t('drama.management.characterUpdated'))
     } else {
       const existingCharacters = drama.value?.characters || []
       const allCharacters = [
@@ -600,13 +603,13 @@ const saveCharacter = async () => {
       ]
 
       await dramaAPI.saveCharacters(drama.value!.id, allCharacters)
-      ElMessage.success('角色添加成功')
+      ElMessage.success(t('drama.management.characterAdded'))
     }
     addCharacterDialogVisible.value = false
     editingCharacterId.value = null
     await loadDramaData()
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+    ElMessage.error(error.message || t('common.saveFailed'))
   }
 }
 
@@ -624,33 +627,33 @@ const editCharacter = (character: any) => {
 
 const deleteCharacter = async (character: any) => {
   if (character.library_id) {
-    ElMessage.warning('该角色来自角色库，请前往角色库进行删除')
+    ElMessage.warning(t('drama.management.characterDeleteFromLibrary'))
     return
   }
 
   if (!character.id) {
-    ElMessage.error('角色ID不存在，无法删除')
+    ElMessage.error(t('drama.management.characterIdMissing'))
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      `确定要删除角色"${character.name}"吗？此操作不可恢复。`,
-      '删除确认',
+      t('drama.management.deleteCharacterConfirm', { name: character.name }),
+      t('drama.management.deleteConfirmTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
 
     await characterLibraryAPI.deleteCharacter(character.id)
-    ElMessage.success('角色已删除')
+    ElMessage.success(t('drama.management.characterDeleted'))
     await loadDramaData()
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除角色失败:', error)
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || t('common.deleteFailed'))
     }
   }
 }
@@ -670,7 +673,7 @@ const saveScene = async () => {
   const timeValue = sceneForm.value.time.trim()
 
   if (!location || !timeValue) {
-    ElMessage.warning('请输入场景地点和时间')
+    ElMessage.warning(t('drama.management.sceneLocationTimeRequired'))
     return
   }
 
@@ -682,7 +685,7 @@ const saveScene = async () => {
         time: timeValue,
         prompt: sceneForm.value.prompt?.trim() || ''
       })
-      ElMessage.success('场景更新成功')
+      ElMessage.success(t('drama.management.sceneUpdated'))
     } else {
       await sceneAPI.create({
         drama_id: Number(route.params.id),
@@ -690,13 +693,13 @@ const saveScene = async () => {
         time: timeValue,
         prompt: sceneForm.value.prompt?.trim() || ''
       })
-      ElMessage.success('场景添加成功')
+      ElMessage.success(t('drama.management.sceneAdded'))
     }
 
     sceneDialogVisible.value = false
     await loadDramaData()
   } catch (error: any) {
-    ElMessage.error(error.message || '保存失败')
+    ElMessage.error(error.message || t('common.saveFailed'))
   } finally {
     sceneDialogSaving.value = false
   }
@@ -714,28 +717,28 @@ const editScene = (scene: any) => {
 
 const deleteScene = async (scene: any) => {
   if (!scene.id) {
-    ElMessage.error('场景ID不存在，无法删除')
+    ElMessage.error(t('drama.management.sceneIdMissing'))
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      `确定要删除场景"${getSceneTitle(scene)}"吗？此操作不可恢复。`,
-      '删除确认',
+      t('drama.management.deleteSceneConfirm', { name: getSceneTitle(scene) }),
+      t('drama.management.deleteConfirmTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
 
     await dramaAPI.deleteScene(scene.id.toString())
-    ElMessage.success('场景已删除')
+    ElMessage.success(t('drama.management.sceneDeleted'))
     await loadDramaData()
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除场景失败:', error)
-      ElMessage.error(error.message || '删除失败')
+      ElMessage.error(error.message || t('common.deleteFailed'))
     }
   }
 }

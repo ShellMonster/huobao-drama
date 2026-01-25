@@ -75,6 +75,9 @@ func NewOpenAIClient(baseURL, apiKey, model, endpoint string) *OpenAIClient {
 	if model == "" {
 		model = strings.TrimSpace(config.GetTuning().Defaults.Models.OpenAIText)
 	}
+	if model == "" {
+		model = "gpt-4o"
+	}
 	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.AISeconds, 10*time.Minute)
 
 	return &OpenAIClient{

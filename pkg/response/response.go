@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/drama-generator/backend/pkg/i18n"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,7 +46,7 @@ func SuccessWithMessage(c *gin.Context, message string, data interface{}) {
 	c.JSON(http.StatusOK, Response{
 		Success:   true,
 		Data:      data,
-		Message:   message,
+		Message:   i18n.Translate(i18n.GetLang(c, i18n.LangZhCN), message, nil),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
 }
@@ -80,7 +81,7 @@ func Error(c *gin.Context, statusCode int, errCode string, message string) {
 		Success: false,
 		Error: &ErrorInfo{
 			Code:    errCode,
-			Message: message,
+			Message: i18n.Translate(i18n.GetLang(c, i18n.LangZhCN), message, nil),
 		},
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
@@ -91,7 +92,30 @@ func ErrorWithDetails(c *gin.Context, statusCode int, errCode string, message st
 		Success: false,
 		Error: &ErrorInfo{
 			Code:    errCode,
-			Message: message,
+			Message: i18n.Translate(i18n.GetLang(c, i18n.LangZhCN), message, nil),
+			Details: details,
+		},
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func ErrorKey(c *gin.Context, statusCode int, errCode string, key string, args map[string]string) {
+	c.JSON(statusCode, Response{
+		Success: false,
+		Error: &ErrorInfo{
+			Code:    errCode,
+			Message: i18n.Translate(i18n.GetLang(c, i18n.LangZhCN), key, args),
+		},
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func ErrorKeyWithDetails(c *gin.Context, statusCode int, errCode string, key string, args map[string]string, details interface{}) {
+	c.JSON(statusCode, Response{
+		Success: false,
+		Error: &ErrorInfo{
+			Code:    errCode,
+			Message: i18n.Translate(i18n.GetLang(c, i18n.LangZhCN), key, args),
 			Details: details,
 		},
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -102,18 +126,38 @@ func BadRequest(c *gin.Context, message string) {
 	Error(c, http.StatusBadRequest, "BAD_REQUEST", message)
 }
 
+func BadRequestKey(c *gin.Context, key string, args map[string]string) {
+	ErrorKey(c, http.StatusBadRequest, "BAD_REQUEST", key, args)
+}
+
 func Unauthorized(c *gin.Context, message string) {
 	Error(c, http.StatusUnauthorized, "UNAUTHORIZED", message)
+}
+
+func UnauthorizedKey(c *gin.Context, key string, args map[string]string) {
+	ErrorKey(c, http.StatusUnauthorized, "UNAUTHORIZED", key, args)
 }
 
 func Forbidden(c *gin.Context, message string) {
 	Error(c, http.StatusForbidden, "FORBIDDEN", message)
 }
 
+func ForbiddenKey(c *gin.Context, key string, args map[string]string) {
+	ErrorKey(c, http.StatusForbidden, "FORBIDDEN", key, args)
+}
+
 func NotFound(c *gin.Context, message string) {
 	Error(c, http.StatusNotFound, "NOT_FOUND", message)
 }
 
+func NotFoundKey(c *gin.Context, key string, args map[string]string) {
+	ErrorKey(c, http.StatusNotFound, "NOT_FOUND", key, args)
+}
+
 func InternalError(c *gin.Context, message string) {
 	Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", message)
+}
+
+func InternalErrorKey(c *gin.Context, key string, args map[string]string) {
+	ErrorKey(c, http.StatusInternalServerError, "INTERNAL_ERROR", key, args)
 }
