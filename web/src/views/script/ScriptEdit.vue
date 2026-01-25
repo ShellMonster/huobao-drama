@@ -1,11 +1,11 @@
 <template>
   <div class="script-edit-container">
-    <el-page-header @back="goBack" :title="$t('script.back')">
+    <el-page-header @back="goBack" :title="$t('scriptEditor.back')">
       <template #content>
-        <h2>{{ $t('script.title') }}</h2>
+        <h2>{{ $t('scriptEditor.title') }}</h2>
       </template>
     </el-page-header>
-    <p>{{ $t('script.inDevelopment') }}</p>
+    <p>{{ $t('scriptEditor.inDevelopment') }}</p>
   </div>
 </template>
 

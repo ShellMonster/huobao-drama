@@ -28,7 +28,7 @@ import { settingsAPI } from '@/api/settings'
 
 const { locale, t } = useI18n()
 
-const currentLang = ref(locale.value)
+const currentLang = computed(() => locale.value as string)
 const loading = ref(false)
 
 const languageOptions = computed(() => [
@@ -76,7 +76,6 @@ const handleCommand = async (lang: string) => {
     
     // 更新前端语言
     setLanguage(lang)
-    currentLang.value = lang
     
     const message = res?.message || t('settings.switchSuccess', { language: languageLabel })
     ElMessage.success({ message, duration: 3000 })

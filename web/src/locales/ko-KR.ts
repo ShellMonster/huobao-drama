@@ -1636,7 +1636,7 @@ export default {
       deleteSuccess: '프로젝트가 삭제되었습니다'
     }
   },
-  script: {
+  scriptEditor: {
     title: '스크립트 편집기',
     back: '뒤로',
     inDevelopment: '기능 개발 중...'

@@ -51,8 +51,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
 import { settingsAPI } from '@/api/settings'
 import { useI18n } from 'vue-i18n'
+import { setLanguage } from '@/locales'
 
-const { locale, t } = useI18n()
+const { t } = useI18n()
 const currentLanguage = ref<'zh' | 'en'>('zh')
 const loading = ref(false)
 
@@ -61,7 +62,7 @@ const loadCurrentLanguage = async () => {
     const res = await settingsAPI.getLanguage()
     currentLanguage.value = res?.language as 'zh' | 'en'
     // 同步前端语言
-    locale.value = toLocale(res?.language as 'zh' | 'en')
+    setLanguage(toLocale(res?.language as 'zh' | 'en'))
     console.log('Current language loaded:', res?.language)
   } catch (error) {
     console.error('Failed to load language:', error)
@@ -92,7 +93,7 @@ const handleLanguageChange = async (value: 'zh' | 'en') => {
     console.log('Language update response:', res)
     
     // 同时更新前端语言
-    locale.value = toLocale(value)
+    setLanguage(toLocale(value))
     
     // 使用后端返回的双语消息（request拦截器已经返回了data）
     ElMessage.success({

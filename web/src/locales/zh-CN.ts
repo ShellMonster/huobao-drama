@@ -1347,7 +1347,7 @@ export default {
       deleteSuccess: '项目已删除'
     }
   },
-  script: {
+  scriptEditor: {
     title: '剧本编辑',
     back: '返回',
     inDevelopment: '功能开发中...'

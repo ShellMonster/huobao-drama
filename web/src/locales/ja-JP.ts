@@ -1258,6 +1258,11 @@ export default {
       failed: '失敗'
     }
   },
+  scriptEditor: {
+    title: 'スクリプトエディタ',
+    back: '戻る',
+    inDevelopment: '機能開発中...'
+  },
   message: {
     deleteConfirm: '削除しますか？',
     deleteSuccess: '削除しました',

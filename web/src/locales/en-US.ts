@@ -1489,7 +1489,7 @@ export default {
       deleteSuccess: 'Project deleted'
     }
   },
-  script: {
+  scriptEditor: {
     title: 'Script Editor',
     back: 'Back',
     inDevelopment: 'Feature under development...'
