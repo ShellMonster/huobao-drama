@@ -168,6 +168,7 @@ type GenerateImageRequest struct {
 	SceneID         *uint    `json:"scene_id"`
 	CharacterID     *uint    `json:"character_id"`
 	AdPromptItemID  *uint    `json:"ad_prompt_item_id"`
+	AdPromptType    *string  `json:"ad_prompt_type"`
 	ImageType       string   `json:"image_type"` // character, scene, storyboard
 	FrameType       *string  `json:"frame_type"` // first, key, last, panel, action
 	Prompt          string   `json:"prompt" binding:"required,min=5,max=10000"`
@@ -221,6 +222,17 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		imageType = string(models.ImageTypeStoryboard)
 	}
 
+	adPromptType := request.AdPromptType
+	if adPromptType == nil && imageType == "ad" {
+		var value string
+		if len(request.ReferenceImages) > 0 {
+			value = models.AdPromptTypeImage
+		} else {
+			value = models.AdPromptTypeText
+		}
+		adPromptType = &value
+	}
+
 	isEnglish := isEnglishPrompt(request.Prompt)
 	prompt := applyStyleToPrompt(request.Prompt, drama.Style)
 	prompt = applyImagePromptConstraints(prompt, len(request.ReferenceImages) > 0, isEnglish)
@@ -231,6 +243,7 @@ func (s *ImageGenerationService) GenerateImage(request *GenerateImageRequest) (*
 		SceneID:         request.SceneID,
 		CharacterID:     request.CharacterID,
 		AdPromptItemID:  request.AdPromptItemID,
+		AdPromptType:    adPromptType,
 		ImageType:       imageType,
 		FrameType:       request.FrameType,
 		Provider:        provider,
@@ -648,7 +661,7 @@ func (s *ImageGenerationService) GetImageGeneration(imageGenID uint) (*models.Im
 	return &imageGen, nil
 }
 
-func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *uint, storyboardID *uint, frameType string, imageType string, status string, page, pageSize int) ([]models.ImageGeneration, int64, error) {
+func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *uint, storyboardID *uint, frameType string, imageType string, status string, adPromptType string, page, pageSize int) ([]models.ImageGeneration, int64, error) {
 	query := s.db.Model(&models.ImageGeneration{})
 
 	if dramaID != nil {
@@ -673,6 +686,9 @@ func (s *ImageGenerationService) ListImageGenerations(dramaID *uint, sceneID *ui
 
 	if status != "" {
 		query = query.Where("status = ?", status)
+	}
+	if adPromptType != "" {
+		query = query.Where("ad_prompt_type = ?", adPromptType)
 	}
 
 	var total int64

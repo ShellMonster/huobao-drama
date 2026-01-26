@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS image_generations (
     storyboard_id INTEGER, -- 修正：引用storyboards表
     drama_id INTEGER NOT NULL,
     ad_prompt_item_id INTEGER,
+    ad_prompt_type TEXT,
     provider TEXT NOT NULL, -- openai, midjourney, stable_diffusion
     prompt TEXT NOT NULL,
     negative_prompt TEXT,
@@ -179,6 +180,7 @@ CREATE TABLE IF NOT EXISTS image_generations (
 CREATE INDEX IF NOT EXISTS idx_image_generations_storyboard_id ON image_generations(storyboard_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_drama_id ON image_generations(drama_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_ad_prompt_item_id ON image_generations(ad_prompt_item_id);
+CREATE INDEX IF NOT EXISTS idx_image_generations_ad_prompt_type ON image_generations(ad_prompt_type);
 CREATE INDEX IF NOT EXISTS idx_image_generations_status ON image_generations(status);
 CREATE INDEX IF NOT EXISTS idx_image_generations_task_id ON image_generations(task_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_deleted_at ON image_generations(deleted_at);

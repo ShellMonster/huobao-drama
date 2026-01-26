@@ -174,6 +174,15 @@
           >
             <el-card shadow="hover" class="image-card">
               <div class="image-wrapper">
+                <el-button
+                  class="image-delete"
+                  type="danger"
+                  circle
+                  size="small"
+                  @click.stop="deleteImage(image)"
+                >
+                  <el-icon><Delete /></el-icon>
+                </el-button>
                 <el-image
                   v-if="image.status === 'completed' && image.image_url"
                   :src="image.image_url"
@@ -253,7 +262,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Picture } from '@element-plus/icons-vue'
+import { Delete, Document, Picture } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adPromptAPI } from '@/api/ad-image-prompt'
 import type { AdPromptItem } from '@/api/ad-image-prompt'
@@ -325,6 +334,7 @@ watch(
     if (activeTab.value !== nextTab) {
       activeTab.value = nextTab
     }
+    void loadImages()
   }
 )
 
@@ -362,6 +372,7 @@ const loadImages = async () => {
     const res = await imageAPI.listImages({
       drama_id: props.dramaId,
       image_type: 'ad',
+      ad_prompt_type: activeTab.value,
       page: 1,
       page_size: 50
     })
@@ -563,6 +574,7 @@ const generateImages = async (prompts: AdPromptItem[], reference?: string) => {
         drama_id: props.dramaId,
         prompt: prompt.prompt,
         ad_prompt_item_id: prompt.id,
+        ad_prompt_type: activeTab.value,
         image_type: 'ad',
         reference_images: reference ? [reference] : undefined
       })
@@ -593,6 +605,23 @@ const truncateText = (text: string, max = 80) => {
   if (!text) return ''
   if (text.length <= max) return text
   return text.slice(0, max) + '...'
+}
+
+const deleteImage = async (image: ImageGeneration) => {
+  try {
+    await ElMessageBox.confirm('确认删除该图片吗？', '删除图片', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await imageAPI.deleteImage(image.id)
+    ElMessage.success('已删除')
+    await loadImages()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.message || '删除图片失败')
+    }
+  }
 }
 
 onMounted(() => {

@@ -6,6 +6,7 @@ export interface ImageGeneration {
   drama_id: string
   character_id?: number
   ad_prompt_item_id?: number
+  ad_prompt_type?: 'text' | 'image'
   image_type?: string
   frame_type?: string
   provider: string
@@ -41,11 +42,13 @@ export interface GenerateImageRequest {
   storyboard_id?: number
   drama_id: string
   ad_prompt_item_id?: number
+  ad_prompt_type?: 'text' | 'image'
   image_type?: string
   frame_type?: string
   prompt: string
   negative_prompt?: string
   reference_images?: string[]
+  ad_prompt_type?: 'text' | 'image'
   provider?: string
   model?: string
   size?: string
@@ -65,6 +68,7 @@ export interface ImageGenerationListParams {
   frame_type?: string
   image_type?: string
   status?: ImageStatus
+  ad_prompt_type?: 'text' | 'image'
   include_reuse_prev_last?: boolean
   page?: number
   page_size?: number

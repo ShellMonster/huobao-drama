@@ -182,6 +182,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	frameType := c.Query("frame_type")
 	imageType := c.Query("image_type")
 	status := c.Query("status")
+	adPromptType := c.Query("ad_prompt_type")
 	includeReusePrevLast := c.Query("include_reuse_prev_last") == "true"
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -225,6 +226,11 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 	} else {
 		normalizedQuery.Del("include_reuse_prev_last")
 	}
+	if adPromptType != "" {
+		normalizedQuery.Set("ad_prompt_type", adPromptType)
+	} else {
+		normalizedQuery.Del("ad_prompt_type")
+	}
 
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceImageList, normalizedQuery)
 	sceneIDVal := interface{}(nil)
@@ -245,6 +251,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		"drama_id", dramaIDVal,
 		"frame_type", frameType,
 		"image_type", imageType,
+		"ad_prompt_type", adPromptType,
 		"status", status,
 		"page", page,
 		"page_size", pageSize,
@@ -267,7 +274,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 
 	h.log.Infow("List images db query start", withFields("cache_key", cacheKey)...)
 	dbStart := time.Now()
-	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, imageType, status, page, pageSize)
+	images, total, err := h.imageService.ListImageGenerations(dramaIDUint, sceneID, storyboardID, frameType, imageType, status, adPromptType, page, pageSize)
 
 	if err != nil {
 		h.log.Errorw("Failed to list images", withFields(

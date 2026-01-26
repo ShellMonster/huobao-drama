@@ -13,6 +13,7 @@ type ImageGeneration struct {
 	SceneID         *uint                 `gorm:"index" json:"scene_id,omitempty"`
 	CharacterID     *uint                 `gorm:"index" json:"character_id,omitempty"`
 	AdPromptItemID  *uint                 `gorm:"index" json:"ad_prompt_item_id,omitempty"`
+	AdPromptType    *string               `gorm:"size:20;index" json:"ad_prompt_type,omitempty"`
 	ImageType       string                `gorm:"size:20;index;default:'storyboard'" json:"image_type"`
 	FrameType       *string               `gorm:"size:20" json:"frame_type,omitempty"`
 	Provider        string                `gorm:"size:50;not null" json:"provider"`
