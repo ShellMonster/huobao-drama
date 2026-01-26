@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"net/http"
 	"strconv"
 	"time"
 
@@ -143,14 +142,10 @@ func (h *ImageGenerationHandler) GetImageGeneration(c *gin.Context) {
 	}
 
 	cacheKey := cache.NamespaceKey(cache.NamespaceImageDetail, c.Param("id"))
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -160,10 +155,7 @@ func (h *ImageGenerationHandler) GetImageGeneration(c *gin.Context) {
 		return
 	}
 
-	if entry, err := cache.Set(cacheKey, imageGen, cacheTTLImageDetail); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, imageGen, cacheTTLImageDetail)
 	response.Success(c, imageGen)
 }
 
@@ -265,15 +257,11 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 		return fields
 	}
 	h.log.Infow("List images start", withFields("cache_key", cacheKey)...)
-	if entry, ok := cache.Get(cacheKey); ok {
+	if entry, ok := tryServeCached(c, cacheKey); ok {
 		h.log.Infow("List images cache hit", withFields("cache_key", cacheKey, "duration_ms", time.Since(start).Milliseconds())...)
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -337,10 +325,7 @@ func (h *ImageGenerationHandler) ListImageGenerations(c *gin.Context) {
 			TotalPages: totalPages,
 		},
 	}
-	if entry, err := cache.Set(cacheKey, payload, cacheTTLImageList); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLImageList)
 	response.Success(c, payload)
 }
 

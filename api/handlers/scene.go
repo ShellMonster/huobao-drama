@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"net/http"
-
 	services2 "github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -27,14 +25,10 @@ func (h *SceneHandler) GetStoryboardsForEpisode(c *gin.Context) {
 	episodeID := c.Param("episode_id")
 
 	cacheKey := cache.NamespaceKey(cache.NamespaceStoryboards, episodeID)
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -49,10 +43,7 @@ func (h *SceneHandler) GetStoryboardsForEpisode(c *gin.Context) {
 		"storyboards": storyboards,
 		"total":       len(storyboards),
 	}
-	if entry, err := cache.Set(cacheKey, payload, cacheTTLStoryboards); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLStoryboards)
 	response.Success(c, payload)
 }
 

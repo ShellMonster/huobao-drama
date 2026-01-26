@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
@@ -56,14 +55,10 @@ func (h *DramaHandler) GetDrama(c *gin.Context) {
 	dramaID := c.Param("id")
 
 	cacheKey := cache.NamespaceKey(cache.NamespaceDramaDetail, dramaID)
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -77,10 +72,7 @@ func (h *DramaHandler) GetDrama(c *gin.Context) {
 		return
 	}
 
-	if entry, err := cache.Set(cacheKey, drama, cacheTTLDramaDetail); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, drama, cacheTTLDramaDetail)
 	response.Success(c, drama)
 }
 
@@ -103,14 +95,10 @@ func (h *DramaHandler) ListDramas(c *gin.Context) {
 	normalizedQuery.Set("page", strconv.Itoa(query.Page))
 	normalizedQuery.Set("page_size", strconv.Itoa(query.PageSize))
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceDramaList, normalizedQuery)
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -129,10 +117,7 @@ func (h *DramaHandler) ListDramas(c *gin.Context) {
 			TotalPages: totalPages,
 		},
 	}
-	if entry, err := cache.Set(cacheKey, payload, cacheTTLDramaList); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLDramaList)
 	response.Success(c, payload)
 }
 
@@ -184,14 +169,10 @@ func (h *DramaHandler) DeleteDrama(c *gin.Context) {
 func (h *DramaHandler) GetDramaStats(c *gin.Context) {
 
 	cacheKey := cache.NamespaceKey(cache.NamespaceDramaStats, "all")
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -201,10 +182,7 @@ func (h *DramaHandler) GetDramaStats(c *gin.Context) {
 		return
 	}
 
-	if entry, err := cache.Set(cacheKey, stats, cacheTTLDramaStats); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, stats, cacheTTLDramaStats)
 	response.Success(c, stats)
 }
 

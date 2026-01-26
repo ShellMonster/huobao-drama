@@ -55,6 +55,9 @@ func main() {
 	if err := services.MigrateLegacyStylePlaceholders(db, logr); err != nil {
 		logr.Warn("Failed to migrate legacy style prompts", "error", err)
 	}
+	if err := services.MigrateLegacyAdPromptItems(db, logr); err != nil {
+		logr.Warn("Failed to migrate legacy ad prompt items", "error", err)
+	}
 
 	// 初始化存储
 	storageService, err := storage.NewStorage(cfg.Storage)

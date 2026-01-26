@@ -14,6 +14,7 @@ import (
 	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/utils"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -220,10 +221,6 @@ func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uin
 }
 
 func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID string, brandID *uint, specID *uint, sourceText *string, sourceImageURL *string, prompts []string) ([]models.AdImagePromptItem, error) {
-	data, err := json.Marshal(prompts)
-	if err != nil {
-		return nil, err
-	}
 	dramaIDParsed, err := strconv.ParseUint(dramaID, 10, 32)
 	if err != nil {
 		return nil, err
@@ -235,7 +232,7 @@ func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID strin
 		PromptType:     promptType,
 		SourceText:     sourceText,
 		SourceImageURL: sourceImageURL,
-		Prompts:        data,
+		Prompts:        datatypes.JSON([]byte("[]")),
 	}
 
 	var items []models.AdImagePromptItem
@@ -283,23 +280,7 @@ func (s *AdImagePromptService) loadLatestPromptItems(dramaID string, brandID *ui
 		Find(&items).Error; err != nil {
 		return nil, err
 	}
-	if len(items) > 0 {
-		return items, nil
-	}
-
-	if len(record.Prompts) == 0 {
-		return []models.AdImagePromptItem{}, nil
-	}
-
-	var prompts []string
-	if err := json.Unmarshal(record.Prompts, &prompts); err != nil {
-		return nil, err
-	}
-	if len(prompts) == 0 {
-		return []models.AdImagePromptItem{}, nil
-	}
-
-	return s.createPromptItems(s.db, &record, prompts)
+	return items, nil
 }
 
 func (s *AdImagePromptService) createPromptItems(tx *gorm.DB, record *models.AdImagePrompt, prompts []string) ([]models.AdImagePromptItem, error) {
@@ -349,17 +330,12 @@ func (s *AdImagePromptService) DeletePromptItem(promptItemID uint) error {
 			}
 			return err
 		}
-		promptID := item.PromptID
 
 		if err := s.deleteImagesByPromptItem(tx, promptItemID); err != nil {
 			return err
 		}
 
 		if err := tx.Delete(&models.AdImagePromptItem{}, promptItemID).Error; err != nil {
-			return err
-		}
-
-		if err := s.syncPromptRecordPrompts(tx, promptID); err != nil {
 			return err
 		}
 
@@ -394,26 +370,6 @@ func (s *AdImagePromptService) deleteImagesByPromptItem(tx *gorm.DB, promptItemI
 		}
 	}
 	return nil
-}
-
-func (s *AdImagePromptService) syncPromptRecordPrompts(tx *gorm.DB, promptID uint) error {
-	var items []models.AdImagePromptItem
-	if err := tx.Where("prompt_id = ?", promptID).
-		Order("sort_order ASC, id ASC").
-		Find(&items).Error; err != nil {
-		return err
-	}
-	prompts := make([]string, 0, len(items))
-	for _, item := range items {
-		prompts = append(prompts, item.Prompt)
-	}
-	data, err := json.Marshal(prompts)
-	if err != nil {
-		return err
-	}
-	return tx.Model(&models.AdImagePrompt{}).
-		Where("id = ?", promptID).
-		Update("prompts", data).Error
 }
 
 func buildAdContextText(brand *models.Brand, spec *models.BrandSpec) string {

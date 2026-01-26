@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
@@ -85,14 +84,10 @@ func (h *VideoGenerationHandler) GetVideoGeneration(c *gin.Context) {
 	}
 
 	cacheKey := cache.NamespaceKey(cache.NamespaceVideoDetail, c.Param("id"))
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -102,10 +97,7 @@ func (h *VideoGenerationHandler) GetVideoGeneration(c *gin.Context) {
 		return
 	}
 
-	if entry, err := cache.Set(cacheKey, videoGen, cacheTTLVideoDetail); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, videoGen, cacheTTLVideoDetail)
 	response.Success(c, videoGen)
 }
 
@@ -154,14 +146,10 @@ func (h *VideoGenerationHandler) ListVideoGenerations(c *gin.Context) {
 	}
 
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceVideoList, normalizedQuery)
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -185,10 +173,7 @@ func (h *VideoGenerationHandler) ListVideoGenerations(c *gin.Context) {
 			TotalPages: totalPages,
 		},
 	}
-	if entry, err := cache.Set(cacheKey, payload, cacheTTLVideoList); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLVideoList)
 	response.Success(c, payload)
 }
 

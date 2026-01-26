@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"net/http"
 	"strconv"
 
 	"github.com/drama-generator/backend/application/services"
@@ -68,14 +67,10 @@ func (h *AIConfigHandler) ListConfigs(c *gin.Context) {
 	serviceType := c.Query("service_type")
 	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceAIConfig, c.Request.URL.Query())
 
-	if entry, ok := cache.Get(cacheKey); ok {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-		if cache.MatchETag(c.GetHeader("If-None-Match"), entry.ETag) {
-			c.Status(http.StatusNotModified)
-			return
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
 		}
-		response.Success(c, entry.Data)
 		return
 	}
 
@@ -85,10 +80,7 @@ func (h *AIConfigHandler) ListConfigs(c *gin.Context) {
 		return
 	}
 
-	if entry, err := cache.Set(cacheKey, configs, cacheTTLAIConfig); err == nil {
-		c.Header("ETag", entry.ETag)
-		c.Header("Cache-Control", "private, max-age=0, must-revalidate")
-	}
+	saveCachedResponse(c, cacheKey, configs, cacheTTLAIConfig)
 	response.Success(c, configs)
 }
 
