@@ -59,7 +59,7 @@
               :src="image.image_url"
               fit="cover"
               class="image"
-              :preview-src-list="[image.image_url]"
+              @click="viewDetails(image)"
             >
               <template #error>
                 <div class="image-placeholder">
@@ -416,6 +416,7 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
+  cursor: pointer;
 }
 
 .image-placeholder {

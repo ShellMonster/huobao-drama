@@ -14,7 +14,6 @@
               :src="image.image_url"
               fit="contain"
               class="preview-image"
-              :preview-src-list="[image.image_url]"
             >
               <template #error>
                 <div class="image-error">
@@ -94,12 +93,34 @@
             <el-divider />
 
             <div class="prompt-section">
-              <h4>{{ $t('image.detail.prompt') }}</h4>
+              <div class="prompt-header">
+                <h4>{{ $t('image.detail.prompt') }}</h4>
+                <el-button
+                  text
+                  size="small"
+                  :disabled="!image.prompt"
+                  @click="copyText(image.prompt)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  复制
+                </el-button>
+              </div>
               <div class="prompt-text">{{ image.prompt }}</div>
             </div>
 
             <div v-if="image.negative_prompt" class="prompt-section">
-              <h4>{{ $t('image.detail.negativePrompt') }}</h4>
+              <div class="prompt-header">
+                <h4>{{ $t('image.detail.negativePrompt') }}</h4>
+                <el-button
+                  text
+                  size="small"
+                  :disabled="!image.negative_prompt"
+                  @click="copyText(image.negative_prompt)"
+                >
+                  <el-icon><CopyDocument /></el-icon>
+                  复制
+                </el-button>
+              </div>
               <div class="prompt-text">{{ image.negative_prompt }}</div>
             </div>
           </div>
@@ -133,9 +154,9 @@
 import { computed } from 'vue'
 import {
   PictureFilled, CircleClose,
-  Download, Refresh
+  Download, Refresh, CopyDocument
 } from '@element-plus/icons-vue'
-import { imageAPI } from '@/api/image'
+import { ElMessage } from 'element-plus'
 import type { ImageGeneration, ImageStatus } from '@/types/image'
 import { formatDateTime } from '@/utils/date'
 import { useI18n } from 'vue-i18n'
@@ -182,6 +203,16 @@ const getStatusText = (status: ImageStatus) => {
 const downloadImage = () => {
   if (!props.image?.image_url) return
   window.open(props.image.image_url, '_blank')
+}
+
+const copyText = async (text?: string) => {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('已复制')
+  } catch (error) {
+    ElMessage.error('复制失败')
+  }
 }
 
 const regenerate = () => {
@@ -265,8 +296,15 @@ const handleClose = () => {
   margin-bottom: 20px;
 }
 
-.prompt-section h4 {
-  margin: 0 0 8px 0;
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.prompt-header h4 {
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #333;
