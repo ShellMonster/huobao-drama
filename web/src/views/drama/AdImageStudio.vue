@@ -14,6 +14,40 @@
                 show-word-limit
               />
             </el-form-item>
+            <el-row :gutter="12">
+              <el-col :span="12">
+                <el-form-item label="比例">
+                  <el-select
+                    v-model="selectedAspectRatio"
+                    placeholder="选择比例"
+                    :disabled="ratioOptions.length === 0"
+                  >
+                    <el-option
+                      v-for="option in ratioOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="分辨率">
+                  <el-select
+                    v-model="selectedSize"
+                    placeholder="选择分辨率"
+                    :disabled="sizeOptions.length === 0"
+                  >
+                    <el-option
+                      v-for="option in sizeOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
             <el-form-item label="生成数量">
               <el-input-number v-model="textPromptCount" :min="1" :max="30" />
             </el-form-item>
@@ -45,6 +79,40 @@
                 <img :src="referenceImage" alt="参考图" />
               </div>
             </el-form-item>
+            <el-row :gutter="12">
+              <el-col :span="12">
+                <el-form-item label="比例">
+                  <el-select
+                    v-model="selectedAspectRatio"
+                    placeholder="选择比例"
+                    :disabled="ratioOptions.length === 0"
+                  >
+                    <el-option
+                      v-for="option in ratioOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="分辨率">
+                  <el-select
+                    v-model="selectedSize"
+                    placeholder="选择分辨率"
+                    :disabled="sizeOptions.length === 0"
+                  >
+                    <el-option
+                      v-for="option in sizeOptions"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
             <el-form-item label="生成数量">
               <el-input-number v-model="imagePromptCount" :min="1" :max="30" />
             </el-form-item>
@@ -313,9 +381,18 @@ const editPromptIndex = ref<number | null>(null)
 const editPromptType = ref<'text' | 'image'>('text')
 const textSelectAll = ref(false)
 const imageSelectAll = ref(false)
+const selectedAspectRatio = ref('')
+const selectedSize = ref('')
 
 const brandId = computed(() => drama.value?.brand_id)
 const specId = computed(() => drama.value?.spec_id)
+const activeSpec = computed(() => {
+  if (drama.value?.spec) return drama.value.spec
+  if (drama.value?.spec_id && drama.value?.brand?.specs?.length) {
+    return drama.value.brand.specs.find(specItem => specItem.id === drama.value?.spec_id) || null
+  }
+  return null
+})
 const hasActivePrompts = computed(() =>
   activeTab.value === 'text' ? textPrompts.value.length > 0 : imagePrompts.value.length > 0
 )
@@ -326,6 +403,64 @@ const textIndeterminate = computed(() =>
 const imageIndeterminate = computed(() =>
   selectedImagePrompts.value.length > 0 && selectedImagePrompts.value.length < imagePrompts.value.length
 )
+const ratioOptions = computed(() => {
+  const ratios = activeSpec.value?.aspect_ratios || []
+  return ratios
+    .map((ratio) => ratio.replace(/\s+/g, '').replace('/', ':'))
+    .filter((ratio) => ratio.length > 0)
+    .filter((ratio, index, list) => list.indexOf(ratio) === index)
+    .map((ratio) => ({
+      label: ratio,
+      value: ratio
+    }))
+})
+const sizeOptionsAll = computed(() => {
+  const sizes = activeSpec.value?.allowed_sizes || []
+  const normalize = (value: string) => value.trim()
+  const parseSize = (value: string) => {
+    const match = normalize(value).match(/^(\d+)\s*[x×]\s*(\d+)$/i)
+    if (!match) return null
+    const width = Number(match[1])
+    const height = Number(match[2])
+    if (!width || !height) return null
+    return { width, height }
+  }
+  const gcd = (a: number, b: number) => {
+    let x = a
+    let y = b
+    while (y !== 0) {
+      const temp = x % y
+      x = y
+      y = temp
+    }
+    return x
+  }
+  return sizes
+    .map((raw) => {
+      const trimmed = normalize(raw)
+      const parsed = parseSize(trimmed)
+      if (!parsed) {
+        return {
+          label: trimmed,
+          value: trimmed
+        }
+      }
+      const divisor = gcd(parsed.width, parsed.height)
+      const ratio = `${parsed.width / divisor}:${parsed.height / divisor}`
+      return {
+        label: `${parsed.width} x ${parsed.height}`,
+        value: `${parsed.width}x${parsed.height}`,
+        ratio
+      }
+    })
+    .filter((option) => option.value.length > 0)
+    .filter((option, index, list) => list.findIndex(item => item.value === option.value) === index)
+})
+const sizeOptions = computed(() => {
+  if (!selectedAspectRatio.value) return sizeOptionsAll.value
+  const matches = sizeOptionsAll.value.filter(option => option.ratio === selectedAspectRatio.value)
+  return matches.length > 0 ? matches : sizeOptionsAll.value
+})
 
 watch(
   () => route.params.mode,
@@ -356,6 +491,43 @@ watch(
     })
   }
 )
+
+watch(
+  [ratioOptions, sizeOptionsAll],
+  () => {
+    if (ratioOptions.value.length === 0) {
+      selectedAspectRatio.value = ''
+    } else if (!ratioOptions.value.some(option => option.value === selectedAspectRatio.value)) {
+      selectedAspectRatio.value = ratioOptions.value[0]?.value || ''
+    }
+
+    if (sizeOptionsAll.value.length === 0) {
+      selectedSize.value = ''
+      return
+    }
+
+    if (!sizeOptionsAll.value.some(option => option.value === selectedSize.value)) {
+      selectedSize.value = sizeOptions.value[0]?.value || sizeOptionsAll.value[0]?.value || ''
+      return
+    }
+
+    if (selectedAspectRatio.value) {
+      const available = sizeOptions.value
+      if (available.length > 0 && !available.some(option => option.value === selectedSize.value)) {
+        selectedSize.value = available[0].value
+      }
+    }
+  },
+  { immediate: true }
+)
+
+watch(selectedAspectRatio, () => {
+  if (!selectedAspectRatio.value) return
+  const available = sizeOptions.value
+  if (available.length > 0 && !available.some(option => option.value === selectedSize.value)) {
+    selectedSize.value = available[0].value
+  }
+})
 
 const loadDrama = async () => {
   try {
@@ -576,6 +748,7 @@ const generateImages = async (prompts: AdPromptItem[], reference?: string) => {
         ad_prompt_item_id: prompt.id,
         ad_prompt_type: activeTab.value,
         image_type: 'ad',
+        size: selectedSize.value || undefined,
         reference_images: reference ? [reference] : undefined
       })
     }
