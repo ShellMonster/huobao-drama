@@ -733,9 +733,18 @@ onMounted(() => {
   background: var(--bg-muted, #f5f5f5);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.image-card .image-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 0;
 }
 
 .image-card .image {
