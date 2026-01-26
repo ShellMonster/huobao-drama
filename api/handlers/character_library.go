@@ -5,6 +5,7 @@ import (
 
 	services2 "github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/infrastructure/storage"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/events"
 	"github.com/drama-generator/backend/pkg/logger"
@@ -43,6 +44,33 @@ func (h *CharacterLibraryHandler) ListLibraryItems(c *gin.Context) {
 		query.PageSize = 20
 	}
 
+	normalizedQuery := c.Request.URL.Query()
+	normalizedQuery.Set("page", strconv.Itoa(query.Page))
+	normalizedQuery.Set("page_size", strconv.Itoa(query.PageSize))
+	if query.Category != "" {
+		normalizedQuery.Set("category", query.Category)
+	} else {
+		normalizedQuery.Del("category")
+	}
+	if query.SourceType != "" {
+		normalizedQuery.Set("source_type", query.SourceType)
+	} else {
+		normalizedQuery.Del("source_type")
+	}
+	if query.Keyword != "" {
+		normalizedQuery.Set("keyword", query.Keyword)
+	} else {
+		normalizedQuery.Del("keyword")
+	}
+
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceCharLibList, normalizedQuery)
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
+		}
+		return
+	}
+
 	items, total, err := h.libraryService.ListLibraryItems(&query)
 	if err != nil {
 		h.log.Errorw("Failed to list library items", "error", err)
@@ -50,7 +78,18 @@ func (h *CharacterLibraryHandler) ListLibraryItems(c *gin.Context) {
 		return
 	}
 
-	response.SuccessWithPagination(c, items, total, query.Page, query.PageSize)
+	totalPages := (total + int64(query.PageSize) - 1) / int64(query.PageSize)
+	payload := response.PaginationData{
+		Items: items,
+		Pagination: response.Pagination{
+			Page:       query.Page,
+			PageSize:   query.PageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLCharLibList)
+	response.Success(c, payload)
 }
 
 // CreateLibraryItem 添加到角色库
@@ -69,6 +108,8 @@ func (h *CharacterLibraryHandler) CreateLibraryItem(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceCharLibList)
+	cache.BumpNamespace(cache.NamespaceCharLibItem)
 	response.Created(c, item)
 }
 
@@ -76,6 +117,13 @@ func (h *CharacterLibraryHandler) CreateLibraryItem(c *gin.Context) {
 func (h *CharacterLibraryHandler) GetLibraryItem(c *gin.Context) {
 
 	itemID := c.Param("id")
+	cacheKey := cache.NamespaceKey(cache.NamespaceCharLibItem, itemID)
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
+		}
+		return
+	}
 
 	item, err := h.libraryService.GetLibraryItem(itemID)
 	if err != nil {
@@ -88,6 +136,7 @@ func (h *CharacterLibraryHandler) GetLibraryItem(c *gin.Context) {
 		return
 	}
 
+	saveCachedResponse(c, cacheKey, item, cacheTTLCharLibItem)
 	response.Success(c, item)
 }
 
@@ -106,6 +155,8 @@ func (h *CharacterLibraryHandler) DeleteLibraryItem(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceCharLibList)
+	cache.BumpNamespace(cache.NamespaceCharLibItem)
 	response.Success(c, gin.H{"message": "删除成功"})
 }
 
@@ -211,6 +262,8 @@ func (h *CharacterLibraryHandler) AddCharacterToLibrary(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceCharLibList)
+	cache.BumpNamespace(cache.NamespaceCharLibItem)
 	response.Created(c, item)
 }
 

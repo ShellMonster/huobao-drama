@@ -63,6 +63,14 @@ tuning:
     video_detail_seconds: 15 # 视频详情缓存（秒）
     storyboards_seconds: 15  # 分镜列表缓存（秒）
     style_catalog_seconds: 600 # 风格列表缓存（秒）
+    ad_prompt_latest_seconds: 20 # 广告提示词最新记录缓存（秒）
+    brand_list_seconds: 30   # 品牌列表缓存（秒）
+    brand_detail_seconds: 20 # 品牌详情缓存（秒）
+    brand_specs_seconds: 30  # 品牌规范列表缓存（秒）
+    asset_list_seconds: 20   # 素材列表缓存（秒）
+    asset_detail_seconds: 15 # 素材详情缓存（秒）
+    character_library_list_seconds: 20 # 角色库列表缓存（秒）
+    character_library_detail_seconds: 15 # 角色库详情缓存（秒）
   rate_limit:
     limit: 2000         # 单窗口请求上限
     window_seconds: 60  # 窗口时长（秒）

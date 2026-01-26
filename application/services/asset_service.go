@@ -157,6 +157,11 @@ func (s *AssetService) GetAsset(assetID uint) (*models.Asset, error) {
 	return &asset, nil
 }
 
+func (s *AssetService) IncrementViewCount(assetID uint) error {
+	return s.db.Model(&models.Asset{}).Where("id = ?", assetID).
+		UpdateColumn("view_count", gorm.Expr("view_count + ?", 1)).Error
+}
+
 func (s *AssetService) ListAssets(req *ListAssetsRequest) ([]models.Asset, int64, error) {
 	query := s.db.Model(&models.Asset{})
 

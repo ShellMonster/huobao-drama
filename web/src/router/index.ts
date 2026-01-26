@@ -1,7 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHistory } from 'vue-router'
-import { enableWorkspace } from '@/utils/workspace'
-
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -18,14 +16,91 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/dramas/:id/workspace',
     name: 'DramaWorkspace',
-    component: () => import('../views/drama/DramaManagement.vue'),
-    meta: { sideNav: false }
+    redirect: (to) => ({
+      name: 'DramaManagement',
+      params: { id: to.params.id },
+      query: to.query,
+      hash: to.hash
+    })
   },
   {
     path: '/dramas/:id',
     name: 'DramaManagement',
+    redirect: (to) => {
+      const section = typeof to.query.section === 'string' ? to.query.section : ''
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      const query = { ...to.query }
+      delete (query as { section?: string }).section
+      delete (query as { tab?: string }).tab
+
+      if (section === 'images') {
+        const mode = typeof to.query.mode === 'string' && ['text', 'image'].includes(to.query.mode)
+          ? to.query.mode
+          : 'text'
+        delete (query as { mode?: string }).mode
+        return { name: 'DramaManagementImagesMode', params: { id: to.params.id, mode }, query, hash: to.hash }
+      }
+      if (section === 'videos') {
+        return { name: 'DramaManagementVideos', params: { id: to.params.id }, query, hash: to.hash }
+      }
+
+      const normalizedTab = ['overview', 'episodes', 'characters', 'scenes'].includes(tab)
+        ? tab
+        : 'overview'
+      return {
+        name: 'DramaManagementAdvancedTab',
+        params: { id: to.params.id, tab: normalizedTab },
+        query,
+        hash: to.hash
+      }
+    }
+  },
+  {
+    path: '/dramas/:id/images',
+    name: 'DramaManagementImages',
+    redirect: (to) => ({
+      name: 'DramaManagementImagesMode',
+      params: { id: to.params.id, mode: 'text' },
+      query: to.query,
+      hash: to.hash
+    })
+  },
+  {
+    path: '/dramas/:id/images/:mode(text|image)',
+    name: 'DramaManagementImagesMode',
     component: () => import('../views/drama/DramaManagement.vue'),
-    meta: { sideNav: true }
+    meta: { sideNav: true, section: 'images' }
+  },
+  {
+    path: '/dramas/:id/videos',
+    name: 'DramaManagementVideos',
+    component: () => import('../views/drama/DramaManagement.vue'),
+    meta: { sideNav: true, section: 'videos' }
+  },
+  {
+    path: '/dramas/:id/advanced',
+    name: 'DramaManagementAdvanced',
+    redirect: (to) => {
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      const query = { ...to.query }
+      delete (query as { section?: string }).section
+      delete (query as { tab?: string }).tab
+      const normalizedTab = ['overview', 'episodes', 'characters', 'scenes'].includes(tab)
+        ? tab
+        : 'overview'
+      return {
+        name: 'DramaManagementAdvancedTab',
+        params: { id: to.params.id, tab: normalizedTab },
+        query,
+        hash: to.hash
+      }
+    }
+  },
+  {
+    path: '/dramas/:id/advanced/:tab',
+    name: 'DramaManagementAdvancedTab',
+    component: () => import('../views/drama/DramaManagement.vue'),
+    meta: { sideNav: true, section: 'advanced' }
   },
   {
     path: '/dramas/:id/episode/:episodeNumber',
@@ -94,14 +169,6 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
-})
-
-router.beforeEach((to, _from, next) => {
-  if (to.name === 'DramaWorkspace') {
-    const dramaId = typeof to.params?.id === 'string' ? to.params.id : undefined
-    enableWorkspace(dramaId)
-  }
-  next()
 })
 
 // 开源版本 - 无需认证

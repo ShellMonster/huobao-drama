@@ -83,30 +83,32 @@
             size="small"
             :loading="imageGenerating"
             :disabled="selectedTextPrompts.length === 0 || imageGenerating"
-            @click="generateImages(selectedTextPrompts)"
+            @click="generateImages(getSelectedPromptItems('text'))"
           >
             批量生成
           </el-button>
         </div>
 
-        <el-row :gutter="16">
+        <el-row :gutter="12">
           <el-col
             v-for="(prompt, index) in textPrompts"
-            :key="`${prompt}-${index}`"
+            :key="prompt.id"
             :xs="24"
             :sm="12"
-            :md="8"
-            :lg="6"
+            :md="6"
+            :lg="4"
+            :xl="3"
           >
             <PromptCard
-              :prompt="prompt"
-              :selected="isPromptSelected('text', prompt)"
+              :prompt="prompt.prompt"
+              :selected="isPromptSelected('text', prompt.id)"
               :loading="imageGenerating"
               :disabled="imageGenerating"
-              @select="togglePromptSelection('text', prompt)"
+              @select="togglePromptSelection('text', prompt.id)"
               @preview="openPromptPreview('text', prompt)"
               @edit="openEditPrompt('text', prompt, index)"
-              @copy="copyPrompt(prompt)"
+              @copy="copyPrompt(prompt.prompt)"
+              @delete="deletePromptItem('text', prompt)"
               @generate="generateImages([prompt])"
             />
           </el-col>
@@ -129,30 +131,32 @@
             size="small"
             :loading="imageGenerating"
             :disabled="selectedImagePrompts.length === 0 || imageGenerating"
-            @click="generateImages(selectedImagePrompts, referenceImage)"
+            @click="generateImages(getSelectedPromptItems('image'), referenceImage)"
           >
             批量生成
           </el-button>
         </div>
 
-        <el-row :gutter="16">
+        <el-row :gutter="12">
           <el-col
             v-for="(prompt, index) in imagePrompts"
-            :key="`${prompt}-${index}`"
+            :key="prompt.id"
             :xs="24"
             :sm="12"
-            :md="8"
-            :lg="6"
+            :md="6"
+            :lg="4"
+            :xl="3"
           >
             <PromptCard
-              :prompt="prompt"
-              :selected="isPromptSelected('image', prompt)"
+              :prompt="prompt.prompt"
+              :selected="isPromptSelected('image', prompt.id)"
               :loading="imageGenerating"
               :disabled="imageGenerating"
-              @select="togglePromptSelection('image', prompt)"
+              @select="togglePromptSelection('image', prompt.id)"
               @preview="openPromptPreview('image', prompt)"
               @edit="openEditPrompt('image', prompt, index)"
-              @copy="copyPrompt(prompt)"
+              @copy="copyPrompt(prompt.prompt)"
+              @delete="deletePromptItem('image', prompt)"
               @generate="generateImages([prompt], referenceImage)"
             />
           </el-col>
@@ -247,10 +251,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Picture } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
 import { adPromptAPI } from '@/api/ad-image-prompt'
+import type { AdPromptItem } from '@/api/ad-image-prompt'
 import { imageAPI } from '@/api/image'
 import { dramaAPI } from '@/api/drama'
 import type { Drama } from '@/types/drama'
@@ -263,15 +269,23 @@ const props = defineProps<{
   dramaId: string
 }>()
 
+const route = useRoute()
+const router = useRouter()
+
 const uploadAction = '/api/v1/upload/image'
-const activeTab = ref<'text' | 'image'>('text')
+const allowedTabs = new Set(['text', 'image'])
+const resolveTab = () => {
+  const mode = typeof route.params.mode === 'string' ? route.params.mode : ''
+  return allowedTabs.has(mode) ? (mode as 'text' | 'image') : 'text'
+}
+const activeTab = ref<'text' | 'image'>(resolveTab())
 const textDemand = ref('')
 const textPromptCount = ref(10)
 const imagePromptCount = ref(10)
-const textPrompts = ref<string[]>([])
-const imagePrompts = ref<string[]>([])
-const selectedTextPrompts = ref<string[]>([])
-const selectedImagePrompts = ref<string[]>([])
+const textPrompts = ref<AdPromptItem[]>([])
+const imagePrompts = ref<AdPromptItem[]>([])
+const selectedTextPrompts = ref<number[]>([])
+const selectedImagePrompts = ref<number[]>([])
 const textPromptLoading = ref(false)
 const imagePromptLoading = ref(false)
 const imageGenerating = ref(false)
@@ -302,6 +316,35 @@ const textIndeterminate = computed(() =>
 )
 const imageIndeterminate = computed(() =>
   selectedImagePrompts.value.length > 0 && selectedImagePrompts.value.length < imagePrompts.value.length
+)
+
+watch(
+  () => route.params.mode,
+  () => {
+    const nextTab = resolveTab()
+    if (activeTab.value !== nextTab) {
+      activeTab.value = nextTab
+    }
+  }
+)
+
+watch(
+  activeTab,
+  (nextTab) => {
+    if (!allowedTabs.has(nextTab)) return
+    const currentMode = typeof route.params.mode === 'string' ? route.params.mode : ''
+    if (route.name === 'DramaManagementImagesMode' && currentMode === nextTab) {
+      return
+    }
+    const targetId = typeof route.params.id === 'string' ? route.params.id : props.dramaId
+    if (!targetId) return
+    router.replace({
+      name: 'DramaManagementImagesMode',
+      params: { id: targetId, mode: nextTab },
+      query: route.query,
+      hash: route.hash
+    })
+  }
 )
 
 const loadDrama = async () => {
@@ -338,41 +381,39 @@ const loadLatestPrompts = async () => {
       brand_id: brandId.value,
       spec_id: specId.value
     })
-    if (res.text_prompts?.length) {
-      textPrompts.value = res.text_prompts
-      selectedTextPrompts.value = [...textPrompts.value]
-    }
-    if (res.image_prompts?.length) {
-      imagePrompts.value = res.image_prompts
-      selectedImagePrompts.value = [...imagePrompts.value]
-    }
+    textPrompts.value = res.text_prompts || []
+    selectedTextPrompts.value = textPrompts.value.map(item => item.id)
+    imagePrompts.value = res.image_prompts || []
+    selectedImagePrompts.value = imagePrompts.value.map(item => item.id)
+    updateSelectAllState('text')
+    updateSelectAllState('image')
   } catch (error: any) {
     ElMessage.error(error?.message || '加载提示词失败')
   }
 }
 
-const isPromptSelected = (type: 'text' | 'image', prompt: string) => {
+const isPromptSelected = (type: 'text' | 'image', promptId: number) => {
   return type === 'text'
-    ? selectedTextPrompts.value.includes(prompt)
-    : selectedImagePrompts.value.includes(prompt)
+    ? selectedTextPrompts.value.includes(promptId)
+    : selectedImagePrompts.value.includes(promptId)
 }
 
-const togglePromptSelection = (type: 'text' | 'image', prompt: string) => {
+const togglePromptSelection = (type: 'text' | 'image', promptId: number) => {
   const list = type === 'text' ? selectedTextPrompts.value : selectedImagePrompts.value
-  const index = list.indexOf(prompt)
+  const index = list.indexOf(promptId)
   if (index >= 0) {
     list.splice(index, 1)
   } else {
-    list.push(prompt)
+    list.push(promptId)
   }
   updateSelectAllState(type)
 }
 
 const handleSelectAll = (type: 'text' | 'image') => {
   if (type === 'text') {
-    selectedTextPrompts.value = textSelectAll.value ? [...textPrompts.value] : []
+    selectedTextPrompts.value = textSelectAll.value ? textPrompts.value.map(item => item.id) : []
   } else {
-    selectedImagePrompts.value = imageSelectAll.value ? [...imagePrompts.value] : []
+    selectedImagePrompts.value = imageSelectAll.value ? imagePrompts.value.map(item => item.id) : []
   }
 }
 
@@ -384,9 +425,15 @@ const updateSelectAllState = (type: 'text' | 'image') => {
   }
 }
 
-const openPromptPreview = (type: 'text' | 'image', prompt: string) => {
+const getSelectedPromptItems = (type: 'text' | 'image') => {
+  const list = type === 'text' ? textPrompts.value : imagePrompts.value
+  const selected = type === 'text' ? selectedTextPrompts.value : selectedImagePrompts.value
+  return list.filter(item => selected.includes(item.id))
+}
+
+const openPromptPreview = (type: 'text' | 'image', prompt: AdPromptItem) => {
   previewType.value = type
-  previewPrompt.value = prompt
+  previewPrompt.value = prompt.prompt
   showPromptDialog.value = true
 }
 
@@ -400,10 +447,10 @@ const copyPrompt = async (prompt?: string) => {
   }
 }
 
-const openEditPrompt = (type: 'text' | 'image', prompt: string, index: number) => {
+const openEditPrompt = (type: 'text' | 'image', prompt: AdPromptItem, index: number) => {
   editPromptType.value = type
   editPromptIndex.value = index
-  editPromptValue.value = prompt
+  editPromptValue.value = prompt.prompt
   showEditDialog.value = true
 }
 
@@ -413,15 +460,45 @@ const applyPromptEdit = () => {
     return
   }
   const list = editPromptType.value === 'text' ? textPrompts.value : imagePrompts.value
-  const selected = editPromptType.value === 'text' ? selectedTextPrompts.value : selectedImagePrompts.value
   const index = editPromptIndex.value
-  const oldPrompt = list[index]
-  list.splice(index, 1, editPromptValue.value.trim())
-  const selectedIndex = selected.indexOf(oldPrompt)
-  if (selectedIndex >= 0) {
-    selected.splice(selectedIndex, 1, editPromptValue.value.trim())
-  }
+  list.splice(index, 1, { ...list[index], prompt: editPromptValue.value.trim() })
   showEditDialog.value = false
+}
+
+const deletePromptItem = async (type: 'text' | 'image', prompt: AdPromptItem) => {
+  try {
+    await ElMessageBox.confirm(
+      '确认删除该提示词及其对应的图片吗？',
+      '删除提示词',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    await adPromptAPI.deleteItem(prompt.id)
+
+    const list = type === 'text' ? textPrompts.value : imagePrompts.value
+    const listIndex = list.findIndex(item => item.id === prompt.id)
+    if (listIndex >= 0) {
+      list.splice(listIndex, 1)
+    }
+
+    const selected = type === 'text' ? selectedTextPrompts.value : selectedImagePrompts.value
+    const selectedIndex = selected.indexOf(prompt.id)
+    if (selectedIndex >= 0) {
+      selected.splice(selectedIndex, 1)
+    }
+
+    updateSelectAllState(type)
+    await loadImages()
+    ElMessage.success('已删除')
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.message || '删除提示词失败')
+    }
+  }
 }
 
 const viewDetails = (image: ImageGeneration) => {
@@ -444,7 +521,7 @@ const generateTextPrompts = async () => {
       count: textPromptCount.value
     })
     textPrompts.value = res.prompts || []
-    selectedTextPrompts.value = [...textPrompts.value]
+    selectedTextPrompts.value = textPrompts.value.map(item => item.id)
     updateSelectAllState('text')
   } catch (error: any) {
     ElMessage.error(error?.message || '生成提示词失败')
@@ -468,7 +545,7 @@ const generateImagePrompts = async () => {
       count: imagePromptCount.value
     })
     imagePrompts.value = res.prompts || []
-    selectedImagePrompts.value = [...imagePrompts.value]
+    selectedImagePrompts.value = imagePrompts.value.map(item => item.id)
     updateSelectAllState('image')
   } catch (error: any) {
     ElMessage.error(error?.message || '解析提示词失败')
@@ -477,14 +554,15 @@ const generateImagePrompts = async () => {
   }
 }
 
-const generateImages = async (prompts: string[], reference?: string) => {
+const generateImages = async (prompts: AdPromptItem[], reference?: string) => {
   if (imageGenerating.value) return
   imageGenerating.value = true
   try {
     for (const prompt of prompts) {
       await imageAPI.generateImage({
         drama_id: props.dramaId,
-        prompt,
+        prompt: prompt.prompt,
+        ad_prompt_item_id: prompt.id,
         image_type: 'ad',
         reference_images: reference ? [reference] : undefined
       })

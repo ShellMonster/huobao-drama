@@ -36,16 +36,24 @@ type PollingSetting struct {
 }
 
 type CacheConfig struct {
-	DramaListSeconds    int `mapstructure:"drama_list_seconds"`
-	DramaDetailSeconds  int `mapstructure:"drama_detail_seconds"`
-	DramaStatsSeconds   int `mapstructure:"drama_stats_seconds"`
-	AIConfigSeconds     int `mapstructure:"ai_config_seconds"`
-	ImageListSeconds    int `mapstructure:"image_list_seconds"`
-	VideoListSeconds    int `mapstructure:"video_list_seconds"`
-	ImageDetailSeconds  int `mapstructure:"image_detail_seconds"`
-	VideoDetailSeconds  int `mapstructure:"video_detail_seconds"`
-	StoryboardsSeconds  int `mapstructure:"storyboards_seconds"`
-	StyleCatalogSeconds int `mapstructure:"style_catalog_seconds"`
+	DramaListSeconds      int `mapstructure:"drama_list_seconds"`
+	DramaDetailSeconds    int `mapstructure:"drama_detail_seconds"`
+	DramaStatsSeconds     int `mapstructure:"drama_stats_seconds"`
+	AIConfigSeconds       int `mapstructure:"ai_config_seconds"`
+	ImageListSeconds      int `mapstructure:"image_list_seconds"`
+	VideoListSeconds      int `mapstructure:"video_list_seconds"`
+	ImageDetailSeconds    int `mapstructure:"image_detail_seconds"`
+	VideoDetailSeconds    int `mapstructure:"video_detail_seconds"`
+	StoryboardsSeconds    int `mapstructure:"storyboards_seconds"`
+	StyleCatalogSeconds   int `mapstructure:"style_catalog_seconds"`
+	AdPromptLatestSeconds int `mapstructure:"ad_prompt_latest_seconds"`
+	BrandListSeconds      int `mapstructure:"brand_list_seconds"`
+	BrandDetailSeconds    int `mapstructure:"brand_detail_seconds"`
+	BrandSpecsSeconds     int `mapstructure:"brand_specs_seconds"`
+	AssetListSeconds      int `mapstructure:"asset_list_seconds"`
+	AssetDetailSeconds    int `mapstructure:"asset_detail_seconds"`
+	CharLibListSeconds    int `mapstructure:"character_library_list_seconds"`
+	CharLibDetailSeconds  int `mapstructure:"character_library_detail_seconds"`
 }
 
 type RateLimitConfig struct {

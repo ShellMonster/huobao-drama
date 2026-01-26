@@ -22,17 +22,26 @@ export interface GetLatestAdPromptRequest {
   spec_id?: number
 }
 
+export interface AdPromptItem {
+  id: number
+  prompt: string
+  sort_order?: number
+}
+
 export const adPromptAPI = {
   getLatest(params: GetLatestAdPromptRequest) {
-    return request.get<{ text_prompts: string[]; image_prompts: string[] }>(
+    return request.get<{ text_prompts: AdPromptItem[]; image_prompts: AdPromptItem[] }>(
       '/ad-image-prompts/latest',
       { params }
     )
   },
   generateText(data: GenerateAdTextPromptRequest) {
-    return request.post<{ prompts: string[] }>('/ad-image-prompts/text', data)
+    return request.post<{ prompts: AdPromptItem[] }>('/ad-image-prompts/text', data)
   },
   generateFromImage(data: GenerateAdImagePromptRequest) {
-    return request.post<{ prompts: string[] }>('/ad-image-prompts/image', data)
+    return request.post<{ prompts: AdPromptItem[] }>('/ad-image-prompts/image', data)
+  },
+  deleteItem(id: number) {
+    return request.delete(`/ad-image-prompts/items/${id}`)
   }
 }

@@ -12,6 +12,7 @@
             <el-image
               v-if="image.status === 'completed' && image.image_url"
               :src="image.image_url"
+              :style="previewStyle"
               fit="contain"
               class="preview-image"
             >
@@ -180,6 +181,38 @@ const visible = computed({
 
 const { t } = useI18n()
 
+const previewStyle = computed(() => {
+  const style: Record<string, string> = {
+    maxWidth: '100%',
+    maxHeight: '70vh'
+  }
+  let width = props.image?.width
+  let height = props.image?.height
+
+  if ((!width || !height) && typeof props.image?.size === 'string') {
+    const match = props.image.size.match(/(\d+)\s*[xX*]\s*(\d+)/)
+    if (match) {
+      width = Number(match[1])
+      height = Number(match[2])
+    }
+  }
+
+  if (width && height) {
+    if (width >= height) {
+      style.width = '100%'
+      style.height = 'auto'
+    } else {
+      style.width = 'auto'
+      style.height = '70vh'
+    }
+  } else {
+    style.width = '100%'
+    style.height = 'auto'
+  }
+
+  return style
+})
+
 const getStatusType = (status: ImageStatus) => {
   const types: Record<ImageStatus, any> = {
     pending: 'info',
@@ -233,7 +266,8 @@ const handleClose = () => {
 
 .image-preview {
   width: 100%;
-  height: 600px;
+  min-height: 360px;
+  max-height: 70vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -243,8 +277,16 @@ const handleClose = () => {
 }
 
 .preview-image {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 70vh;
+}
+
+.preview-image :deep(.el-image__inner) {
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
 
 .image-status {

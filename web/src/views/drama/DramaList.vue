@@ -184,7 +184,10 @@ const loadDramas = async () => {
 // Navigation handlers / 导航处理
 const handleCreate = () => createDialogVisible.value = true
 const viewDrama = (id: string) => {
-  const url = router.resolve({ name: 'DramaWorkspace', params: { id } }).href
+  const url = router.resolve({
+    name: 'DramaManagementAdvancedTab',
+    params: { id, tab: 'overview' }
+  }).href
   const newWindow = window.open(url, '_blank', 'noopener')
   if (newWindow) {
     newWindow.opener = null

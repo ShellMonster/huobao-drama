@@ -16,6 +16,14 @@ var (
 	cacheTTLImageDetail = 15 * time.Second
 	cacheTTLVideoDetail = 15 * time.Second
 	cacheTTLStoryboards = 15 * time.Second
+	cacheTTLAdPrompts   = 20 * time.Second
+	cacheTTLBrandList   = 30 * time.Second
+	cacheTTLBrandDetail = 20 * time.Second
+	cacheTTLBrandSpecs  = 30 * time.Second
+	cacheTTLAssetList   = 20 * time.Second
+	cacheTTLAssetDetail = 15 * time.Second
+	cacheTTLCharLibList = 20 * time.Second
+	cacheTTLCharLibItem = 15 * time.Second
 )
 
 func ApplyCacheConfig() {
@@ -29,4 +37,12 @@ func ApplyCacheConfig() {
 	cacheTTLImageDetail = config.DurationFromSeconds(tuning.Cache.ImageDetailSeconds, 15*time.Second)
 	cacheTTLVideoDetail = config.DurationFromSeconds(tuning.Cache.VideoDetailSeconds, 15*time.Second)
 	cacheTTLStoryboards = config.DurationFromSeconds(tuning.Cache.StoryboardsSeconds, 15*time.Second)
+	cacheTTLAdPrompts = config.DurationFromSeconds(tuning.Cache.AdPromptLatestSeconds, 20*time.Second)
+	cacheTTLBrandList = config.DurationFromSeconds(tuning.Cache.BrandListSeconds, 30*time.Second)
+	cacheTTLBrandDetail = config.DurationFromSeconds(tuning.Cache.BrandDetailSeconds, 20*time.Second)
+	cacheTTLBrandSpecs = config.DurationFromSeconds(tuning.Cache.BrandSpecsSeconds, 30*time.Second)
+	cacheTTLAssetList = config.DurationFromSeconds(tuning.Cache.AssetListSeconds, 20*time.Second)
+	cacheTTLAssetDetail = config.DurationFromSeconds(tuning.Cache.AssetDetailSeconds, 15*time.Second)
+	cacheTTLCharLibList = config.DurationFromSeconds(tuning.Cache.CharLibListSeconds, 20*time.Second)
+	cacheTTLCharLibItem = config.DurationFromSeconds(tuning.Cache.CharLibDetailSeconds, 15*time.Second)
 }

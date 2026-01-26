@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"strconv"
+
 	"github.com/drama-generator/backend/application/services"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/response"
 	"github.com/gin-gonic/gin"
 )
@@ -79,6 +82,14 @@ func (h *AdImagePromptHandler) GetLatestPrompts(c *gin.Context) {
 		return
 	}
 
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceAdPrompts, c.Request.URL.Query())
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
+		}
+		return
+	}
+
 	result, err := h.service.GetLatestPrompts(&req)
 	if err != nil {
 		switch err.Error() {
@@ -98,5 +109,26 @@ func (h *AdImagePromptHandler) GetLatestPrompts(c *gin.Context) {
 		response.InternalError(c, err.Error())
 		return
 	}
+	saveCachedResponse(c, cacheKey, result, cacheTTLAdPrompts)
 	response.Success(c, result)
+}
+
+func (h *AdImagePromptHandler) DeletePromptItem(c *gin.Context) {
+	itemID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		response.BadRequest(c, "无效的ID")
+		return
+	}
+
+	if err := h.service.DeletePromptItem(uint(itemID)); err != nil {
+		switch err.Error() {
+		case "prompt item not found":
+			response.NotFound(c, "提示词不存在")
+			return
+		}
+		response.InternalError(c, err.Error())
+		return
+	}
+
+	response.Success(c, nil)
 }

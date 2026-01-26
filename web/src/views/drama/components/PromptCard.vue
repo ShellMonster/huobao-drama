@@ -12,7 +12,7 @@
       @click.stop
     />
     <div class="prompt-preview">
-      <el-icon :size="28" class="preview-icon">
+      <el-icon :size="24" class="preview-icon">
         <Document />
       </el-icon>
       <span class="preview-label">提示词</span>
@@ -23,6 +23,7 @@
     <div class="prompt-tools">
       <el-button text size="small" @click.stop="emit('edit')">编辑</el-button>
       <el-button text size="small" @click.stop="emit('copy')">复制</el-button>
+      <el-button text size="small" type="danger" @click.stop="emit('delete')">删除</el-button>
     </div>
     <el-button
       type="primary"
@@ -56,6 +57,7 @@ const emit = defineEmits<{
   (e: 'preview'): void
   (e: 'edit'): void
   (e: 'copy'): void
+  (e: 'delete'): void
   (e: 'generate'): void
 }>()
 </script>
@@ -66,7 +68,7 @@ const emit = defineEmits<{
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
 }
 
@@ -75,22 +77,26 @@ const emit = defineEmits<{
   box-shadow: 0 2px 12px rgba(64, 158, 255, 0.3);
 }
 
+.prompt-card :deep(.el-card__body) {
+  padding: 12px;
+}
+
 .prompt-checkbox {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   z-index: 1;
 }
 
 .prompt-preview {
-  height: 140px;
+  height: 96px;
   border-radius: 8px;
   background: #f5f7fa;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   color: #909399;
 }
 
@@ -99,15 +105,15 @@ const emit = defineEmits<{
 }
 
 .prompt-body {
-  min-height: 80px;
+  min-height: 48px;
 }
 
 .prompt-text {
-  font-size: 13px;
+  font-size: 12px;
   color: #303133;
   line-height: 1.5;
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -115,7 +121,8 @@ const emit = defineEmits<{
 .prompt-tools {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .prompt-generate {

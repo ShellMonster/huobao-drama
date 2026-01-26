@@ -102,6 +102,7 @@ func SetupRouter(cfg *config.Config, db *gorm.DB, log *logger.Logger, storageSer
 			adPrompts.GET("/latest", adPromptHandler.GetLatestPrompts)
 			adPrompts.POST("/text", adPromptHandler.GenerateTextPrompts)
 			adPrompts.POST("/image", adPromptHandler.GenerateImagePrompts)
+			adPrompts.DELETE("/items/:id", adPromptHandler.DeletePromptItem)
 		}
 
 		aiConfigs := api.Group("/ai-configs")

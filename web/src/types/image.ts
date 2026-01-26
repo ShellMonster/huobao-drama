@@ -5,6 +5,7 @@ export interface ImageGeneration {
   scene_id?: string
   drama_id: string
   character_id?: number
+  ad_prompt_item_id?: number
   image_type?: string
   frame_type?: string
   provider: string
@@ -39,6 +40,7 @@ export interface GenerateImageRequest {
   scene_id?: number
   storyboard_id?: number
   drama_id: string
+  ad_prompt_item_id?: number
   image_type?: string
   frame_type?: string
   prompt: string

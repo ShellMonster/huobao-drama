@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS image_generations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     storyboard_id INTEGER, -- 修正：引用storyboards表
     drama_id INTEGER NOT NULL,
+    ad_prompt_item_id INTEGER,
     provider TEXT NOT NULL, -- openai, midjourney, stable_diffusion
     prompt TEXT NOT NULL,
     negative_prompt TEXT,
@@ -177,6 +178,7 @@ CREATE TABLE IF NOT EXISTS image_generations (
 
 CREATE INDEX IF NOT EXISTS idx_image_generations_storyboard_id ON image_generations(storyboard_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_drama_id ON image_generations(drama_id);
+CREATE INDEX IF NOT EXISTS idx_image_generations_ad_prompt_item_id ON image_generations(ad_prompt_item_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_status ON image_generations(status);
 CREATE INDEX IF NOT EXISTS idx_image_generations_task_id ON image_generations(task_id);
 CREATE INDEX IF NOT EXISTS idx_image_generations_deleted_at ON image_generations(deleted_at);
@@ -199,6 +201,26 @@ CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_drama_id ON ad_image_prompts(dra
 CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_brand_id ON ad_image_prompts(brand_id);
 CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_spec_id ON ad_image_prompts(spec_id);
 CREATE INDEX IF NOT EXISTS idx_ad_image_prompts_type ON ad_image_prompts(prompt_type);
+
+-- 广告图提示词明细表
+CREATE TABLE IF NOT EXISTS ad_image_prompt_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt_id INTEGER NOT NULL,
+    drama_id INTEGER NOT NULL,
+    brand_id INTEGER,
+    spec_id INTEGER,
+    prompt_type TEXT NOT NULL, -- text, image
+    prompt TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompt_items_prompt_id ON ad_image_prompt_items(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompt_items_drama_id ON ad_image_prompt_items(drama_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompt_items_brand_id ON ad_image_prompt_items(brand_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompt_items_spec_id ON ad_image_prompt_items(spec_id);
+CREATE INDEX IF NOT EXISTS idx_ad_image_prompt_items_type ON ad_image_prompt_items(prompt_type);
 
 -- 视频生成记录表
 CREATE TABLE IF NOT EXISTS video_generations (

@@ -6,6 +6,7 @@ import (
 
 	"github.com/drama-generator/backend/application/services"
 	"github.com/drama-generator/backend/domain/models"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/config"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/response"
@@ -40,6 +41,8 @@ func (h *AssetHandler) CreateAsset(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
 	response.Success(c, asset)
 }
 
@@ -64,6 +67,8 @@ func (h *AssetHandler) UpdateAsset(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
 	response.Success(c, asset)
 }
 
@@ -75,12 +80,24 @@ func (h *AssetHandler) GetAsset(c *gin.Context) {
 		return
 	}
 
+	cacheKey := cache.NamespaceKey(cache.NamespaceAssetDetail, c.Param("id"))
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if err := h.assetService.IncrementViewCount(uint(assetID)); err != nil {
+			h.log.Warnw("Failed to increment asset view count", "error", err, "id", assetID)
+		}
+		if entry != nil {
+			response.Success(c, entry.Data)
+		}
+		return
+	}
+
 	asset, err := h.assetService.GetAsset(uint(assetID))
 	if err != nil {
 		response.NotFound(c, "素材不存在")
 		return
 	}
 
+	saveCachedResponse(c, cacheKey, asset, cacheTTLAssetDetail)
 	response.Success(c, asset)
 }
 
@@ -156,6 +173,62 @@ func (h *AssetHandler) ListAssets(c *gin.Context) {
 		PageSize:     pageSize,
 	}
 
+	normalizedQuery := c.Request.URL.Query()
+	normalizedQuery.Set("page", strconv.Itoa(page))
+	normalizedQuery.Set("page_size", strconv.Itoa(pageSize))
+	if dramaID != nil {
+		normalizedQuery.Set("drama_id", *dramaID)
+	} else {
+		normalizedQuery.Del("drama_id")
+	}
+	if episodeID != nil {
+		normalizedQuery.Set("episode_id", strconv.FormatUint(uint64(*episodeID), 10))
+	} else {
+		normalizedQuery.Del("episode_id")
+	}
+	if storyboardID != nil {
+		normalizedQuery.Set("storyboard_id", strconv.FormatUint(uint64(*storyboardID), 10))
+	} else {
+		normalizedQuery.Del("storyboard_id")
+	}
+	if assetType != nil {
+		normalizedQuery.Set("type", string(*assetType))
+	} else {
+		normalizedQuery.Del("type")
+	}
+	if req.Category != "" {
+		normalizedQuery.Set("category", req.Category)
+	} else {
+		normalizedQuery.Del("category")
+	}
+	if req.Search != "" {
+		normalizedQuery.Set("search", req.Search)
+	} else {
+		normalizedQuery.Del("search")
+	}
+	if req.IsFavorite != nil {
+		normalizedQuery.Set("is_favorite", strconv.FormatBool(*req.IsFavorite))
+	} else {
+		normalizedQuery.Del("is_favorite")
+	}
+	if len(tagIDs) > 0 {
+		tagIDStrings := make([]string, 0, len(tagIDs))
+		for _, tagID := range tagIDs {
+			tagIDStrings = append(tagIDStrings, strconv.FormatUint(uint64(tagID), 10))
+		}
+		normalizedQuery.Set("tag_ids", strings.Join(tagIDStrings, ","))
+	} else {
+		normalizedQuery.Del("tag_ids")
+	}
+
+	cacheKey := cache.NamespaceKeyWithQuery(cache.NamespaceAssetList, normalizedQuery)
+	if entry, ok := tryServeCached(c, cacheKey); ok {
+		if entry != nil {
+			response.Success(c, entry.Data)
+		}
+		return
+	}
+
 	assets, total, err := h.assetService.ListAssets(req)
 	if err != nil {
 		h.log.Errorw("Failed to list assets", "error", err)
@@ -163,7 +236,18 @@ func (h *AssetHandler) ListAssets(c *gin.Context) {
 		return
 	}
 
-	response.SuccessWithPagination(c, assets, total, page, pageSize)
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+	payload := response.PaginationData{
+		Items: assets,
+		Pagination: response.Pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	}
+	saveCachedResponse(c, cacheKey, payload, cacheTTLAssetList)
+	response.Success(c, payload)
 }
 
 func (h *AssetHandler) DeleteAsset(c *gin.Context) {
@@ -180,6 +264,8 @@ func (h *AssetHandler) DeleteAsset(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
 	response.Success(c, nil)
 }
 
@@ -198,6 +284,8 @@ func (h *AssetHandler) ImportFromImageGen(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
 	response.Success(c, asset)
 }
 
@@ -216,5 +304,7 @@ func (h *AssetHandler) ImportFromVideoGen(c *gin.Context) {
 		return
 	}
 
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
 	response.Success(c, asset)
 }

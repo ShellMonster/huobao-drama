@@ -11,6 +11,7 @@ import (
 	"github.com/drama-generator/backend/domain/models"
 	"github.com/drama-generator/backend/infrastructure/storage"
 	"github.com/drama-generator/backend/pkg/ai"
+	"github.com/drama-generator/backend/pkg/cache"
 	"github.com/drama-generator/backend/pkg/logger"
 	"github.com/drama-generator/backend/pkg/utils"
 	"gorm.io/gorm"
@@ -63,7 +64,13 @@ type GenerateAdImagePromptRequest struct {
 	Count    int    `json:"count"`
 }
 
-func (s *AdImagePromptService) GenerateTextPrompts(req *GenerateAdTextPromptRequest) ([]string, error) {
+type AdPromptItem struct {
+	ID        uint   `json:"id"`
+	Prompt    string `json:"prompt"`
+	SortOrder int    `json:"sort_order,omitempty"`
+}
+
+func (s *AdImagePromptService) GenerateTextPrompts(req *GenerateAdTextPromptRequest) ([]AdPromptItem, error) {
 	if req.Count <= 0 {
 		req.Count = 10
 	}
@@ -84,13 +91,18 @@ func (s *AdImagePromptService) GenerateTextPrompts(req *GenerateAdTextPromptRequ
 	if err != nil {
 		return nil, err
 	}
-	if len(prompts) > 0 {
-		_ = s.savePromptRecord(models.AdPromptTypeText, req.DramaID, resolvedBrandID, resolvedSpecID, &req.Prompt, nil, prompts)
+	if len(prompts) == 0 {
+		return []AdPromptItem{}, nil
 	}
-	return prompts, nil
+	items, err := s.savePromptRecord(models.AdPromptTypeText, req.DramaID, resolvedBrandID, resolvedSpecID, &req.Prompt, nil, prompts)
+	if err != nil {
+		return nil, err
+	}
+	cache.BumpNamespace(cache.NamespaceAdPrompts)
+	return formatPromptItems(items), nil
 }
 
-func (s *AdImagePromptService) GeneratePromptsFromImage(req *GenerateAdImagePromptRequest) ([]string, error) {
+func (s *AdImagePromptService) GeneratePromptsFromImage(req *GenerateAdImagePromptRequest) ([]AdPromptItem, error) {
 	if req.Count <= 0 {
 		req.Count = 10
 	}
@@ -116,10 +128,15 @@ func (s *AdImagePromptService) GeneratePromptsFromImage(req *GenerateAdImageProm
 	if err != nil {
 		return nil, err
 	}
-	if len(prompts) > 0 {
-		_ = s.savePromptRecord(models.AdPromptTypeImage, req.DramaID, resolvedBrandID, resolvedSpecID, nil, &req.ImageURL, prompts)
+	if len(prompts) == 0 {
+		return []AdPromptItem{}, nil
 	}
-	return prompts, nil
+	items, err := s.savePromptRecord(models.AdPromptTypeImage, req.DramaID, resolvedBrandID, resolvedSpecID, nil, &req.ImageURL, prompts)
+	if err != nil {
+		return nil, err
+	}
+	cache.BumpNamespace(cache.NamespaceAdPrompts)
+	return formatPromptItems(items), nil
 }
 
 type GetAdPromptRequest struct {
@@ -129,8 +146,8 @@ type GetAdPromptRequest struct {
 }
 
 type LatestAdPromptResult struct {
-	TextPrompts  []string `json:"text_prompts"`
-	ImagePrompts []string `json:"image_prompts"`
+	TextPrompts  []AdPromptItem `json:"text_prompts"`
+	ImagePrompts []AdPromptItem `json:"image_prompts"`
 }
 
 func (s *AdImagePromptService) GetLatestPrompts(req *GetAdPromptRequest) (*LatestAdPromptResult, error) {
@@ -139,18 +156,18 @@ func (s *AdImagePromptService) GetLatestPrompts(req *GetAdPromptRequest) (*Lates
 		return nil, err
 	}
 
-	textPrompts, err := s.loadLatestPromptList(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeText)
+	textPrompts, err := s.loadLatestPromptItems(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeText)
 	if err != nil {
 		return nil, err
 	}
-	imagePrompts, err := s.loadLatestPromptList(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeImage)
+	imagePrompts, err := s.loadLatestPromptItems(req.DramaID, resolvedBrandID, resolvedSpecID, models.AdPromptTypeImage)
 	if err != nil {
 		return nil, err
 	}
 
 	return &LatestAdPromptResult{
-		TextPrompts:  textPrompts,
-		ImagePrompts: imagePrompts,
+		TextPrompts:  formatPromptItems(textPrompts),
+		ImagePrompts: formatPromptItems(imagePrompts),
 	}, nil
 }
 
@@ -202,14 +219,14 @@ func (s *AdImagePromptService) buildAdPromptContext(dramaID string, brandID *uin
 	return buildAdContextText(brand, spec), resolvedBrandID, resolvedSpecID, spec, nil
 }
 
-func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID string, brandID *uint, specID *uint, sourceText *string, sourceImageURL *string, prompts []string) error {
+func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID string, brandID *uint, specID *uint, sourceText *string, sourceImageURL *string, prompts []string) ([]models.AdImagePromptItem, error) {
 	data, err := json.Marshal(prompts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dramaIDParsed, err := strconv.ParseUint(dramaID, 10, 32)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	record := models.AdImagePrompt{
 		DramaID:        uint(dramaIDParsed),
@@ -220,10 +237,25 @@ func (s *AdImagePromptService) savePromptRecord(promptType string, dramaID strin
 		SourceImageURL: sourceImageURL,
 		Prompts:        data,
 	}
-	return s.db.Create(&record).Error
+
+	var items []models.AdImagePromptItem
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&record).Error; err != nil {
+			return err
+		}
+		created, err := s.createPromptItems(tx, &record, prompts)
+		if err != nil {
+			return err
+		}
+		items = created
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-func (s *AdImagePromptService) loadLatestPromptList(dramaID string, brandID *uint, specID *uint, promptType string) ([]string, error) {
+func (s *AdImagePromptService) loadLatestPromptItems(dramaID string, brandID *uint, specID *uint, promptType string) ([]models.AdImagePromptItem, error) {
 	query := s.db.Model(&models.AdImagePrompt{}).
 		Where("drama_id = ? AND prompt_type = ?", dramaID, promptType)
 	if brandID == nil {
@@ -240,16 +272,148 @@ func (s *AdImagePromptService) loadLatestPromptList(dramaID string, brandID *uin
 	var record models.AdImagePrompt
 	if err := query.Order("created_at DESC").First(&record).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return []string{}, nil
+			return []models.AdImagePromptItem{}, nil
 		}
 		return nil, err
+	}
+
+	var items []models.AdImagePromptItem
+	if err := s.db.Where("prompt_id = ?", record.ID).
+		Order("sort_order ASC, id ASC").
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	if len(items) > 0 {
+		return items, nil
+	}
+
+	if len(record.Prompts) == 0 {
+		return []models.AdImagePromptItem{}, nil
 	}
 
 	var prompts []string
 	if err := json.Unmarshal(record.Prompts, &prompts); err != nil {
 		return nil, err
 	}
-	return prompts, nil
+	if len(prompts) == 0 {
+		return []models.AdImagePromptItem{}, nil
+	}
+
+	return s.createPromptItems(s.db, &record, prompts)
+}
+
+func (s *AdImagePromptService) createPromptItems(tx *gorm.DB, record *models.AdImagePrompt, prompts []string) ([]models.AdImagePromptItem, error) {
+	items := make([]models.AdImagePromptItem, 0, len(prompts))
+	for index, prompt := range prompts {
+		trimmed := strings.TrimSpace(prompt)
+		if trimmed == "" {
+			continue
+		}
+		items = append(items, models.AdImagePromptItem{
+			PromptID:   record.ID,
+			DramaID:    record.DramaID,
+			BrandID:    record.BrandID,
+			SpecID:     record.SpecID,
+			PromptType: record.PromptType,
+			Prompt:     trimmed,
+			SortOrder:  index + 1,
+		})
+	}
+	if len(items) == 0 {
+		return []models.AdImagePromptItem{}, nil
+	}
+	if err := tx.Create(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func formatPromptItems(items []models.AdImagePromptItem) []AdPromptItem {
+	result := make([]AdPromptItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, AdPromptItem{
+			ID:        item.ID,
+			Prompt:    item.Prompt,
+			SortOrder: item.SortOrder,
+		})
+	}
+	return result
+}
+
+func (s *AdImagePromptService) DeletePromptItem(promptItemID uint) error {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		var item models.AdImagePromptItem
+		if err := tx.Where("id = ?", promptItemID).First(&item).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("prompt item not found")
+			}
+			return err
+		}
+		promptID := item.PromptID
+
+		if err := s.deleteImagesByPromptItem(tx, promptItemID); err != nil {
+			return err
+		}
+
+		if err := tx.Delete(&models.AdImagePromptItem{}, promptItemID).Error; err != nil {
+			return err
+		}
+
+		if err := s.syncPromptRecordPrompts(tx, promptID); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	cache.BumpNamespace(cache.NamespaceDramaList)
+	cache.BumpNamespace(cache.NamespaceDramaDetail)
+	cache.BumpNamespace(cache.NamespaceImageList)
+	cache.BumpNamespace(cache.NamespaceImageDetail)
+	cache.BumpNamespace(cache.NamespaceAssetList)
+	cache.BumpNamespace(cache.NamespaceAssetDetail)
+	cache.BumpNamespace(cache.NamespaceAdPrompts)
+	return nil
+}
+
+func (s *AdImagePromptService) deleteImagesByPromptItem(tx *gorm.DB, promptItemID uint) error {
+	var imageIDs []uint
+	if err := tx.Model(&models.ImageGeneration{}).
+		Where("ad_prompt_item_id = ?", promptItemID).
+		Pluck("id", &imageIDs).Error; err != nil {
+		return err
+	}
+	if len(imageIDs) == 0 {
+		return nil
+	}
+	for _, imageID := range imageIDs {
+		if err := deleteImageGenerationTx(tx, imageID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *AdImagePromptService) syncPromptRecordPrompts(tx *gorm.DB, promptID uint) error {
+	var items []models.AdImagePromptItem
+	if err := tx.Where("prompt_id = ?", promptID).
+		Order("sort_order ASC, id ASC").
+		Find(&items).Error; err != nil {
+		return err
+	}
+	prompts := make([]string, 0, len(items))
+	for _, item := range items {
+		prompts = append(prompts, item.Prompt)
+	}
+	data, err := json.Marshal(prompts)
+	if err != nil {
+		return err
+	}
+	return tx.Model(&models.AdImagePrompt{}).
+		Where("id = ?", promptID).
+		Update("prompts", data).Error
 }
 
 func buildAdContextText(brand *models.Brand, spec *models.BrandSpec) string {

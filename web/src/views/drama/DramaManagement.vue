@@ -320,18 +320,53 @@ import { getCache, setCache } from '@/utils/cache'
 import { formatDateTime } from '@/utils/date'
 import AdImageStudio from './AdImageStudio.vue'
 import VideoGeneration from '../generation/VideoGeneration.vue'
-import { disableWorkspace, isWorkspaceActive } from '@/utils/workspace'
 
 const router = useRouter()
 const route = useRoute()
 const dramaId = route.params.id as string
 const { t } = useI18n()
 
-const workspaceActive = ref(isWorkspaceActive())
-
 const drama = ref<Drama>()
-const mainTab = ref((route.query.section as string) || 'advanced')
-const advancedTab = ref(route.query.tab as string || 'overview')
+const allowedMainTabs = new Set(['images', 'videos', 'advanced'])
+const allowedAdvancedTabs = new Set(['overview', 'episodes', 'characters', 'scenes'])
+const allowedImageModes = new Set(['text', 'image'])
+
+const resolveMainTab = () => {
+  switch (route.name) {
+    case 'DramaManagementImages':
+    case 'DramaManagementImagesMode':
+      return 'images'
+    case 'DramaManagementVideos':
+      return 'videos'
+    case 'DramaManagementAdvancedTab':
+    case 'DramaManagementAdvanced':
+      return 'advanced'
+    default:
+      return 'advanced'
+  }
+}
+
+const resolveAdvancedTab = () => {
+  const tab = typeof route.params.tab === 'string' ? route.params.tab : ''
+  return allowedAdvancedTabs.has(tab) ? tab : 'overview'
+}
+
+const resolveImageMode = () => {
+  const mode = typeof route.params.mode === 'string' ? route.params.mode : ''
+  return allowedImageModes.has(mode) ? mode : 'text'
+}
+
+const getCleanQuery = () => {
+  const query = { ...route.query } as Record<string, any>
+  delete query.section
+  delete query.tab
+  delete query.mode
+  return query
+}
+
+const mainTab = ref(resolveMainTab())
+const advancedTab = ref(resolveAdvancedTab())
+const lastImageMode = ref<'text' | 'image'>(resolveImageMode())
 const scenes = ref<any[]>([])
 const pageLoading = ref(false)
 const cacheTTL = 60 * 1000
@@ -491,11 +526,6 @@ const createNewEpisode = () => {
 }
 
 const goBack = () => {
-  if (workspaceActive.value) {
-    disableWorkspace()
-    router.push({ name: 'DramaList' })
-    return
-  }
   const target = { name: 'DramaList' }
   const targetPath = router.resolve(target).path
   if (route.path === targetPath) {
@@ -744,20 +774,73 @@ const deleteScene = async (scene: any) => {
 }
 
 onMounted(() => {
-  workspaceActive.value = isWorkspaceActive()
   const hasCache = hydrateDramaFromCache()
   loadDramaData(!hasCache)
-
-  // 如果有query参数指定tab，切换到对应tab
-  if (route.query.tab) {
-    advancedTab.value = route.query.tab as string
-  }
 })
 
 watch(
   () => route.fullPath,
   () => {
-    workspaceActive.value = isWorkspaceActive()
+    const nextMainTab = resolveMainTab()
+    if (mainTab.value !== nextMainTab) {
+      mainTab.value = nextMainTab
+    }
+    if (nextMainTab === 'images') {
+      const nextImageMode = resolveImageMode()
+      if (lastImageMode.value !== nextImageMode) {
+        lastImageMode.value = nextImageMode
+      }
+    }
+    if (nextMainTab === 'advanced') {
+      const nextAdvancedTab = resolveAdvancedTab()
+      if (advancedTab.value !== nextAdvancedTab) {
+        advancedTab.value = nextAdvancedTab
+      }
+    }
+  }
+)
+
+watch(
+  [mainTab, advancedTab],
+  ([nextMainTab, nextAdvancedTab]) => {
+    if (!allowedMainTabs.has(nextMainTab)) return
+    const targetTab = allowedAdvancedTabs.has(nextAdvancedTab) ? nextAdvancedTab : 'overview'
+    const targetId = route.params.id as string
+    if (!targetId) return
+
+    if (nextMainTab === 'images') {
+      const targetMode = allowedImageModes.has(lastImageMode.value) ? lastImageMode.value : 'text'
+      if (route.name !== 'DramaManagementImagesMode' || route.params.mode !== targetMode) {
+        router.replace({
+          name: 'DramaManagementImagesMode',
+          params: { id: targetId, mode: targetMode },
+          query: getCleanQuery(),
+          hash: route.hash
+        })
+      }
+      return
+    }
+
+    if (nextMainTab === 'videos') {
+      if (route.name !== 'DramaManagementVideos') {
+        router.replace({
+          name: 'DramaManagementVideos',
+          params: { id: targetId },
+          query: getCleanQuery(),
+          hash: route.hash
+        })
+      }
+      return
+    }
+
+    if (route.name !== 'DramaManagementAdvancedTab' || route.params.tab !== targetTab) {
+      router.replace({
+        name: 'DramaManagementAdvancedTab',
+        params: { id: targetId, tab: targetTab },
+        query: getCleanQuery(),
+        hash: route.hash
+      })
+    }
   }
 )
 

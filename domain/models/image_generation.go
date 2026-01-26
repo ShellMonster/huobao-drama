@@ -12,6 +12,7 @@ type ImageGeneration struct {
 	DramaID         uint                  `gorm:"not null;index" json:"drama_id"`
 	SceneID         *uint                 `gorm:"index" json:"scene_id,omitempty"`
 	CharacterID     *uint                 `gorm:"index" json:"character_id,omitempty"`
+	AdPromptItemID  *uint                 `gorm:"index" json:"ad_prompt_item_id,omitempty"`
 	ImageType       string                `gorm:"size:20;index;default:'storyboard'" json:"image_type"`
 	FrameType       *string               `gorm:"size:20" json:"frame_type,omitempty"`
 	Provider        string                `gorm:"size:50;not null" json:"provider"`
