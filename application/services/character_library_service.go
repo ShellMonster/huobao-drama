@@ -317,7 +317,6 @@ func (s *CharacterLibraryService) GenerateCharacterImage(characterID string, ima
 
 	// 添加干净背景要求 - 确保背景简洁不干扰主体
 	prompt += ", simple clean background, plain solid color background, white or light gray background"
-	prompt += ", studio lighting, professional photography"
 
 	// 添加质量和风格要求
 	prompt += ", high quality, detailed, {{STYLE}}, character design"

@@ -122,6 +122,75 @@ func MigrateLegacyStylePlaceholders(db *gorm.DB, log *logger.Logger) error {
 	return nil
 }
 
+func MigrateSystemStylePrompts(db *gorm.DB, log *logger.Logger) error {
+	seeds := DefaultStyleSeeds()
+	if len(seeds) == 0 {
+		return nil
+	}
+
+	seedMap := make(map[string]StyleSeed)
+	for _, seed := range seeds {
+		if seed.ImageURL == "" || seed.Name == "" {
+			continue
+		}
+		key := hashStyleKey(seed.ImageURL)
+		if key == "" {
+			continue
+		}
+		seedMap[key] = seed
+	}
+
+	var styles []models.Style
+	if err := db.Where("is_system = ?", true).Find(&styles).Error; err != nil {
+		return err
+	}
+
+	updated := 0
+	for _, style := range styles {
+		seed, ok := seedMap[style.Key]
+		if !ok {
+			continue
+		}
+
+		promptZh := strings.TrimSpace(seed.PromptZh)
+		if promptZh == "" {
+			promptZh = seed.Name
+		}
+		promptEn := strings.TrimSpace(seed.PromptEn)
+		if promptEn == "" {
+			promptEn = seed.Name
+		}
+
+		updates := make(map[string]interface{})
+		if strings.TrimSpace(style.PromptZh) == "" || style.PromptZh == style.Name {
+			if style.PromptZh != promptZh {
+				updates["prompt_zh"] = promptZh
+			}
+		}
+		if strings.TrimSpace(style.PromptEn) == "" || style.PromptEn == style.Name {
+			if style.PromptEn != promptEn {
+				updates["prompt_en"] = promptEn
+			}
+		}
+
+		if len(updates) == 0 {
+			continue
+		}
+
+		if err := db.Model(&models.Style{}).Where("id = ?", style.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		updated++
+	}
+
+	if updated > 0 {
+		cache.BumpNamespace(cache.NamespaceStyles)
+		log.Infow("System style prompts updated", "updated", updated)
+	}
+
+	return nil
+}
+
 func migratePromptTable(db *gorm.DB, table string, column string) (int, error) {
 	where, args := legacyPromptWhere(column)
 	if where == "" {

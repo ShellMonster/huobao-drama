@@ -36,7 +36,7 @@ ARG DOCKER_REGISTRY=
 ARG GO_PROXY=
 ARG ALPINE_MIRROR=
 
-FROM ${DOCKER_REGISTRY:-}golang:1.23-alpine AS backend-builder
+FROM ${DOCKER_REGISTRY:-}golang:1.24-alpine AS backend-builder
 
 # 重新声明 ARG（FROM 之后 ARG 作用域失效，需要重新声明）
 ARG GO_PROXY=

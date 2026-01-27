@@ -87,11 +87,25 @@ func (s *StoryboardService) GenerateStoryboard(episodeID string, model string) (
 		return nil, fmt.Errorf("剧本内容为空，请先生成剧集内容")
 	}
 
-	// 获取该剧本的所有角色
+	// 获取该剧集关联的角色（优先使用章节角色，避免混入历史角色）
 	var characters []models.Character
-	if err := s.db.Where("drama_id = ?", episode.DramaID).Order("name ASC").Find(&characters).Error; err != nil {
-		return nil, fmt.Errorf("获取角色列表失败: %w", err)
+	var episodeCharacters []models.Character
+	if err := s.db.Joins("JOIN episode_characters ec ON ec.character_id = characters.id").
+		Where("ec.episode_id = ?", episode.ID).
+		Order("characters.name ASC").
+		Find(&episodeCharacters).Error; err != nil {
+		s.log.Warnw("Failed to load episode characters, fallback to drama characters", "error", err, "episode_id", episode.ID)
 	}
+
+	if len(episodeCharacters) > 0 {
+		characters = episodeCharacters
+	} else {
+		if err := s.db.Where("drama_id = ?", episode.DramaID).Order("name ASC").Find(&characters).Error; err != nil {
+			return nil, fmt.Errorf("获取角色列表失败: %w", err)
+		}
+	}
+
+	characters = dedupeCharactersByName(characters)
 
 	// 构建角色列表字符串（包含ID和名称）
 	characterList := "无角色"

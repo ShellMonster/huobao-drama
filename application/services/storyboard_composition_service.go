@@ -124,10 +124,20 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 		s.log.Warnw("Failed to load characters", "error", err)
 	}
 
-	// 创建角色ID到角色信息的映射
-	charIDToInfo := make(map[uint]*models.Character)
-	for i := range characters {
-		charIDToInfo[characters[i].ID] = &characters[i]
+	bestVisualByName := make(map[string]models.Character)
+	visualCountByName := make(map[string]int)
+	for _, character := range characters {
+		if character.Name == "" {
+			continue
+		}
+		if hasCharacterImage(character) || hasCharacterReferenceImages(character) {
+			visualCountByName[character.Name]++
+			if existing, ok := bestVisualByName[character.Name]; ok {
+				bestVisualByName[character.Name] = preferCharacter(existing, character)
+			} else {
+				bestVisualByName[character.Name] = character
+			}
+		}
 	}
 
 	// 获取所有场景ID
@@ -290,15 +300,41 @@ func (s *StoryboardCompositionService) GetScenesForEpisode(episodeID string) ([]
 			ReusePrevLastFrame: storyboard.ReusePrevLastFrame,
 		}
 
-		// 直接使用关联的角色信息
+		// 直接使用关联的角色信息，必要时修复同名角色关联
 		if len(storyboard.Characters) > 0 {
+			needsRepair := false
+			desiredIDs := make([]uint, 0, len(storyboard.Characters))
+			desiredIDSet := make(map[uint]struct{})
 			for _, char := range storyboard.Characters {
+				currentChar := char
+				if (!hasCharacterImage(char)) && char.Name != "" && visualCountByName[char.Name] == 1 {
+					if best, ok := bestVisualByName[char.Name]; ok && best.ID != char.ID {
+						currentChar = best
+						needsRepair = true
+					}
+				}
+
+				if _, exists := desiredIDSet[currentChar.ID]; !exists {
+					desiredIDs = append(desiredIDs, currentChar.ID)
+					desiredIDSet[currentChar.ID] = struct{}{}
+				}
 				storyboardChar := SceneCharacterInfo{
-					ID:       char.ID,
-					Name:     char.Name,
-					ImageURL: char.ImageURL,
+					ID:       currentChar.ID,
+					Name:     currentChar.Name,
+					ImageURL: currentChar.ImageURL,
 				}
 				storyboardInfo.Characters = append(storyboardInfo.Characters, storyboardChar)
+			}
+
+			if needsRepair {
+				var newCharacters []models.Character
+				if err := s.db.Where("id IN ?", desiredIDs).Find(&newCharacters).Error; err == nil {
+					if err := s.db.Model(&storyboard).Association("Characters").Replace(&newCharacters); err != nil {
+						s.log.Warnw("Failed to repair storyboard characters", "storyboard_id", storyboard.ID, "error", err)
+					}
+				} else {
+					s.log.Warnw("Failed to load characters for repair", "storyboard_id", storyboard.ID, "error", err)
+				}
 			}
 		}
 

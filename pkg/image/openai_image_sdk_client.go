@@ -62,8 +62,15 @@ func (c *OpenAIImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 	if model != "" {
 		params.Model = openai.ImageModel(model)
 	}
-	if options.Size != "" {
-		params.Size = openai.ImageGenerateParamsSize(options.Size)
+	sizeValue := options.Size
+	if sizeValue != "" {
+		normalized := strings.ToUpper(strings.TrimSpace(sizeValue))
+		if normalized == "1K" || normalized == "2K" || normalized == "4K" {
+			sizeValue = normalizeOpenAISize(options.Width, options.Height)
+		}
+	}
+	if sizeValue != "" {
+		params.Size = openai.ImageGenerateParamsSize(sizeValue)
 	}
 	if options.Quality != "" {
 		params.Quality = openai.ImageGenerateParamsQuality(options.Quality)
@@ -105,4 +112,17 @@ func (c *OpenAIImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 
 func (c *OpenAIImageSDKClient) GetTaskStatus(taskID string) (*ImageResult, error) {
 	return nil, fmt.Errorf("not supported for OpenAI image generation (synchronous)")
+}
+
+func normalizeOpenAISize(width, height int) string {
+	if width > 0 && height > 0 {
+		if width == height {
+			return "1024x1024"
+		}
+		if width > height {
+			return "1792x1024"
+		}
+		return "1024x1792"
+	}
+	return "1024x1024"
 }

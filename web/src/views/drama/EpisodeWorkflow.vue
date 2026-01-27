@@ -1764,13 +1764,6 @@ const pollTaskStatus = async (taskId: string) => {
       }
       generatingShots.value = false
       ElMessage.success($t('workflow.splitSuccess'))
-      router.push({
-        name: 'ProfessionalEditor',
-        params: {
-          dramaId: dramaId,
-          episodeNumber: episodeNumber
-        }
-      })
     } else if (task.status === 'failed') {
       stopTaskStream()
       if (pollTimer) {

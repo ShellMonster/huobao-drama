@@ -340,6 +340,14 @@ func buildStylesFromSeeds(seeds []StyleSeed, storagePath, baseURL string, log *l
 		if seed.ImageURL == "" || seed.Name == "" {
 			continue
 		}
+		promptZh := strings.TrimSpace(seed.PromptZh)
+		if promptZh == "" {
+			promptZh = seed.Name
+		}
+		promptEn := strings.TrimSpace(seed.PromptEn)
+		if promptEn == "" {
+			promptEn = seed.Name
+		}
 		key := hashStyleKey(seed.ImageURL)
 		filename := key + ".webp"
 		localPath := filepath.Join(styleDir, filename)
@@ -351,8 +359,8 @@ func buildStylesFromSeeds(seeds []StyleSeed, storagePath, baseURL string, log *l
 		styles = append(styles, models.Style{
 			Key:        key,
 			Name:       seed.Name,
-			PromptZh:   seed.Name,
-			PromptEn:   seed.Name,
+			PromptZh:   promptZh,
+			PromptEn:   promptEn,
 			PreviewURL: fmt.Sprintf("%s/styles/%s", base, filename),
 			SortOrder:  idx,
 			IsActive:   true,

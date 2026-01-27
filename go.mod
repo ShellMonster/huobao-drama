@@ -1,8 +1,9 @@
 module github.com/drama-generator/backend
 
-go 1.23.0
+go 1.24
 
 require (
+	github.com/dgraph-io/ristretto v0.1.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/uuid v1.6.0
 	github.com/openai/openai-go/v3 v3.16.0
@@ -10,7 +11,7 @@ require (
 	github.com/spf13/viper v1.17.0
 	github.com/volcengine/volc-sdk-golang v1.0.235
 	go.uber.org/zap v1.26.0
-	google.golang.org/genai v1.0.0
+	google.golang.org/genai v1.41.1
 	gorm.io/datatypes v1.2.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.6.0
@@ -26,7 +27,6 @@ require (
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
-	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect

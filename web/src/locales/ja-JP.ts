@@ -670,7 +670,7 @@ export default {
     reSplitShots: '再分割',
     enterProfessional: 'プロ制作へ',
     editShot: 'ショット編集',
-    splitSuccess: '分鏡分割成功！プロ制作画面へ移動します...',
+    splitSuccess: '分鏡分割成功！「プロ制作へ」をクリックしてください。',
     reSplitConfirm: '再分割しますか？',
     deleteCharacter: 'キャラクター削除',
     splitStoryboardFirst: '先に分鏡分割してください',

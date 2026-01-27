@@ -49,11 +49,19 @@ func buildDefaultStyleCatalog() map[string]styleDefinition {
 		if key == "" || seed.Name == "" {
 			continue
 		}
+		promptZh := strings.TrimSpace(seed.PromptZh)
+		if promptZh == "" {
+			promptZh = seed.Name
+		}
+		promptEn := strings.TrimSpace(seed.PromptEn)
+		if promptEn == "" {
+			promptEn = seed.Name
+		}
 		catalog[key] = styleDefinition{
 			Key:        key,
 			Name:       seed.Name,
-			PromptZh:   seed.Name,
-			PromptEn:   seed.Name,
+			PromptZh:   promptZh,
+			PromptEn:   promptEn,
 			PreviewURL: fmt.Sprintf("/static/styles/%s.webp", key),
 			SortOrder:  idx,
 			IsDefault:  idx == 0,

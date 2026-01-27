@@ -49,6 +49,9 @@ func main() {
 	if err := services.MigrateLegacyStyleKeys(db, logr); err != nil {
 		logr.Warn("Failed to migrate legacy style keys", "error", err)
 	}
+	if err := services.MigrateSystemStylePrompts(db, logr); err != nil {
+		logr.Warn("Failed to migrate system style prompts", "error", err)
+	}
 	if err := styleService.RefreshStyleCatalog(); err != nil {
 		logr.Warn("Failed to refresh style catalog", "error", err)
 	}

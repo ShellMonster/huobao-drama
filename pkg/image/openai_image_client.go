@@ -71,10 +71,18 @@ func (c *OpenAIImageClient) GenerateImage(prompt string, opts ...ImageOption) (*
 		model = options.Model
 	}
 
+	sizeValue := options.Size
+	if sizeValue != "" {
+		normalized := strings.ToUpper(strings.TrimSpace(sizeValue))
+		if normalized == "1K" || normalized == "2K" || normalized == "4K" {
+			sizeValue = normalizeOpenAISize(options.Width, options.Height)
+		}
+	}
+
 	reqBody := DALLERequest{
 		Model:   model,
 		Prompt:  prompt,
-		Size:    options.Size,
+		Size:    sizeValue,
 		Quality: options.Quality,
 		N:       1,
 		Image:   options.ReferenceImages,

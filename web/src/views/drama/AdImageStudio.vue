@@ -384,6 +384,12 @@ const imageSelectAll = ref(false)
 const selectedAspectRatio = ref('')
 const selectedSize = ref('')
 
+const sizeBaseMap: Record<string, number> = {
+  '1K': 1024,
+  '2K': 2048,
+  '4K': 4096
+}
+
 const brandId = computed(() => drama.value?.brand_id)
 const specId = computed(() => drama.value?.spec_id)
 const activeSpec = computed(() => {
@@ -608,6 +614,32 @@ const updateSelectAllState = (type: 'text' | 'image') => {
   }
 }
 
+const resolveRatioParts = (ratioValue: string) => {
+  const parts = ratioValue.split(':')
+  if (parts.length !== 2) return null
+  const width = Number(parts[0])
+  const height = Number(parts[1])
+  if (!width || !height) return null
+  return { width, height }
+}
+
+const resolveDimensions = () => {
+  const sizeKey = selectedSize.value.trim().toUpperCase()
+  const base = sizeBaseMap[sizeKey]
+  if (!base) return null
+
+  const ratio = resolveRatioParts(selectedAspectRatio.value.trim())
+  if (!ratio) {
+    return { width: base, height: base, size: `${base}x${base}` }
+  }
+
+  const maxSide = Math.max(ratio.width, ratio.height)
+  const scale = Math.max(1, Math.floor(base / maxSide))
+  const width = ratio.width * scale
+  const height = ratio.height * scale
+  return { width, height, size: `${width}x${height}` }
+}
+
 const getSelectedPromptItems = (type: 'text' | 'image') => {
   const list = type === 'text' ? textPrompts.value : imagePrompts.value
   const selected = type === 'text' ? selectedTextPrompts.value : selectedImagePrompts.value
@@ -741,6 +773,7 @@ const generateImages = async (prompts: AdPromptItem[], reference?: string) => {
   if (imageGenerating.value) return
   imageGenerating.value = true
   try {
+    const dimensions = resolveDimensions()
     for (const prompt of prompts) {
       await imageAPI.generateImage({
         drama_id: props.dramaId,
@@ -749,6 +782,8 @@ const generateImages = async (prompts: AdPromptItem[], reference?: string) => {
         ad_prompt_type: activeTab.value,
         image_type: 'ad',
         size: selectedSize.value || undefined,
+        width: dimensions?.width,
+        height: dimensions?.height,
         reference_images: reference ? [reference] : undefined
       })
     }

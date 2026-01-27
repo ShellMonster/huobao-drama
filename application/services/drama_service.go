@@ -532,10 +532,14 @@ func (s *DramaService) SaveCharacters(dramaID string, req *SaveCharactersRequest
 		return err
 	}
 
-	// 创建角色名称到角色的映射
-	existingCharMap := make(map[string]*models.Character)
-	for i := range existingCharacters {
-		existingCharMap[existingCharacters[i].Name] = &existingCharacters[i]
+	// 创建角色名称到角色的映射（优先保留有图或信息更完整的记录）
+	existingCharMap := make(map[string]models.Character)
+	for _, character := range existingCharacters {
+		if existing, ok := existingCharMap[character.Name]; ok {
+			existingCharMap[character.Name] = preferCharacter(existing, character)
+			continue
+		}
+		existingCharMap[character.Name] = character
 	}
 
 	// 收集需要关联到章节的角色ID
@@ -616,32 +620,63 @@ func (s *DramaService) SaveEpisodes(dramaID string, req *SaveEpisodesRequest) er
 		return err
 	}
 
-	// 删除旧剧集
-	if err := s.db.Where("drama_id = ?", dramaIDUint).Delete(&models.Episode{}).Error; err != nil {
-		s.log.Errorw("Failed to delete old episodes", "error", err)
+	// 获取旧剧集ID列表用于清理关联数据
+	var oldEpisodeIDs []uint
+	if err := s.db.Model(&models.Episode{}).
+		Where("drama_id = ?", dramaIDUint).
+		Pluck("id", &oldEpisodeIDs).Error; err != nil {
+		s.log.Errorw("Failed to load episode ids", "error", err)
 		return err
 	}
 
-	// 创建新剧集（不包含场景，场景由后续步骤生成）
-	for _, ep := range req.Episodes {
-		episode := models.Episode{
-			DramaID:       dramaIDUint,
-			EpisodeNum:    ep.EpisodeNum,
-			Title:         ep.Title,
-			Description:   ep.Description,
-			ScriptContent: ep.ScriptContent,
-			Duration:      ep.Duration,
-			Status:        "draft",
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		candidateCharacterIDs, err := collectEpisodeCharacterIDs(tx, oldEpisodeIDs)
+		if err != nil {
+			s.log.Errorw("Failed to collect episode characters", "error", err)
+			return err
 		}
 
-		if err := s.db.Create(&episode).Error; err != nil {
-			s.log.Errorw("Failed to create episode", "error", err, "episode", ep.EpisodeNum)
-			continue
+		if err := cleanupEpisodeData(tx, oldEpisodeIDs); err != nil {
+			s.log.Errorw("Failed to cleanup episode data", "error", err)
+			return err
 		}
-	}
 
-	if err := s.db.Model(&drama).Update("updated_at", time.Now()).Error; err != nil {
-		s.log.Errorw("Failed to update drama timestamp", "error", err)
+		// 删除旧剧集
+		if err := tx.Where("drama_id = ?", dramaIDUint).Delete(&models.Episode{}).Error; err != nil {
+			s.log.Errorw("Failed to delete old episodes", "error", err)
+			return err
+		}
+
+		if err := cleanupOrphanCharacters(tx, dramaIDUint, candidateCharacterIDs); err != nil {
+			s.log.Errorw("Failed to cleanup orphan characters", "error", err)
+			return err
+		}
+
+		// 创建新剧集（不包含场景，场景由后续步骤生成）
+		for _, ep := range req.Episodes {
+			episode := models.Episode{
+				DramaID:       dramaIDUint,
+				EpisodeNum:    ep.EpisodeNum,
+				Title:         ep.Title,
+				Description:   ep.Description,
+				ScriptContent: ep.ScriptContent,
+				Duration:      ep.Duration,
+				Status:        "draft",
+			}
+
+			if err := tx.Create(&episode).Error; err != nil {
+				s.log.Errorw("Failed to create episode", "error", err, "episode", ep.EpisodeNum)
+				continue
+			}
+		}
+
+		if err := tx.Model(&drama).Update("updated_at", time.Now()).Error; err != nil {
+			s.log.Errorw("Failed to update drama timestamp", "error", err)
+		}
+
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	s.log.Infow("Episodes saved", "drama_id", dramaID, "count", len(req.Episodes))

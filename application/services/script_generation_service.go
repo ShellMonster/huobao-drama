@@ -91,13 +91,12 @@ func (s *ScriptGenerationService) GenerateCharacters(req *GenerateCharactersRequ
 
 	var characters []models.Character
 	for _, char := range result {
-		// 检查角色是否已存在
-		var existingChar models.Character
-		err := s.db.Where("drama_id = ? AND name = ?", req.DramaID, char.Name).First(&existingChar).Error
-		if err == nil {
-			// 角色已存在，直接使用已存在的角色，不覆盖
-			s.log.Infow("Character already exists, skipping", "drama_id", req.DramaID, "name", char.Name)
-			characters = append(characters, existingChar)
+		// 检查角色是否已存在（同名优先复用有图或信息更完整的记录）
+		var existingChars []models.Character
+		if err := s.db.Where("drama_id = ? AND name = ?", req.DramaID, char.Name).Find(&existingChars).Error; err == nil && len(existingChars) > 0 {
+			preferred := pickBestCharacter(existingChars)
+			s.log.Infow("Character already exists, reusing", "drama_id", req.DramaID, "name", char.Name, "character_id", preferred.ID)
+			characters = append(characters, preferred)
 			continue
 		}
 

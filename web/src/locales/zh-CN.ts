@@ -708,7 +708,7 @@ export default {
     reSplitShots: '重新拆分',
     enterProfessional: '进入专业制作',
     editShot: '编辑镜头',
-    splitSuccess: '分镜拆分成功！正在进入专业制作界面...',
+    splitSuccess: '分镜拆分成功！请点击进入专业制作',
     reSplitConfirm: '确定要重新拂分分镜吗？',
     deleteCharacter: '删除角色',
     splitStoryboardFirst: '请先对章节进行分镜拆解',

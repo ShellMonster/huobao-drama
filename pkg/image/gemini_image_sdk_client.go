@@ -83,7 +83,10 @@ func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 	if options.NegativePrompt != "" {
 		promptText += fmt.Sprintf("\n\nNegative prompt: %s", options.NegativePrompt)
 	}
-	if options.Size != "" {
+
+	imageSize := normalizeGeminiImageSize(options.Size, options.Width, options.Height)
+	aspectRatio := normalizeGeminiAspectRatio(options.Size, options.Width, options.Height)
+	if imageSize == "" && aspectRatio == "" && options.Size != "" {
 		promptText += fmt.Sprintf("\n\nImage size: %s", options.Size)
 	}
 
@@ -110,6 +113,12 @@ func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 	genConfig := &genai.GenerateContentConfig{
 		ResponseModalities: []string{"TEXT", "IMAGE"},
 	}
+	if imageSize != "" || aspectRatio != "" {
+		genConfig.ImageConfig = &genai.ImageConfig{
+			ImageSize:   imageSize,
+			AspectRatio: aspectRatio,
+		}
+	}
 
 	timeout := config.DurationFromSeconds(config.GetTuning().HTTPTimeout.ImageSeconds, 10*time.Minute)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -125,7 +134,7 @@ func (c *GeminiImageSDKClient) GenerateImage(prompt string, opts ...ImageOption)
 		return nil, err
 	}
 
-	width, height := parseImageSize(options.Size)
+	width, height := resolveImageDimensions(options.Size, options.Width, options.Height)
 
 	return &ImageResult{
 		Status:    "completed",
@@ -230,4 +239,75 @@ func extractInlineImage(resp *genai.GenerateContentResponse) (string, error) {
 	}
 
 	return "", fmt.Errorf("no inline image data in response")
+}
+
+func normalizeGeminiImageSize(size string, width, height int) string {
+	normalized := strings.ToUpper(strings.TrimSpace(size))
+	if normalized == "1K" || normalized == "2K" || normalized == "4K" {
+		return normalized
+	}
+
+	w, h := resolveImageDimensions(size, width, height)
+	if w == 0 || h == 0 {
+		return ""
+	}
+
+	longSide := w
+	if h > w {
+		longSide = h
+	}
+	switch {
+	case longSide <= 1024:
+		return "1K"
+	case longSide <= 2048:
+		return "2K"
+	default:
+		return "4K"
+	}
+}
+
+func normalizeGeminiAspectRatio(size string, width, height int) string {
+	w, h := resolveImageDimensions(size, width, height)
+	if w == 0 || h == 0 {
+		return ""
+	}
+
+	target := float64(w) / float64(h)
+	allowed := map[string]float64{
+		"1:1":  1.0,
+		"2:3":  2.0 / 3.0,
+		"3:2":  3.0 / 2.0,
+		"3:4":  3.0 / 4.0,
+		"4:3":  4.0 / 3.0,
+		"9:16": 9.0 / 16.0,
+		"16:9": 16.0 / 9.0,
+		"21:9": 21.0 / 9.0,
+	}
+	const epsilon = 0.02
+	best := ""
+	bestDiff := 1.0
+	for key, value := range allowed {
+		diff := value - target
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff < bestDiff {
+			bestDiff = diff
+			best = key
+		}
+	}
+	if bestDiff <= epsilon {
+		return best
+	}
+	return ""
+}
+
+func resolveImageDimensions(size string, width, height int) (int, int) {
+	if width > 0 && height > 0 {
+		return width, height
+	}
+	if size == "" {
+		return 0, 0
+	}
+	return parseImageSize(size)
 }
